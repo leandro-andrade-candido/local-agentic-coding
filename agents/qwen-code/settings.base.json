@@ -1,0 +1,98 @@
+{
+  "//": "Base do Qwen Code 0.26.x para o llama-server local. Gerado em $QWEN_HOME/settings.json por run.sh/qwen-local (agents/lib/render.py), mesclado com settings.<perfil>.json. Chaves '//' são removidas.",
+  "$version": 4,
+  "general": {
+    "enableAutoUpdate": false,
+    "showSessionRecap": false,
+    "gitCoAuthor": { "commit": false, "pr": false }
+  },
+  "privacy": { "usageStatisticsEnabled": false },
+  "telemetry": { "enabled": false, "logPrompts": false },
+  "ui": {
+    "//": "Sugestões de continuação e feedback chamam o modelo em segundo plano: com um slot só, cada chamada extra apaga o cache do prompt.",
+    "enableFollowupSuggestions": false,
+    "enableUserFeedback": false,
+    "enableWelcomeBack": false,
+    "showResponseTokensPerSecond": true
+  },
+  "security": { "auth": { "selectedType": "openai" } },
+  "model": {
+    "name": "@@LLM_MODEL@@",
+    "skipNextSpeakerCheck": true
+  },
+  "modelProviders": {
+    "openai": [
+      {
+        "id": "@@LLM_MODEL@@",
+        "name": "Qwen3.6-35B-A3B (llama.cpp local)",
+        "envKey": "LOCAL_LLM_API_KEY",
+        "baseUrl": "@@LLM_BASE_URL@@/v1",
+        "generationConfig": {
+          "//": "timeout 0 = sem limite por requisição; o prefill de ~100k tokens leva minutos.",
+          "timeout": 0,
+          "streamIdleTimeoutMs": 900000,
+          "maxRetries": 2,
+          "contextWindowSize": "@@INT:LLM_CONTEXT@@",
+          "modalities": { "image": false, "pdf": false, "audio": false, "video": false },
+          "samplingParams": {
+            "//": "Cartão do modelo, modo thinking para código preciso. Com samplingParams o Qwen Code envia as chaves como estão e não calcula max_tokens sozinho.",
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0,
+            "presence_penalty": 0,
+            "max_tokens": "@@INT:LLM_MAX_OUTPUT@@"
+          },
+          "extra_body": {
+            "chat_template_kwargs": { "preserve_thinking": true }
+          }
+        }
+      }
+    ]
+  },
+  "context": {
+    "//": "Compacta a ~75% da janela (98k de 131k), deixando ~32k para a resposta.",
+    "autoCompactThreshold": 0.75
+  },
+  "tools": {
+    "shell": { "defaultTimeoutMs": 300000 },
+    "disabled": [
+      "web_search",
+      "image_gen",
+      "artifact",
+      "record_artifact",
+      "cron_create",
+      "cron_list",
+      "cron_delete",
+      "autofix_pr"
+    ]
+  },
+  "memory": {
+    "//": "Memória automática desligada: o catálogo vai no fim de cada requisição e força reprocessar o prompt inteiro em modelos híbridos no llama.cpp (QwenLM/qwen-code#14203).",
+    "enableManagedAutoMemory": false,
+    "enableManagedAutoDream": false,
+    "enableAutoSkill": false
+  },
+  "agents": { "crossSessionMessaging": false },
+  "experimental": {
+    "cron": false,
+    "artifact": false,
+    "emitToolUseSummaries": false
+  },
+  "goals": { "modelProposed": "disabled" },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^run_shell_command$",
+        "hooks": [
+          {
+            "type": "command",
+            "name": "local-guard",
+            "command": "python3 -I \"@@AGENT_GUARD@@\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

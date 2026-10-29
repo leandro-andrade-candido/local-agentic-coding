@@ -270,6 +270,8 @@ llama-server -m ~/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf -a qwen3.6-35b \
 
 ## 8. Plano de execução
 
+**Ordem de execução alterada em 29/10: a E7 (container) roda antes da E6 (teste dos agentes).** O teste da E6 executa os agentes em modo autônomo (yolo / `bypassPermissions`), em que qualquer comando roda sem confirmação. Sem o container, a única barreira seria o guarda de cada agente, que é só a segunda camada. A numeração foi mantida porque já é referenciada em documentos e scripts.
+
 Cada etapa termina com uma verificação objetiva e pode ser desfeita isoladamente. Nenhuma etapa usa `sudo`, a não ser que o Claude Code local seja o escolhido e precise do bubblewrap; nesse caso pergunto antes. Cada download acima de 5 GB será confirmado antes, mesmo depois da aprovação geral.
 
 | Etapa | O que faz | Verificação | Como desfazer | Download · tempo |

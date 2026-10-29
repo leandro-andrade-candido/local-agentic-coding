@@ -18,8 +18,8 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | E3 | Teste de fumaça com Qwen3.5-4B | concluída e verificada em 29/10 |
 | E4 | Qwen3.6-35B-A3B e benchmarks | pendente |
 | E5 | llama-server como serviço | pendente |
-| E6 | Teste comparativo dos agentes | pendente |
-| E7 | Container, permissões, hooks | pendente |
+| E7 | Container, permissões, hooks (roda antes da E6) | pendente |
+| E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
 | E8 | Validação (T1–T7 e piloto em projeto real privado) | pendente |
 | E9 | Documentação de operação | pendente |
 

@@ -1,0 +1,51 @@
+{
+  "//": "Perfil do eval (run.sh usa --approval-mode yolo). No YOLO as regras deny continuam valendo; ask e allow não têm efeito. Listas substituem as da base.",
+  "tools": {
+    "approvalMode": "yolo",
+    "disabled": [
+      "web_search",
+      "web_fetch",
+      "image_gen",
+      "artifact",
+      "record_artifact",
+      "cron_create",
+      "cron_list",
+      "cron_delete",
+      "autofix_pr",
+      "ask_user_question",
+      "enter_plan_mode",
+      "exit_plan_mode"
+    ]
+  },
+  "permissions": {
+    "allow": [],
+    "ask": [],
+    "deny": [
+      "Bash(git push)",
+      "Bash(sudo)",
+      "Bash(su)",
+      "Bash(doas)",
+      "Bash(pkexec)",
+      "Bash(npm install)",
+      "Bash(npm i)",
+      "Bash(npm ci)",
+      "Bash(npm add)",
+      "Bash(pnpm install)",
+      "Bash(pnpm i)",
+      "Bash(pnpm add)",
+      "Bash(yarn add)",
+      "Bash(yarn install)",
+      "Bash(bun install)",
+      "Bash(bun add)",
+      "Bash(pip install)",
+      "Bash(pip3 install)",
+      "Bash(python -m pip install)",
+      "Bash(python3 -m pip install)",
+      "Bash(uv add)",
+      "Bash(uv pip install)",
+      "Bash(apt)",
+      "Bash(apt-get)",
+      "Bash(brew)"
+    ]
+  }
+}

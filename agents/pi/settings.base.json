@@ -1,0 +1,20 @@
+{
+  "//": "Base do Pi 1.4.x. Gerado em $PI_CODING_AGENT_DIR/settings.json, mesclado com settings.<perfil>.json.",
+  "defaultProvider": "local",
+  "defaultModel": "@@LLM_MODEL@@",
+  "defaultThinkingLevel": "medium",
+  "defaultTools": ["read", "bash", "edit", "write"],
+  "cacheWarming": "off",
+  "compaction": {
+    "//": "Compacta quando sobram menos de 32k tokens livres: ~98k de 131k.",
+    "enabled": true,
+    "reserveTokens": 32768,
+    "keepRecentTokens": 20000
+  },
+  "httpIdleTimeoutMs": 900000,
+  "retry": { "enabled": true, "maxRetries": 2 },
+  "enableInstallTelemetry": false,
+  "enableAnalytics": false,
+  "quietStartup": true,
+  "extensions": ["-builtin:mcp", "-builtin:llama.cpp"]
+}

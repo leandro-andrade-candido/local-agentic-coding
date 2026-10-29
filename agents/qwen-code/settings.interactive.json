@@ -1,0 +1,17 @@
+{
+  "//": "Perfil interativo: leitura livre, edição livre dentro do projeto, shell pergunta, lista de bloqueio. Ordem de decisão do Qwen Code: deny > ask > allow > modo.",
+  "tools": {
+    "approvalMode": "default"
+  },
+  "permissions": {
+    "allow": ["Read", "Edit(/**)"],
+    "ask": ["WebFetch"],
+    "deny": [
+      "Bash(git push)",
+      "Bash(sudo)",
+      "Bash(su)",
+      "Bash(doas)",
+      "Bash(pkexec)"
+    ]
+  }
+}

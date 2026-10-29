@@ -1,0 +1,93 @@
+{
+  "//": "Base do OpenCode 1.19.x. Gerado em $XDG_CONFIG_HOME/opencode/opencode.json (diretório isolado) por run.sh/opencode-local, mesclado com opencode.<perfil>.json.",
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled",
+  "enabled_providers": [
+    "llamacpp"
+  ],
+  "model": "llamacpp/@@LLM_MODEL@@",
+  "small_model": "llamacpp/@@LLM_MODEL@@",
+  "provider": {
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama.cpp local",
+      "options": {
+        "baseURL": "@@LLM_BASE_URL@@/v1",
+        "apiKey": "{env:LOCAL_LLM_API_KEY}",
+        "timeout": false,
+        "headerTimeout": 1800000,
+        "chunkTimeout": 900000
+      },
+      "models": {
+        "@@LLM_MODEL@@": {
+          "name": "Qwen3.6-35B-A3B (local)",
+          "reasoning": true,
+          "tool_call": true,
+          "temperature": true,
+          "attachment": false,
+          "//interleaved": "Devolve o raciocínio anterior em reasoning_content (preserve_thinking do Qwen3.6).",
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "cost": {
+            "input": 0,
+            "output": 0
+          },
+          "//limit": "O OpenCode limita a saída a 32000 e compacta em context - saída = ~99k.",
+          "limit": {
+            "context": "@@INT:LLM_CONTEXT@@",
+            "output": "@@INT:LLM_MAX_OUTPUT@@"
+          },
+          "//options": "Campos extras vão direto no corpo da requisição (@ai-sdk/openai-compatible).",
+          "options": {
+            "top_k": 20,
+            "min_p": 0,
+            "presence_penalty": 0,
+            "chat_template_kwargs": {
+              "preserve_thinking": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "agent": {
+    "//": "temperature e top_p são por agente no OpenCode. O agente de título fica desligado: com um slot só, cada chamada extra apaga o cache do prompt.",
+    "build": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "plan": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "general": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "explore": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "compaction": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "title": {
+      "disable": true
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": false
+  }
+}
