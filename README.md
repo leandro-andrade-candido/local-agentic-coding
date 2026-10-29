@@ -17,10 +17,10 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | E2 | llama.cpp pré-compilado | concluída e verificada em 29/10 |
 | E3 | Teste de fumaça com Qwen3.5-4B | concluída e verificada em 29/10 |
 | E4 | Qwen3.6-35B-A3B e benchmarks | concluída e verificada em 29/10 |
-| E5 | llama-server como serviço | pendente |
-| E7 | Container, permissões, hooks (roda antes da E6) | pendente |
+| E5 | llama-server como serviço | em andamento: serviço instalado e saudável; bateria de tool calling parcial (ver `docs/etapas/E5.md`) |
+| E7 | Container, permissões, hooks (roda antes da E6) | concluída em 29/10; verificação adversária pendente |
 | E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
-| E8 | Validação (T1–T7 e piloto em projeto real privado) | pendente |
+| E8 | Validação (T1–T7 e piloto em projeto real privado) | suíte pronta e validada sem modelo; execução pendente |
 | E9 | Documentação de operação | pendente |
 
 ## Estrutura

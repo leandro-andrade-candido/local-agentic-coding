@@ -331,10 +331,21 @@ if st == 200 and js:
               ("cors_proxy_enabled", js.get("cors_proxy_enabled"), False),
               ("endpoint_metrics", js.get("endpoint_metrics"), True)]
     for field, flag in (("temperature", "--temp"), ("top_p", "--top-p"), ("top_k", "--top-k"),
-                        ("min_p", "--min-p"), ("presence_penalty", "--presence-penalty"),
-                        ("max_tokens", "-n")):
+                        ("min_p", "--min-p"), ("presence_penalty", "--presence-penalty")):
         if exp(flag) is not None:
             checks.append((field, params.get(field), float(exp(flag))))
+    # O /props mostra n_predict=-1 mesmo com -n: o valor só aparece no pedido efetivo
+    # (verificado na E5 com response_fields). Por isso o -n é conferido num pedido real.
+    if exp("-n") is not None:
+        # Sem max_tokens de propósito (para ver o padrão); as palavras de parada encerram
+        # a geração no primeiro espaço ou quebra de linha, então o pedido é sempre curto.
+        st2, js2, _, _, _ = req("POST", "/completion", {
+            "prompt": "Responda apenas: OK", "stop": ["\n", " ", "."],
+            "response_fields": ["generation_settings/n_predict"]}, timeout=60)
+        got = (js2 or {}).get("generation_settings/n_predict") if st2 == 200 else f"HTTP {st2}"
+        if isinstance(js2, dict) and "generation_settings" in js2:
+            got = js2["generation_settings"].get("n_predict")
+        checks.append(("n_predict efetivo", got, float(exp("-n"))))
     if exp("-np") is not None:
         checks.append(("total_slots", js.get("total_slots"), int(exp("-np"))))
     if exp("-c") is not None:
