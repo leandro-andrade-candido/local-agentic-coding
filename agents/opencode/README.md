@@ -1,6 +1,6 @@
 # OpenCode (local)
 
-Terceira opção da Meta 1. O mais parecido com o Claude Code em recursos
+Concorrente da Meta 1. O mais parecido com o Claude Code em recursos
 (subagentes, skills, plugins, permissões allow/ask/deny), com o maior prompt
 fixo entre os abertos (~7,5 mil tokens).
 

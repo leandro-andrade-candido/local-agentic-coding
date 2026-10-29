@@ -1,6 +1,6 @@
 # Qwen Code (local)
 
-Primeira opção da Meta 1. Fork do Gemini CLI mantido pela equipe do Qwen, com
+Concorrente da Meta 1 (disputa única desde 29/10). Fork do Gemini CLI mantido pela equipe do Qwen, com
 provedores OpenAI-compatíveis, hooks no formato do Claude Code, regras de
 permissão e modo headless.
 

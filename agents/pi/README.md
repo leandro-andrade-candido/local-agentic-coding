@@ -1,6 +1,6 @@
 # Pi (local)
 
-Segunda opção da Meta 1. Agente mínimo (4 ferramentas, prompt de ~1,4 mil
+Concorrente da Meta 1. Agente mínimo (4 ferramentas, prompt de ~1,4 mil
 tokens), extensível em TypeScript, primeiro lugar no harness-bench com modelos
 locais. Não tem permissões nem sandbox: o isolamento real é o container da E7.
 

@@ -281,6 +281,16 @@ def reads_stdin(prog, args):
     return not [a for a in args if not a.startswith("-")]
 
 
+def shell_script(prog, args):
+    """Script de `bash -c '...'`, `sh -lc '...'`, `zsh -c ...`; None se não houver."""
+    if prog not in SHELLS:
+        return None
+    for i, a in enumerate(args):
+        if a.startswith("-") and not a.startswith("--") and "c" in a[1:] and i + 1 < len(args):
+            return args[i + 1]
+    return None
+
+
 def evaluate(command, cwd, profile):
     root = project_root(cwd)
     cwd = os.path.realpath(cwd)
@@ -308,6 +318,9 @@ def evaluate(command, cwd, profile):
             raise Deny("piping a download into a shell/interpreter (curl | sh) is not allowed")
         if prog in DOWNLOADERS:
             pipeline_has_download = True
+        script = shell_script(prog, args)
+        if script is not None:
+            evaluate(script, cwd, profile)  # bash -lc "<script>": avalia o script interno
         if prog == "git":
             check_git(args)
         elif prog == "rm":

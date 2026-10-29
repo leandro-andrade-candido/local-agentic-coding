@@ -1,0 +1,49 @@
+
+# Só no perfil autonomous: instalação de pacotes pela rede (as dependências do
+# eval já vêm instaladas).
+
+prefix_rule(
+    pattern = ["npm", ["install", "i", "ci", "add", "update"]],
+    decision = "forbidden",
+    justification = "Network installs are not allowed in autonomous mode; dependencies are preinstalled.",
+    match = ["npm install lodash", "npm ci"],
+    not_match = ["npm test", "npm run build"],
+)
+
+prefix_rule(
+    pattern = ["pnpm", ["install", "i", "add", "update", "dlx"]],
+    decision = "forbidden",
+    justification = "Network installs are not allowed in autonomous mode; dependencies are preinstalled.",
+)
+
+prefix_rule(
+    pattern = [["yarn", "bun"], ["install", "add", "upgrade", "dlx"]],
+    decision = "forbidden",
+    justification = "Network installs are not allowed in autonomous mode; dependencies are preinstalled.",
+)
+
+prefix_rule(
+    pattern = [["pip", "pip3"], ["install", "download"]],
+    decision = "forbidden",
+    justification = "Network installs are not allowed in autonomous mode; dependencies are preinstalled.",
+    match = ["pip install requests"],
+)
+
+prefix_rule(
+    pattern = [["python", "python3"], "-m", ["pip", "pip3"], "install"],
+    decision = "forbidden",
+    justification = "Network installs are not allowed in autonomous mode; dependencies are preinstalled.",
+)
+
+prefix_rule(
+    pattern = ["uv", ["add", "pip", "tool"]],
+    decision = "forbidden",
+    justification = "uv add / uv pip / uv tool are not allowed in autonomous mode; use `uv run`.",
+    not_match = ["uv run pytest"],
+)
+
+prefix_rule(
+    pattern = [["apt", "apt-get", "brew", "dnf", "yum", "pacman", "snap", "uvx", "bunx", "pnpx"]],
+    decision = "forbidden",
+    justification = "Package installation is not allowed in autonomous mode.",
+)

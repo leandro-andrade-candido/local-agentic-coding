@@ -1,7 +1,8 @@
 # Claude Code com o modelo local (claude-local)
 
-Meta 2: só entra se a Meta 1 falhar por causa do agente. É o Claude Code
-apontado para o endpoint Anthropic (`/v1/messages`) do llama-server. A Anthropic
+Desde 29/10 disputa a Meta 1 junto com os agentes abertos (em empate técnico,
+vence o aberto). É o Claude Code apontado para o endpoint Anthropic
+(`/v1/messages`) do llama-server. A Anthropic
 não dá suporte a modelos que não sejam Claude; tudo aqui é configuração de
 gateway documentada, mas o comportamento com o Qwen3.6 só a E6 mostra.
 

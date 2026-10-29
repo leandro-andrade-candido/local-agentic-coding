@@ -1,0 +1,85 @@
+# Codex CLI 0.165.x com o llama-server local (endpoint Responses /v1/responses).
+# Gerado em $CODEX_HOME/config.toml por run.sh/codex-local (agents/lib/render.py).
+# O perfil (interactive/autonomous) fica em $CODEX_HOME/<perfil>.config.toml e é
+# escolhido com --profile. Chaves conferidas na Configuration Reference
+# (developers.openai.com/codex/config-reference) e no código da tag rust-v0.165.0.
+
+model = "@@LLM_MODEL@@"
+model_provider = "llamacpp"
+
+# Janela do servidor. O Codex usa 95% dela como janela efetiva.
+model_context_window = @@INT:LLM_CONTEXT@@
+# Compacta a ~75% (98k de 131k). O Codex não manda limite de saída
+# (max_output_tokens), então a folga para a resposta vem daqui e do -n do servidor.
+model_auto_compact_token_limit = @@INT:CODEX_AUTO_COMPACT@@
+
+# Raciocínio: o Qwen3.6 pensa pelo template. Sem metadados de raciocínio
+# (reasoning.effort/summary), que o llama.cpp ignora ou traduz para kwargs do template.
+model_supports_reasoning_summaries = false
+model_reasoning_summary = "none"
+# Mostra o raciocínio cru (reasoning_text do llama.cpp) nos eventos do exec e na TUI.
+show_raw_agent_reasoning = true
+# Tira a seção "Personality" das instruções base (prompt menor).
+personality = "none"
+
+# Sem busca na web (o llama.cpp descarta ferramentas que não são "function").
+web_search = "disabled"
+check_for_update_on_startup = false
+
+[model_providers.llamacpp]
+name = "llama.cpp local"
+base_url = "@@LLM_BASE_URL@@/v1"
+wire_api = "responses"
+# Chave fictícia lida do ambiente; o servidor não confere.
+env_key = "LOCAL_LLM_API_KEY"
+request_max_retries = 2
+stream_max_retries = 2
+# Prefill de ~100k tokens leva minutos sem nenhum byte no stream.
+stream_idle_timeout_ms = 1800000
+supports_websockets = false
+
+[model_providers.llamacpp.capabilities]
+# Compactação local (o llama.cpp não tem o protocolo de compactação remota).
+remote_compaction = "unsupported"
+external_web_access = false
+
+[analytics]
+# Também desliga o exportador de métricas (padrão: statsig).
+enabled = false
+
+[feedback]
+enabled = false
+
+[otel]
+exporter = "none"
+trace_exporter = "none"
+metrics_exporter = "none"
+log_user_prompt = false
+
+[features]
+# Conectores, catálogo remoto de plugins e modos rápidos dependem da conta OpenAI.
+apps = false
+remote_plugin = false
+fast_mode = false
+ultrafast_mode = false
+skill_mcp_dependency_install = false
+# Subagentes, metas com continuação automática e memórias geram requisições
+# extras; com um slot só, cada uma tira o prompt principal do cache.
+multi_agent = false
+goals = false
+memories = false
+hooks = true
+
+[tui]
+# O recap automático chama o modelo quando o terminal perde o foco.
+auto_recap = false
+show_tooltips = false
+
+# Guarda comum (agents/lib/guard.py) antes de todo comando de shell.
+# Hooks não gerenciados exigem confiança: run.sh e codex-local passam
+# --dangerously-bypass-hook-trust (o hook é este, gerado pelo repositório).
+[[hooks.PreToolUse]]
+matcher = "Bash"
+hooks = [
+  { type = "command", command = "python3 -I \"@@AGENT_GUARD@@\"", timeout = 15, statusMessage = "local-guard" },
+]

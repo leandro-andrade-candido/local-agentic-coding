@@ -1,0 +1,7 @@
+# Perfil do eval ($CODEX_HOME/autonomous.config.toml, --profile autonomous).
+# Sem aprovações e sem o sandbox do Codex: o isolamento é o container da E7
+# (o bubblewrap do Codex não cria namespaces dentro de um container Docker sem
+# privilégios). Regras "forbidden" (rules/) e o hook de guarda continuam valendo.
+# Para usar o sandbox do Codex fora do container: CODEX_LOCAL_SANDBOX=workspace-write.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"

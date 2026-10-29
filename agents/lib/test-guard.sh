@@ -73,6 +73,16 @@ EOF"
   check allow $p 'npm run test'
   check allow $p 'uv run pytest -q'
   check allow $p 'pytest -q && git add -A && git commit -m wip'
+  check deny  $p "bash -lc 'git push origin main'"
+  check deny  $p 'sh -c "cd src && sudo make install"'
+  check allow $p "bash -lc 'pytest -q'"
+  check allow $p "bash -lc \"apply_patch <<'EOF'
+*** Begin Patch
+*** Update File: a.py
+-sudo rm -rf /
++print(1)
+*** End Patch
+EOF\""
 done
 check allow interactive 'npm install'
 check allow interactive 'pip install requests'

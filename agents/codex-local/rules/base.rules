@@ -1,0 +1,20 @@
+# Regras de execução (execpolicy, Starlark) do Codex local, nos dois perfis.
+# Copiadas para $CODEX_HOME/rules/local.rules. "forbidden" bloqueia sem perguntar;
+# vale a decisão mais restritiva entre as regras que casam. Casam por prefixo do
+# argv; scripts "bash -lc" simples são separados em comandos. Formas como
+# `git -C x push` ficam para o hook agents/lib/guard.py.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "git push is not allowed: pushing is always done manually by the user.",
+    match = ["git push", "git push origin main"],
+    not_match = ["git pull", "git status"],
+)
+
+prefix_rule(
+    pattern = [["sudo", "su", "doas", "pkexec", "runuser"]],
+    decision = "forbidden",
+    justification = "Privilege escalation is not allowed.",
+    match = ["sudo apt install x", "su -"],
+)
