@@ -19,6 +19,16 @@ agents_versions_hash() {
     grep -E '^[A-Z_]+_(PKG|VERSION|INTEGRITY)=' "$AGENTS_DIR/versions.env" | sha256sum | cut -c1-16
 }
 
+# Prefixo das skills materializadas por scripts/fetch-skills.sh (SKILLS_PREFIX do
+# versions.env da raiz; a variável de ambiente sobrepõe).
+skills_prefix() {
+    if [ -n "${SKILLS_PREFIX:-}" ]; then echo "$SKILLS_PREFIX"; return; fi
+    (set +eu; source "$REPO_ROOT/versions.env" >/dev/null 2>&1; echo "${SKILLS_PREFIX:-$HOME/.local/opt/skills}")
+}
+
+# Cabeçalho de comentários do script como ajuda.
+box_usage() { awk 'NR > 1 && /^#/ {sub(/^# ?/, ""); print; next} NR > 1 {exit}' "$1"; }
+
 # Fuso do host (as tarefas do chrono dependem dele; ver eval/README.md).
 host_tz() {
     if [ -n "${TZ:-}" ]; then echo "$TZ"; return; fi

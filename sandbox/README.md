@@ -40,6 +40,7 @@ EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 lote1
 # sessão interativa num projeto (só ele é montado)
 sandbox/agent-shell.sh claude-local ~/projetos/copia-do-piloto
 sandbox/agent-shell.sh shell ~/projetos/copia-do-piloto     # bash no mesmo isolamento
+sandbox/agent-shell.sh --skills-dir ~/minhas-skills pi ~/projetos/x   # + skills pessoais
 AGENT_PROFILE=autonomous sandbox/agent-shell.sh qwen-code ~/projetos/x
 
 # qualquer comando; por exemplo, medir o preâmbulo de um agente (E6) dentro do container
@@ -69,7 +70,8 @@ rode `sandbox/build.sh` de novo.
 | `--memory`/`--memory-swap` 8g, `--cpus 8`, `--pids-limit 2048`, `--oom-score-adj 500` | Um agente em loop não derruba a máquina. Sob falta de memória, o kernel mata o agente antes do llama-server. |
 | `--init`, `--rm`, nome e rótulo `local-agentic.agent-box` | Reaproveita processos órfãos e apaga o container no fim. SIGTERM, SIGINT e o timeout do eval fazem o wrapper rodar `docker rm -f`. |
 | `--runtime runc`, sem `--gpus` | Os agentes não precisam de GPU, e o `/dev/dxg` do WSL fica de fora. |
-| Ambiente por lista | Só passam `LLM_*`, `AGENT_*`, `*_LOCAL_*`, `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, `TZ` e poucas outras. Nada de `SSH_AUTH_SOCK`, `GITHUB_TOKEN`, `DOCKER_HOST`, `WSL_INTEROP` ou chaves de nuvem. |
+| Ambiente por lista | O wrapper define `AGENT_BOX=1` (os `run.sh` no perfil autonomous recusam rodar sem ela), `AGENT_SKILLS_DIRS`, `LLM_BASE_URL`, `HOME` e `TZ`; valores do host para elas são ignorados. Do host passam só `LLM_*` (inclui a chave `LLM_API_KEY`), os ajustes `AGENT_*`/`*_LOCAL_*`, `GIT_AUTHOR_*`/`GIT_COMMITTER_*` e poucas outras. Nada de `SSH_AUTH_SOCK`, `GITHUB_TOKEN`, `DOCKER_HOST`, `WSL_INTEROP` ou chaves de nuvem. |
+| Skills só leitura em `/opt/skills` | O agente usa as skills, mas não altera as que outras sessões vão carregar. Ver "Skills". |
 
 Montagens recusadas pelo `run-in-box.sh`:
 
@@ -112,6 +114,19 @@ porque os agentes precisam enviá-la. Ela só vale para o llama-server, que o
 container já alcança. Ver "Pendências" para a alternativa de injetar a chave no
 lado do host.
 
+### Skills
+
+| Camada | Origem no host | No container |
+|---|---|---|
+| Base | `$SKILLS_PREFIX/profiles/base` (`SKILLS_PREFIX` do `versions.env` da raiz; a variável de ambiente sobrepõe), materializado por `scripts/fetch-skills.sh` | `/opt/skills/base`, só leitura |
+| Pessoais | `--skills-dir <dir>` (repetível) ou `BOX_SKILLS_DIRS=dir1:dir2` | `/opt/skills/extra-1`, `extra-2`..., só leitura |
+| Projeto | `.agents/skills`, `.claude/skills` do repositório | vêm com o workdir/projeto (leitura e escrita, como o resto dele) |
+
+- `AGENT_SKILLS_DIRS` lista as pastas montadas em `/opt/skills`, separadas por `:` (vazia se nenhuma). Os lançadores e `run.sh` dos agentes decidem como cada agente as carrega (ver `skills/README.md`).
+- Sem o perfil base no host, o wrapper avisa e segue sem ele.
+- `--no-skills` não monta nenhuma. O eval usa isso nos containers da captura do diff e das verificações.
+- Skills do projeto não são protegidas: o agente pode reescrevê-las, como qualquer arquivo do projeto, e o que ele escrever vale na próxima sessão naquele projeto.
+
 ### Git
 
 - **Sem credenciais.** Não entram chaves SSH, agente SSH, `gh`, `~/.git-credentials`, `~/.gitconfig` nem `credential.helper` (o `/etc/gitconfig` da imagem zera os ajudantes). Sem rede, o `git push` falha de qualquer forma.
@@ -150,6 +165,7 @@ lado do host.
 
 - **Escrever fora** do workdir, do log-dir, de `/tmp`/`/var/tmp` e da HOME temporária. Isso cobre o repositório, a HOME do host, a imagem, `agents/` e a guarda.
 - **Ler** a HOME do host, chaves, tokens e configurações de outros agentes (`~/.claude`, `~/.codex`). No eval, também os testes ocultos, as soluções e as outras execuções em `eval/`.
+- **Alterar as skills** base e pessoais (montadas só leitura).
 - **Usar a rede:** internet, DNS, o outro serviço local na 8080, outras portas do host, a ponte do Docker, o Windows (vsock e interop do WSL) e sockets abstratos do host.
 - **Ganhar privilégio:** root, `sudo`, setuid, capabilities, user namespaces, o socket do Docker e a GPU.
 - **Fazer `git push`** ou qualquer acesso remoto com as credenciais do usuário.
@@ -187,6 +203,8 @@ lado do host.
 | `BOX_PIDS` | `2048` | Processos e threads |
 | `BOX_TMP_SIZE` / `BOX_HOME_SIZE` | `4g` / `1g` | Tamanho do `/tmp` e da HOME. É memória e conta no limite acima. |
 | `BOX_ALLOW_STALE` | `0` | `1` aceita uma imagem construída com outras versões dos agentes |
+| `BOX_SKILLS_DIRS` | vazio | Pastas de skills pessoais, separadas por `:` (o mesmo que `--skills-dir`) |
+| `SKILLS_PREFIX` | do `versions.env` da raiz | Onde está `profiles/base` |
 | `BOX_DRY_RUN` | `0` | `1` só mostra o `docker run` montado, sem conferir a imagem nem subir nada |
 | `BOX_CODEX_SANDBOX` | `danger-full-access` | Valor de `--sandbox` do Codex no `agent-shell.sh` |
 | `AGENT_BOX_STATE` | `~/.local/state/local-agentic/agent-box` | Estado das sessões interativas no container |

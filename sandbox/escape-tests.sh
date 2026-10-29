@@ -8,7 +8,8 @@
 #   2. sobe um servidor HTTP falso em 127.0.0.1 no lugar do llama-server (testa o
 #      encaminhador com SSE, conexões simultâneas, keep-alive e corpo grande, sem
 #      depender do modelo) e um ouvinte TCP no IP da ponte docker0;
-#   3. roda a bateria DENTRO de um container (run-in-box.sh ... -- escape-tests.sh --inside);
+#   3. roda a bateria DENTRO de um container (run-in-box.sh ... -- escape-tests.sh --inside),
+#      com um perfil base de skills e uma pasta de skills pessoais falsos (só leitura);
 #   4. confere do lado do host o que o container não podia tocar;
 #   5. se o llama-server real responder em LLM_BASE_URL, faz GET /health por dentro;
 #   6. confere que o timeout do eval derruba o container.
@@ -158,6 +159,20 @@ PY
     expect_empty "nenhum socket unix abstrato (namespace de rede próprio)" \
         "$(awk 'NR > 1 && $8 ~ /^@/' /proc/net/unix)"
 
+    echo "-- skills (só leitura) e variáveis do wrapper"
+    expect_ok "AGENT_BOX=1 (definida pelo wrapper)" test "${AGENT_BOX:-}" = 1
+    expect_ok "AGENT_SKILLS_DIRS=/opt/skills/base:/opt/skills/extra-1 (${AGENT_SKILLS_DIRS:-vazia})" \
+        test "${AGENT_SKILLS_DIRS:-}" = /opt/skills/base:/opt/skills/extra-1
+    local sd
+    IFS=: read -r -a sd <<<"${AGENT_SKILLS_DIRS:-}"
+    for d in "${sd[@]}"; do
+        f="$(find "$d" -name SKILL.md 2>/dev/null | head -n1)"
+        expect_ok "lê $d" test -n "$f" -a -r "$f"
+        expect_fail "não grava em $d" try_write "$d"
+        expect_fail "não grava em $(dirname "${f:-$d/x}")" try_write "$(dirname "${f:-$d/x}")"
+        expect_fail "não altera ${f:-$d/SKILL.md}" sh -c ": >> '${f:-$d/SKILL.md}'"
+    done
+
     echo "-- processos e ambiente"
     v="$(cat /proc/1/comm)"
     expect_ok "PID 1 é o init do container ($v)" test "$v" = docker-init -o "$v" = tini
@@ -248,7 +263,12 @@ finish() {
 }
 trap finish EXIT
 
-mkdir -p "$scratch/repo" "$scratch/logs" "$scratch/outside"
+mkdir -p "$scratch/repo" "$scratch/logs" "$scratch/outside" \
+    "$scratch/skills-prefix/profiles/base/demo" "$scratch/skills-extra/pessoal"
+printf -- '---\nname: demo\ndescription: skill falsa do teste\n---\n' >"$scratch/skills-prefix/profiles/base/demo/SKILL.md"
+printf -- '---\nname: pessoal\ndescription: skill falsa do teste\n---\n' >"$scratch/skills-extra/pessoal/SKILL.md"
+skills_sum() { find "$scratch/skills-prefix" "$scratch/skills-extra" -type f -exec sha256sum {} + | sort; }
+skills_before="$(skills_sum)"
 canary="$scratch/outside/canary.txt"
 echo "canário $(date +%s%N) $RANDOM" >"$canary"
 canary_sum="$(sha256sum <"$canary")"
@@ -330,9 +350,11 @@ before="$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)"
 echo "== agent-box: testes de fuga (scratch $scratch, servidor falso :$dummy_port)"
 GITHUB_TOKEN=canario ANTHROPIC_API_KEY=canario OPENAI_API_KEY=canario \
 ET_CANARY_SECRET=canario SSH_AUTH_SOCK="$scratch/ssh-agent.sock" \
+AGENT_BOX=0 AGENT_SKILLS_DIRS=/home SKILLS_PREFIX="$scratch/skills-prefix" BOX_SKILLS_DIRS= \
 LLM_BASE_URL="http://127.0.0.1:$dummy_port" BOX_MEMORY=3g BOX_PIDS=512 BOX_CPUS=2 \
 "$SANDBOX_DIR/run-in-box.sh" \
     --rw "$scratch/repo" --rw "$scratch/logs" --ro "$self" --cwd "$scratch/repo" \
+    --skills-dir "$scratch/skills-extra" \
     --env "ET_MODE=dummy" --env "ET_WORKDIR=$scratch/repo" --env "ET_LOGDIR=$scratch/logs" \
     --env "ET_HOST_HOME=$HOME" --env "ET_HOST_UID=$(id -u)" --env "ET_REPO_ROOT=$REPO_ROOT" \
     --env "ET_AGENTS_DIR=$AGENTS_DIR" --env "ET_CANARY=$canary" --env "ET_HOST_ADDRS=$host_addrs" \
@@ -343,6 +365,7 @@ inside_rc=$?
 echo "-- no host, depois do container"
 if [ "$(sha256sum <"$canary")" = "$canary_sum" ]; then ok "canário intacto"; else bad "canário intacto"; fi
 expect_ok "nada novo fora das montagens" test "$(ls -A "$scratch/outside")" = canary.txt
+expect_ok "skills intactas" test "$(skills_sum)" = "$skills_before"
 expect_empty "tudo que o container gravou é do usuário do host" \
     "$(find "$scratch/repo" "$scratch/logs" ! -uid "$(id -u)" 2>/dev/null | head -3)"
 expect_ok "container removido" test "$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)" = "$before"
@@ -352,7 +375,7 @@ expect_empty "estado temporário do wrapper removido" \
 real="${LLM_BASE_URL:-http://127.0.0.1:9931}"
 if curl -fsS --max-time 3 -o /dev/null "${real%/}/health" 2>/dev/null; then
     echo "-- llama-server real em $real"
-    LLM_BASE_URL="$real" "$SANDBOX_DIR/run-in-box.sh" --rw "$scratch/repo" --ro "$self" \
+    LLM_BASE_URL="$real" "$SANDBOX_DIR/run-in-box.sh" --no-skills --rw "$scratch/repo" --ro "$self" \
         --env ET_MODE=real --env "ET_WORKDIR=$scratch/repo" --env "ET_LOGDIR=$scratch/logs" \
         -- bash "$self" --inside
     [ $? = 0 ] || inside_rc=1
@@ -362,7 +385,7 @@ fi
 
 echo "-- timeout do eval derruba o container"
 t0=$SECONDS
-timeout -k 5 3 "$SANDBOX_DIR/run-in-box.sh" --no-llm -- sleep 120 >/dev/null 2>&1
+timeout -k 5 3 "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills -- sleep 120 >/dev/null 2>&1
 rc=$?
 expect_ok "timeout devolve 124 (saída $rc, $((SECONDS - t0)) s)" test "$rc" = 124
 for _ in $(seq 20); do

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Sessão interativa de um agente dentro do agent-box, com só o projeto montado.
 #
-# Uso: sandbox/agent-shell.sh <agente|shell> <projeto> [opções do agente...]
+# Uso: sandbox/agent-shell.sh [--skills-dir <dir>]... <agente|shell> <projeto> [opções do agente...]
 #   agente: qwen-code | pi | opencode | claude-local | codex-local
 #   shell:  bash no container, com o mesmo isolamento (para rodar testes, git, etc.)
+#   --skills-dir: skills pessoais, só leitura em /opt/skills/extra-N (repetível)
 #
 # - Monta <projeto> com leitura e escrita no mesmo caminho absoluto; nada mais da
 #   HOME do host. agents/ entra só leitura (lançadores e configuração).
@@ -12,6 +13,8 @@
 #   ~/.local/state/local-agentic/agent-box/<agente>, separado do estado dos
 #   lançadores usados direto no host: o que o agente grava no container nunca é
 #   lido por um agente rodando fora dele.
+# - Skills: perfil base em /opt/skills/base, pessoais em /opt/skills/extra-N, as do
+#   projeto (.agents/skills, .claude/skills) vêm com ele; lista em AGENT_SKILLS_DIRS.
 # - .git do projeto protegido (--protect-git): config e hooks só leitura e auditoria
 #   no fim da sessão. O resto do projeto, inclusive o histórico em .git, pode ser
 #   alterado ou apagado pelo agente: trabalhe numa cópia ou worktree.
@@ -22,7 +25,12 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
 
-usage() { sed -n '2,21p' "$0" >&2; exit 2; }
+usage() { box_usage "$0" >&2; exit 2; }
+box_args=()
+while [ "${1:-}" = --skills-dir ]; do
+    box_args+=(--skills-dir "${2:?--skills-dir sem caminho}")
+    shift 2
+done
 [ $# -ge 2 ] || usage
 harness="$1" proj="$2"
 shift 2
@@ -49,7 +57,7 @@ if [ -z "${GIT_AUTHOR_NAME:-}" ]; then
     fi
 fi
 
-args=(--tty --rw "$proj" --cwd "$proj" --protect-git "$proj")
+args=(--tty --rw "$proj" --cwd "$proj" --protect-git "$proj" "${box_args[@]}")
 if [ -z "$launcher" ]; then
     cmd=(bash -l)
 else

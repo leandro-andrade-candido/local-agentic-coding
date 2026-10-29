@@ -11,16 +11,25 @@
 #   --tty                 sessão interativa (docker run -it)
 #   --protect-git <repo>  .git preso no lugar, .git/config e .git/hooks só leitura, e
 #                         auditoria do .git no fim (ver sandbox/README.md, "Git")
+#   --skills-dir <dir>    skills pessoais, só leitura em /opt/skills/extra-N (repetível;
+#                         BOX_SKILLS_DIRS=dir1:dir2 faz o mesmo)
+#   --no-skills           sem skills (nem a base nem as extras)
+#
+# Skills: o perfil base ($SKILLS_PREFIX/profiles/base, de scripts/fetch-skills.sh) entra
+# só leitura em /opt/skills/base; as do projeto vêm com o workdir (.agents/skills,
+# .claude/skills). AGENT_SKILLS_DIRS lista, separadas por ":", as montadas em /opt/skills.
 #
 # Sempre: agents/ só leitura; raiz do container só leitura; HOME, /tmp e /var/tmp em
 # tmpfs; --network none (o único caminho para fora é o encaminhador do llama-server);
 # --cap-drop ALL; no-new-privileges; limites de memória, CPU e processos; sem o socket
 # do Docker, sem a HOME do host, sem nenhuma variável do host além das listadas abaixo.
 #
-# Variáveis repassadas: LLM_* (LLM_BASE_URL reescrita para o encaminhador interno),
-# LOCAL_LLM_API_KEY, AGENT_* (menos AGENT_BIN/HOME/WORKDIR/LOG_DIR/GUARD), CLAUDE_LOCAL_*,
-# CODEX_LOCAL_*, QWEN_LOCAL_*, PI_LOCAL_*, OPENCODE_LOCAL_*, FAKE_ORACLE_*, GIT_AUTHOR_*,
-# GIT_COMMITTER_*, EVAL_TEST_TIMEOUT_S; TZ (fuso do host); TERM (com --tty).
+# Definidas pelo wrapper (valores do host são ignorados): AGENT_BOX=1 (os run.sh no perfil
+# autonomous recusam rodar sem ela), AGENT_SKILLS_DIRS, LLM_BASE_URL (reescrita para o
+# encaminhador interno), HOME, TZ (fuso do host), TERM (com --tty).
+# Repassadas do host: LLM_* (inclui LLM_API_KEY), LOCAL_LLM_API_KEY, os ajustes AGENT_*
+# (menos AGENT_BIN/HOME/WORKDIR/LOG_DIR/GUARD), CLAUDE_LOCAL_*, CODEX_LOCAL_*, QWEN_LOCAL_*,
+# PI_LOCAL_*, OPENCODE_LOCAL_*, FAKE_ORACLE_*, GIT_AUTHOR_*, GIT_COMMITTER_*, EVAL_TEST_TIMEOUT_S.
 #
 # Ajustes: BOX_IMAGE (agent-box:latest), BOX_MEMORY (8g), BOX_CPUS (8), BOX_PIDS (2048),
 # BOX_TMP_SIZE (4g), BOX_HOME_SIZE (1g), BOX_ALLOW_STALE=1 (aceita imagem de outras versões),
@@ -31,7 +40,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
 
-rw=() ro=() extra_env=() protect=() cwd="" llm=1 tty=0
+rw=() ro=() extra_env=() protect=() skills=() cwd="" llm=1 tty=0 use_skills=1
 while [ $# -gt 0 ]; do
     case "$1" in
         --rw) rw+=("${2:?--rw sem caminho}"); shift 2 ;;
@@ -41,8 +50,10 @@ while [ $# -gt 0 ]; do
         --no-llm) llm=0; shift ;;
         --tty) tty=1; shift ;;
         --protect-git) protect+=("${2:?--protect-git sem caminho}"); shift 2 ;;
+        --skills-dir) skills+=("${2:?--skills-dir sem caminho}"); shift 2 ;;
+        --no-skills) use_skills=0; shift ;;
         --) shift; break ;;
-        -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+        -h|--help) box_usage "$0"; exit 0 ;;
         *) box_die "opção desconhecida: $1 (o comando vem depois de --)" ;;
     esac
 done
@@ -129,6 +140,30 @@ for p in "${rw[@]}"; do
     mounts+=(--mount "type=bind,source=$p,target=$p")
 done
 
+# Skills: base e pessoais só leitura, fora das montagens de trabalho.
+skill_dirs=()
+if [ "$use_skills" = 1 ]; then
+    base="$(skills_prefix)/profiles/base"
+    if [ -d "$base" ]; then
+        check_mount "$base"
+        mounts+=(--mount "type=bind,source=$base,target=/opt/skills/base,readonly")
+        skill_dirs+=(/opt/skills/base)
+    else
+        box_warn "perfil base de skills ausente ($base): rode scripts/fetch-skills.sh; seguindo sem ele"
+    fi
+    IFS=: read -r -a env_skills <<<"${BOX_SKILLS_DIRS:-}"
+    n=0
+    for p in "${skills[@]}" "${env_skills[@]}"; do
+        [ -n "$p" ] || continue
+        p="$(abs "$p")"
+        [ -d "$p" ] || box_die "--skills-dir não é diretório: $p"
+        check_mount "$p"
+        n=$((n + 1))
+        mounts+=(--mount "type=bind,source=$p,target=/opt/skills/extra-$n,readonly")
+        skill_dirs+=("/opt/skills/extra-$n")
+    done
+fi
+
 git_repos=()
 for r in "${protect[@]}"; do
     r="$(abs "$r")"; g="$r/.git"
@@ -164,10 +199,11 @@ fi
 cwd="$(abs "$cwd")"
 
 # --- ambiente ---------------------------------------------------------------------
-envs=(-e "HOME=/home/agent" -e "TZ=$(host_tz)")
+envs=(-e "HOME=/home/agent" -e "TZ=$(host_tz)" -e AGENT_BOX=1
+      -e "AGENT_SKILLS_DIRS=$(IFS=:; echo "${skill_dirs[*]}")")
 while IFS= read -r v; do
     case "$v" in
-        LLM_BASE_URL|AGENT_BIN|AGENT_HOME|AGENT_WORKDIR|AGENT_LOG_DIR|AGENT_GUARD) ;;
+        LLM_BASE_URL|AGENT_BOX|AGENT_SKILLS_DIRS|AGENT_BIN|AGENT_HOME|AGENT_WORKDIR|AGENT_LOG_DIR|AGENT_GUARD) ;;
         LLM_*|LOCAL_LLM_API_KEY|AGENT_*|CLAUDE_LOCAL_*|CODEX_LOCAL_*|QWEN_LOCAL_*|PI_LOCAL_*|\
         OPENCODE_LOCAL_*|FAKE_ORACLE_*|GIT_AUTHOR_*|GIT_COMMITTER_*|EVAL_TEST_TIMEOUT_S)
             envs+=(-e "$v") ;;   # sem valor: o docker lê do ambiente (não aparece no ps)
