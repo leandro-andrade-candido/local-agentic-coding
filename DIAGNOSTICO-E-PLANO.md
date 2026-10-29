@@ -365,12 +365,18 @@ Repositórios usados:
 
    | Nível | Agente | Modelo | Custo recorrente | Passa se |
    |---|---|---|---|---|
-   | Meta 1 | Qwen Code, Codex CLI, Pi e OpenCode; a ordem final vem do resultado da E6 | local | zero | ≥ 5 de 7 tarefas sem intervenção em 2 de 3 execuções, nenhuma ação destrutiva, e o piloto aprovado pelo autor e pelo orquestrador |
-   | Meta 2 | Claude Code (fechado, gratuito) | local | zero de API | Mesmo critério. Só é testada se a falha da Meta 1 for do agente: erros de formato de ferramenta, loops, perda de cache. |
+   | Meta 1 (custo zero) | Disputa única na E6 entre Qwen Code, Codex CLI, Pi e OpenCode (open source) e Claude Code (fechado, gratuito), todos com o modelo local | local | zero | ≥ 5 de 7 tarefas sem intervenção em 2 de 3 execuções, nenhuma ação destrutiva, e o piloto aprovado pelo autor e pelo orquestrador |
+   | Meta 2 | Incorporada à Meta 1 em 29/10: o Claude Code local disputa junto com os open source | — | — | — |
    | Meta 3 | qualquer um | local na maior parte, nuvem para planejar e revisar. Opções: Codex com o plano ChatGPT Go (custo baixo) ou Claude | assinatura do autor | A parcela de tarefas resolvida localmente, a definir. Contraria a restrição original e só vale como decisão sua, explícita. |
 
    Se o limite for do modelo (chamadas de ferramenta corretas, mas soluções erradas), trocar de agente não resolve. O próximo passo, nesse caso, é um modelo local maior (Coder-Next 80B ou Qwen3.8-27B como revisor) e, depois, a Meta 3.
 5. **O piloto de validação é um projeto real e privado**, fora deste repositório (ver seção 9).
+7. **Regra de escolha do agente (29/10).** O critério principal é custo zero, não código aberto, então as antigas Metas 1 e 2 viraram uma disputa só.
+   - **Vence o melhor resultado medido** na E6 e na E8.
+   - **Em empate técnico, vence o open source.** Empate técnico é diferença de até 1 tarefa em 7, dentro da variação entre execuções.
+   - **Riscos do Claude Code local que pesam no desempate:** não tem suporte oficial para modelos não-Claude (uma atualização pode quebrar o uso local), o prompt fixo é de ~25–31 mil tokens (mais caro a cada perda de cache) e as chamadas em segundo plano podem descartar o cache.
+   - **A favor dele:** o autor já domina o fluxo (skills, hooks, subagentes, plugins).
+   - **Ordem na E6:** o Claude Code local e o Codex local rodam primeiro, para dar logo o sinal com as ferramentas já conhecidas.
 6. **Codex adicionado ao plano (29/10)**, de duas formas que não se misturam:
    - **Codex CLI com o modelo local:** entra na Meta 1 e no teste da E6 (`agents/codex-local/`).
      - É open source (Apache-2.0), não usa conta nem plano, e o llama-server tem o endpoint `/v1/responses` que ele exige.
