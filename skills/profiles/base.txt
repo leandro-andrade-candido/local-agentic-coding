@@ -1,0 +1,15 @@
+# Perfil base: skills do Superpowers disponíveis em todo projeto (uma por linha).
+# Só nome e descrição entram no prompt; o corpo é carregado sob demanda.
+using-superpowers
+brainstorming
+writing-plans
+executing-plans
+subagent-driven-development
+dispatching-parallel-agents
+test-driven-development
+systematic-debugging
+verification-before-completion
+requesting-code-review
+receiving-code-review
+using-git-worktrees
+finishing-a-development-branch

@@ -4,6 +4,17 @@ O piloto testa se o ambiente local consegue entregar software de verdade num pro
 
 Os detalhes do projeto ficam em `PILOTO.local.md`, fora do git. Este protocolo não cita o projeto.
 
+## Formas de entrada
+
+O piloto é variável: cada execução escolhe uma das duas formas.
+
+| Forma | Ponto de partida | Primeira fase |
+|---|---|---|
+| A. Projeto existente | Repositório real, com cópia ou worktree montado no container | F1 = Entendimento do código |
+| B. Projeto novo | Narrativa do autor: dores, público, entregas de valor esperadas | F1 = Brainstorm (skill `brainstorming`): perguntas, 2 ou 3 abordagens, documento de desenho aprovado pelo autor |
+
+Nas duas formas, o fluxo segue as skills do perfil base (`skills/profiles/base.txt`): `brainstorming` → `writing-plans` → `subagent-driven-development` ou `executing-plans` → `requesting-code-review` → `finishing-a-development-branch`. Contratos e serviços de um projeto novo nascem na F3 (especificação).
+
 ## Entradas
 
 | Entrada | Quem fornece | Observação |
@@ -18,7 +29,7 @@ Cada fase produz um arquivo numa branch própria da cópia. Os pontos de aprova�
 
 | Fase | O agente produz | Ponto de aprovação |
 |---|---|---|
-| F1. Entendimento | `ARQUITETURA.md`: módulos, fluxo de dados, como rodar, testar e publicar | — |
+| F1. Entendimento (forma A) ou Brainstorm (forma B) | A: `ARQUITETURA.md` com módulos, fluxo de dados e como rodar, testar e publicar. B: `DESENHO.md` com o problema, as abordagens consideradas e a escolhida | B: o autor responde às perguntas e escolhe a abordagem |
 | F2. Requisitos | `REQUISITOS.md`: histórias com critérios de aceite, fora de escopo, perguntas abertas | O autor responde às perguntas e aprova |
 | F3. Especificação | `SPEC.md`: desenho, arquivos afetados, dados e migrações, mudanças de API, plano de testes, riscos | O autor aprova |
 | F4. Tarefas | `TAREFAS.md`: tarefas pequenas, em ordem, cada uma com critério de pronto | — |
@@ -42,6 +53,7 @@ O autor e o orquestrador dão uma nota de 0 a 2 em cada item. O orquestrador ava
 
 | Item | 0 | 1 | 2 |
 |---|---|---|---|
+| Entendimento ou desenho | errado ou superficial | correto, com lacunas | preciso; na forma B, abordagens bem comparadas |
 | Requisitos | incompletos ou errados | úteis, com lacunas | claros, testáveis, com bom fora de escopo |
 | Especificação | inviável ou genérica | viável, com riscos não vistos | precisa, com riscos e plano de testes |
 | Tarefas | sem ordem ou critério | ordenadas, sem critério claro | pequenas, ordenadas, com critério de pronto |
@@ -56,7 +68,9 @@ O piloto é aprovado se todas estas condições valerem:
 2. Build, testes e lint terminam verdes.
 3. No máximo 3 intervenções não planejadas.
 4. Nenhuma ação destrutiva.
-5. Nota total de pelo menos 8 em 12, sem nenhum 0.
+5. Nota total de pelo menos 9 em 14, sem nenhum 0.
+
+As notas de planejamento (entendimento ou desenho, requisitos, especificação, tarefas) e as de execução (código, testes, entrega) também são registradas em separado. Elas mostram se vale dividir: planejar com um modelo mais forte e executar localmente.
 
 ## Isolamento e confidencialidade
 
