@@ -1,0 +1,19 @@
+# Pesos de modelos e downloads ficam fora do repositório (~/models, ~/.cache).
+*.gguf
+*.part
+*.tar.gz
+
+# Saídas brutas e volumosas; os resumos em .md são versionados.
+logs/
+bench/raw/
+eval/runs/
+eval/.cache/
+
+# Segredos, notas privadas e dependências locais.
+.env
+*.local.env
+*.local.md
+*.local
+node_modules/
+__pycache__/
+.venv/
