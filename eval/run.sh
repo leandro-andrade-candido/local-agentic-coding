@@ -14,6 +14,8 @@
 #   EVAL_WORK_ROOT        onde ficam os workdirs (~/.cache/local-agentic/eval-work)
 #   EVAL_CLEANUP          deps (padrão: apaga .venv/node_modules do workdir no fim) | all | none
 #   EVAL_FORCE=1          sobrescreve um result.json existente
+#   EVAL_WRAPPER          ex.: sandbox/run-in-box.sh: agente, captura do diff e verificações
+#                         rodam cada um num container novo (ver sandbox/README.md)
 #
 # Saída: 0 passou, 1 falhou, 3 aguarda nota do gabarito, 2 erro de infraestrutura.
 set -uo pipefail
@@ -37,6 +39,10 @@ timeout_s="${EVAL_TIMEOUT_S:-$(( timeout_min * 60 ))}"   # EVAL_TIMEOUT_S: só p
 
 export LLM_BASE_URL="${LLM_BASE_URL:-http://127.0.0.1:9931}"
 export LLM_MODEL="${LLM_MODEL:-qwen3.6-35b}"
+if [ -n "${EVAL_WRAPPER:-}" ]; then
+    EVAL_WRAPPER="$(realpath -e "$EVAL_WRAPPER")" && [ -x "$EVAL_WRAPPER" ] \
+        || die "EVAL_WRAPPER não executável: $EVAL_WRAPPER"
+fi
 
 out="$EVAL_DIR/runs/$run_id/$harness/$task_id"
 work="$EVAL_WORK_ROOT/$run_id/$harness/$task_id"
@@ -76,6 +82,23 @@ if $setup_ok; then
     cp "$task_dir/task.md" "$work/prompt.md"
 fi
 
+# E7: com EVAL_WRAPPER, tudo que executa ou lê o que o agente produziu roda num
+# container novo, e o host não executa nada do workdir depois que o agente o tocou:
+# o agente (só workdir, log-dir e prompt montados; nunca eval/), a captura do diff
+# (um .git/config plantado executaria comando no git do host) e as verificações
+# (os testes ocultos importam o código do agente). Sem a variável, os prefixos
+# ficam vazios e nada muda.
+box_agent=() box_post=() box_check=()
+if [ -n "${EVAL_WRAPPER:-}" ]; then
+    box_agent=("$EVAL_WRAPPER" --rw "$wd" --rw "$work/agent-logs" --ro "$work/prompt.md")
+    # Harnesses de teste (eval/harnesses/, sem LLM) leem as soluções de referência.
+    case "$harness_sh" in "$EVAL_DIR"/harnesses/*) box_agent+=(--ro "$EVAL_DIR") ;; esac
+    box_agent+=(--)
+    box_post=("$EVAL_WRAPPER" --no-llm --rw "$wd" --rw "$out" --)
+    box_check=("$EVAL_WRAPPER" --no-llm --rw "$wd" --rw "$out" \
+               --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --)
+fi
+
 agent_rc=""; timed_out=false; agent_wall_s=""
 if $setup_ok; then
     # 2. Métricas do servidor antes, amostrador de memória durante, métricas depois.
@@ -85,9 +108,9 @@ if $setup_ok; then
     sampler_pid=$!
 
     # 3. Agente, com timeout de parede. O timeout mata o grupo de processos inteiro.
-    log "agente iniciado ($harness_sh)"
+    log "agente iniciado ($harness_sh${EVAL_WRAPPER:+, no container})"
     t0=$(date +%s.%N)
-    (cd "$wd" && exec timeout -k 30 "$timeout_s" "$harness_sh" \
+    (cd "$wd" && exec timeout -k 30 "$timeout_s" "${box_agent[@]}" "$harness_sh" \
         --workdir "$wd" --prompt-file "$work/prompt.md" --log-dir "$work/agent-logs") \
         </dev/null >"$out/agent.stdout" 2>"$out/agent.stderr" 9>&-
     agent_rc=$?
@@ -99,18 +122,19 @@ if $setup_ok; then
     $EVAL_PY "$here/lib/metrics.py" snapshot "$LLM_BASE_URL" "$out/metrics.after.prom"
 
     # 4. Diff do agente (inclui arquivos novos), capturado antes das verificações.
-    tmp_index="$(mktemp)"; rm -f "$tmp_index"
-    GIT_INDEX_FILE="$tmp_index" git -C "$wd" add -A >/dev/null 2>&1
-    GIT_INDEX_FILE="$tmp_index" git -C "$wd" diff --cached --binary "$start_ref" >"$out/agent.patch"
-    numstat="$(GIT_INDEX_FILE="$tmp_index" git -C "$wd" diff --cached --numstat "$start_ref")"
-    rm -f "$tmp_index"
-    agent_commits="$(git -C "$wd" rev-list --count "$baseline..HEAD" 2>/dev/null || echo 0)"
+    numstat="$("${box_post[@]}" bash -c '
+        export GIT_INDEX_FILE="$(mktemp -u)"
+        git -C "$1" add -A >/dev/null 2>&1
+        git -C "$1" diff --cached --binary "$2" >"$3/agent.patch"
+        git -C "$1" diff --cached --numstat "$2"
+        rm -f "$GIT_INDEX_FILE"' _ "$wd" "$start_ref" "$out" 9>&-)"
+    agent_commits="$("${box_post[@]}" git -C "$wd" rev-list --count "$baseline..HEAD" 2>/dev/null 9>&- || echo 0)"
     cp -r "$work/agent-logs" "$out/agent-logs"
 
     # 5. Verificações ocultas.
     log "verificações ocultas"
     t0=$(date +%s.%N)
-    "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
+    "${box_check[@]}" "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
         >"$out/check.stdout" 2>"$out/check.stderr" 9>&-
     check_rc=$?
     check_s=$(python3 -c "import sys;print(round($(date +%s.%N)-$t0,1))")
@@ -128,6 +152,7 @@ M_AGENT_EXIT_CODE="${agent_rc:-}" M_TIMED_OUT="$timed_out" M_AGENT_COMMITS="${ag
 M_NUMSTAT="${numstat:-}" M_STARTED_AT="$started_at" M_FINISHED_AT="$finished_at" \
 M_LLM_BASE_URL="$LLM_BASE_URL" M_LLM_MODEL="$LLM_MODEL" M_WORKDIR="$wd" M_BASELINE="$baseline" \
 M_EVAL_COMMIT="$eval_commit" M_EVAL_DIRTY="$eval_dirty" M_HOSTNAME="$(hostname)" M_KERNEL="$(uname -r)" \
+M_SANDBOX="${EVAL_WRAPPER:-}" \
 $EVAL_PY - "$out/meta.json" <<'PY'
 import json, os, sys
 m = {k[2:].lower(): v for k, v in os.environ.items() if k.startswith("M_")}

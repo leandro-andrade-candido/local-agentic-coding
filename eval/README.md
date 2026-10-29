@@ -90,6 +90,32 @@ Uso manual de uma tarefa: `eval/tasks/T2-*/setup.sh /tmp/wd` cria o workdir; o p
 | `EVAL_CLEANUP` | `deps` | `deps` apaga `.venv`/`node_modules` no fim e mantém as fontes; `all` apaga o workdir; `none` mantém tudo. |
 | `EVAL_FORCE` | `0` | `1` sobrescreve um `result.json` existente. |
 | `EVAL_OFFLINE` | `0` | `1` falha em vez de usar a rede quando o cache está frio. |
+| `EVAL_WRAPPER` | vazio | `sandbox/run-in-box.sh` roda o agente, a captura do diff e as verificações em containers (seção abaixo). |
+
+### No container (E7)
+
+Com os agentes em modo autônomo, rode sempre pelo container da E7 ([`sandbox/`](../sandbox/README.md)):
+
+```bash
+sandbox/build.sh                                   # uma vez, e de novo quando agents/versions.env mudar
+EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 lote1
+EVAL_WRAPPER=sandbox/run-in-box.sh eval/matrix.sh -r 3 e6 qwen-code,pi smoke
+```
+
+Com `EVAL_WRAPPER`, o `run.sh` usa três containers novos por execução. O setup continua no host, porque ainda não houve agente.
+
+| Passo | Montado (fora isso, nada do host) | Rede |
+|---|---|---|
+| Agente (`agents/<h>/run.sh`) | workdir e log-dir (leitura e escrita), `prompt.md` e `agents/` (só leitura) | só o llama-server, pelo encaminhador |
+| Captura do diff (`git add -A`/`diff`/`rev-list`) | workdir e pasta do resultado | nenhuma |
+| Verificações (`check.sh`) | workdir e pasta do resultado; `eval/lib`, `eval/repos` e a pasta da tarefa (só leitura) | nenhuma |
+
+- **O agente nunca vê `eval/`** (testes ocultos, soluções, gabaritos e outras execuções). A exceção são os harnesses de teste de `eval/harnesses/` (como o `fake-oracle`), que não usam LLM e leem as soluções por definição; para eles, `eval/` entra só leitura.
+- **Depois do agente, o host não executa nada do workdir.** Os testes ocultos importam o código que o agente escreveu, e o `git` do host executaria um `core.fsmonitor` ou filtro plantado no `.git/config` do workdir. Por isso a captura do diff e as verificações também rodam em containers, criados depois que o container do agente já foi removido.
+- O timeout continua valendo: o `timeout` do `run.sh` encerra o wrapper, que remove o container.
+- O fuso do host (`TZ`) é repassado ao container, porque os testes do chrono dependem dele.
+- `meta.json` registra o wrapper em `sandbox`.
+- Para inspecionar um workdir depois da execução, prefira o `agent.patch`. Para rodar `git` ou testes nele, use `sandbox/agent-shell.sh shell <workdir>`.
 
 ## Contrato com os harnesses
 
@@ -247,7 +273,7 @@ Ponta a ponta com o harness `fake-oracle`:
 
 ## Limitações conhecidas
 
-- **Isolamento.** Até a E7, o agente roda no host. O workdir fica fora do repositório e o agente não recebe nenhum caminho para `eval/`, mas um agente que vasculhe o disco pode achar `hidden/` e `solution.patch`. Na E7, o container deve montar **só** o workdir (e o log-dir).
+- **Isolamento.** Sem `EVAL_WRAPPER`, o agente roda no host. O workdir fica fora do repositório e o agente não recebe nenhum caminho para `eval/`, mas um agente que vasculhe o disco pode achar `hidden/` e `solution.patch`. Com `EVAL_WRAPPER=sandbox/run-in-box.sh` (E7), o container do agente monta só o workdir, o log-dir, o prompt e `agents/`. Os resultados não são à prova de um agente que ataque o próprio placar: o código dele roda nas verificações, com a pasta do resultado montada.
 - **Contaminação.** Os dois projetos são públicos e os modelos podem tê-los visto. T2, T5 e T7 usam bugs plantados que não existem no upstream. T3 e T6 pedem recursos inexistentes. T4 tem o risco maior: o arquivo de teste removido existe no GitHub.
 - **Palavras-chave do T5** são heurísticas: um relatório correto com outras palavras pode falhar o item `relatorio_causa_raiz`. O `task.json` marca a tarefa para conferência manual.
 - **RAM/VRAM** são do sistema todo, não só do agente e do servidor.
