@@ -144,5 +144,7 @@ run_agent() { # <agente> -- <comando...>
     '{harness:$harness, version:$version, profile:$profile, model:$model, base_url:$base_url,
       workdir:$workdir, prompt_file:$prompt_file, start:$start, end:$end,
       wall_seconds:$seconds, exit_code:$exit_code}' > "$LOG_DIR/run-meta.json"
+  # Métricas do lado do cliente para o eval (agent-metrics.json); nunca muda o código de saída.
+  python3 -I "$AGENTS_DIR/lib/agent_metrics.py" "$harness" "$LOG_DIR" 2>>"$err" || true
   return "$rc"
 }

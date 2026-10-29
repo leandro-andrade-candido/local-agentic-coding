@@ -3,7 +3,7 @@
 # instruções) que um agente envia ao llama-server, com uma tarefa trivial num
 # repositório git vazio. Usa o run.sh do agente (perfil autonomous).
 #
-# Uso: agents/measure-preamble.sh <qwen-code|pi|opencode|claude-local> [<dir-de-saída>]
+# Uso: agents/measure-preamble.sh <qwen-code|pi|opencode|claude-local|codex-local> [<dir-de-saída>]
 #
 # Fontes, da mais direta para a mais indireta:
 #   1. /metrics do llama-server (exige --metrics): diferença de
@@ -18,7 +18,7 @@
 # as linhas do slot com o número de tokens do prompt.
 set -euo pipefail
 AGENTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-harness="${1:?uso: $0 <qwen-code|pi|opencode|claude-local> [dir-de-saída]}"
+harness="${1:?uso: $0 <qwen-code|pi|opencode|claude-local|codex-local> [dir-de-saída]}"
 [ -x "$AGENTS_DIR/$harness/run.sh" ] || { echo "agente desconhecido: $harness" >&2; exit 2; }
 out="${2:-$(mktemp -d "${TMPDIR:-/tmp}/preamble-$harness.XXXX")}"
 mkdir -p "$out"
@@ -66,4 +66,8 @@ case "$harness" in
     jq -c 'select(.type=="step_finish") | (.part.tokens // .tokens)' "$log/events.jsonl" 2>/dev/null | head -1 | sed 's/^/tokens do 1º passo: /' ;;
   claude-local)
     jq -r 'select(.type=="assistant") | .message.usage | "usage da 1ª resposta: input=\(.input_tokens) cache_read=\(.cache_read_input_tokens // 0) cache_creation=\(.cache_creation_input_tokens // 0)"' "$log/events.jsonl" 2>/dev/null | head -1 ;;
+  codex-local)
+    # O exec --json só dá o uso somado do turno; com a tarefa trivial costuma ser uma requisição.
+    jq -c 'select(.type=="turn.completed") | .usage' "$log/events.jsonl" 2>/dev/null | head -1 | sed 's/^/usage do turno: /' ;;
 esac
+[ -f "$log/agent-metrics.json" ] && echo "agent-metrics: $(jq -c '{requests, tool_calls, tokens_in, tokens_out}' "$log/agent-metrics.json")"

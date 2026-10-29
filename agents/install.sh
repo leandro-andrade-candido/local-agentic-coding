@@ -2,10 +2,10 @@
 # Instala um agente na versão fixada em agents/versions.env, isolado em
 # $AGENTS_PREFIX/<agente>/<versão> (npm --global --prefix), e aponta o link
 # "current" para ela. Não toca no prefixo global do npm (~/.nvm/...), em ~/.npmrc
-# nem nas configurações dos agentes (~/.claude, ~/.qwen, ~/.config/opencode, ~/.pi).
+# nem nas configurações dos agentes (~/.claude, ~/.codex, ~/.qwen, ~/.config/opencode, ~/.pi).
 # Versões anteriores ficam no disco: para voltar, aponte "current" para a antiga.
 #
-# Uso: agents/install.sh <qwen-code|pi|opencode|claude-local|all>
+# Uso: agents/install.sh <qwen-code|pi|opencode|claude-local|codex-local|all>
 # Desinstalar: rm -rf "$AGENTS_PREFIX/<agente>"
 set -euo pipefail
 AGENTS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -42,7 +42,8 @@ case "${1:-}" in
   pi) install_one pi "$PI_PKG" "$PI_VERSION" "$PI_INTEGRITY" pi ;;
   opencode) install_one opencode "$OPENCODE_PKG" "$OPENCODE_VERSION" "$OPENCODE_INTEGRITY" opencode ;;
   claude-local) install_one claude-local "$CLAUDE_CODE_PKG" "$CLAUDE_CODE_VERSION" "$CLAUDE_CODE_INTEGRITY" claude ;;
+  codex-local) install_one codex-local "$CODEX_PKG" "$CODEX_VERSION" "$CODEX_INTEGRITY" codex ;;
   all)
-    for a in qwen-code pi opencode claude-local; do "$0" "$a"; done ;;
-  *) echo "uso: $0 <qwen-code|pi|opencode|claude-local|all>" >&2; exit 2 ;;
+    for a in qwen-code pi opencode claude-local codex-local; do "$0" "$a"; done ;;
+  *) echo "uso: $0 <qwen-code|pi|opencode|claude-local|codex-local|all>" >&2; exit 2 ;;
 esac

@@ -371,12 +371,6 @@ Repositórios usados:
 
    Se o limite for do modelo (chamadas de ferramenta corretas, mas soluções erradas), trocar de agente não resolve. O próximo passo, nesse caso, é um modelo local maior (Coder-Next 80B ou Qwen3.8-27B como revisor) e, depois, a Meta 3.
 5. **O piloto de validação é um projeto real e privado**, fora deste repositório (ver seção 9).
-7. **Regra de escolha do agente (29/10).** O critério principal é custo zero, não código aberto, então as antigas Metas 1 e 2 viraram uma disputa só.
-   - **Vence o melhor resultado medido** na E6 e na E8.
-   - **Em empate técnico, vence o open source.** Empate técnico é diferença de até 1 tarefa em 7, dentro da variação entre execuções.
-   - **Riscos do Claude Code local que pesam no desempate:** não tem suporte oficial para modelos não-Claude (uma atualização pode quebrar o uso local), o prompt fixo é de ~25–31 mil tokens (mais caro a cada perda de cache) e as chamadas em segundo plano podem descartar o cache.
-   - **A favor dele:** o autor já domina o fluxo (skills, hooks, subagentes, plugins).
-   - **Ordem na E6:** o Claude Code local e o Codex local rodam primeiro, para dar logo o sinal com as ferramentas já conhecidas.
 6. **Codex adicionado ao plano (29/10)**, de duas formas que não se misturam:
    - **Codex CLI com o modelo local:** entra na Meta 1 e no teste da E6 (`agents/codex-local/`).
      - É open source (Apache-2.0), não usa conta nem plano, e o llama-server tem o endpoint `/v1/responses` que ele exige.
@@ -386,6 +380,12 @@ Repositórios usados:
      - Antes de cada uso, o orquestrador informa o que vai rodar e o consumo estimado, e espera aprovação.
      - Os limites do plano Go ainda precisam ser confirmados.
      - No piloto, conferir a confidencialidade contratual antes de enviar código à nuvem. Documentos pessoais nunca são enviados.
+7. **Regra de escolha do agente (29/10).** O critério principal é custo zero, não código aberto, então as antigas Metas 1 e 2 viraram uma disputa só.
+   - **Vence o melhor resultado medido** na E6 e na E8.
+   - **Em empate técnico, vence o open source.** Empate técnico é diferença de até 1 tarefa em 7, dentro da variação entre execuções.
+   - **Riscos do Claude Code local que pesam no desempate:** não tem suporte oficial para modelos não-Claude (uma atualização pode quebrar o uso local), o prompt fixo é de ~25–31 mil tokens (mais caro a cada perda de cache) e as chamadas em segundo plano podem descartar o cache.
+   - **A favor dele:** o autor já domina o fluxo (skills, hooks, subagentes, plugins).
+   - **Ordem na E6:** o Claude Code local e o Codex local rodam primeiro, para dar logo o sinal com as ferramentas já conhecidas.
 
 ### Pendentes
 
