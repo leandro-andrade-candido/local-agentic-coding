@@ -4,15 +4,22 @@ Barreira real para os agentes em modo autônomo (yolo, `bypassPermissions`,
 `danger-full-access`, sem aprovações). As regras de cada agente e a guarda
 comum (`agents/lib/guard.py`) são a segunda camada. Esta pasta é a primeira.
 
-**Estado (29/10/2026): fase 1.** Os arquivos estão escritos e revisados, mas a
-imagem ainda não foi construída e os testes de fuga ainda não rodaram, porque a
-máquina está ocupada com o benchmark da E4. Os itens marcados **não verificado**
-dependem da fase 2 (ver "Pendências").
+**Estado (29/10/2026): construída e verificada (fase 2).**
 
-Verificado nesta fase: a sintaxe de todos os scripts (`bash -n`, `py_compile`) e o
-encaminhador, sem Docker, ligado a um servidor HTTP falso. Ele entregou SSE evento
-a evento, 4 conexões simultâneas, keep-alive e corpo de 4 MiB. Quando o cliente
-desistiu no meio do stream, a conexão com o servidor fechou.
+| Verificação | Resultado |
+|---|---|
+| `sandbox/build.sh` | imagem `agent-box:latest` com 2,89 GB (camada dos agentes: 1,63 GB); os 5 tarballs conferem com o `versions.env`, e o `--version` de cada um sai com 0 |
+| `sandbox/escape-tests.sh` | 137 de 137: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 8 no host |
+| Eval com `fake-oracle` pelo wrapper | S1 (pytest, 1360 + 3 testes) passa; S2 (jest, 753 + 3 testes) passa; S3 com `sleep:60` e `EVAL_TIMEOUT_S=5` sai com 124, `timed_out: true`, sem container, encaminhador ou pasta temporária sobrando |
+| Sandbox do Codex no container | `codex sandbox -- true` falha: `bwrap: No permissions to create a new namespace` (esperado; ver abaixo) |
+| Trava do perfil autonomous (`agents/lib/common.sh`) | liberada no container (`AGENT_BOX=1` e `/.dockerenv`), recusada no host |
+
+Também verificado: o tmpfs da HOME aceita `uid=`/`gid=`; o `/.dockerenv` existe mesmo com
+`--read-only`; o seccomp padrão do Docker 29 bloqueia `AF_VSOCK`; o binário do Windows
+(interop do WSL) não executa; o encaminhador entrega SSE evento a evento
+(0,0/0,3/0,6/0,9/1,2 s), 4 conexões de 1,5 s em 1,51 s e 4 MiB de ida e volta.
+
+Ainda falta ver, com os agentes de verdade na E6, o que está em "Pendências".
 
 ## Arquivos
 
@@ -31,7 +38,7 @@ desistiu no meio do stream, a conexão com o servidor fechou.
 ## Uso
 
 ```bash
-sandbox/build.sh                    # constrói agent-box:latest (~1,6 GB, estimado)
+sandbox/build.sh                    # constrói agent-box:latest (2,89 GB; ~2 min com cache do apt frio)
 sandbox/escape-tests.sh             # testes de fuga; saída 0 = tudo passou
 
 # eval: agente, captura do diff e verificações em containers (ver eval/README.md)
@@ -110,7 +117,9 @@ Alternativas descartadas:
 O que passa pelo encaminhador é **qualquer** rota do llama-server, não só
 `/v1/*`. Por isso, na E5, manter desligados `--slot-save-path` e o `POST /props`
 (o padrão já é desligado). A chave da E5 (`LLM_API_KEY`) entra no container
-porque os agentes precisam enviá-la. Ela só vale para o llama-server, que o
+porque os agentes precisam enviá-la. Se ela não estiver no ambiente, o `run-in-box.sh`
+lê de `LLM_API_KEY_FILE` (padrão `~/.config/local-agentic/llm-api-key`) e a passa
+por nome (`-e LLM_API_KEY`), nunca na linha de comando. O arquivo em si não entra. Ela só vale para o llama-server, que o
 container já alcança. Ver "Pendências" para a alternativa de injetar a chave no
 lado do host.
 
@@ -152,7 +161,7 @@ lado do host.
   - O seccomp padrão do Docker bloqueia `unshare`/`clone` com `CLONE_NEWUSER` para quem não tem `CAP_SYS_ADMIN`.
   - O `no-new-privileges` anula um `bwrap` setuid.
 - Para funcionar, seria preciso `seccomp=unconfined` (ou um perfil próprio) e talvez `CAP_SYS_ADMIN`. Isso abre a superfície do kernel que o container fecha, o que é pior que a camada extra do Codex.
-- O teste `unshare -Ur` dos testes de fuga mostra o bloqueio. O `codex sandbox linux -- true` sai como INFO (**não verificado**).
+- Verificado: `unshare -Ur` falha nos testes de fuga, e `codex sandbox -- true` (0.165; não há subcomando `linux`) termina com `bwrap: No permissions to create a new namespace`.
 - **Decisão (igual à do `agents/codex-local/`):**
   - no eval, o perfil `autonomous` já usa `sandbox_mode = "danger-full-access"` e `approval_policy = "never"`, e `CODEX_LOCAL_SANDBOX` fica vazio;
   - no `agent-shell.sh`, o perfil `interactive` (que pede `workspace-write`) recebe `--sandbox danger-full-access`, e as aprovações `on-request` continuam;
@@ -228,31 +237,29 @@ Não aponte um para o outro.
 
 ## Pendências
 
-Fase 2, quando o benchmark terminar:
+Comandos da verificação (repetir depois de mudar a imagem ou o wrapper):
 
 ```bash
-sandbox/build.sh                                                     # imagem
-sandbox/run-in-box.sh --no-llm -- /opt/agents/codex-local/current/bin/codex sandbox --help   # subcomando de sandbox
-sandbox/escape-tests.sh                                              # testes de fuga
-EVAL_WRAPPER=sandbox/run-in-box.sh EVAL_FORCE=1 eval/run.sh fake-oracle S1 e7-sandbox   # eval ponta a ponta
+sandbox/build.sh
+sandbox/escape-tests.sh
+EVAL_WRAPPER=sandbox/run-in-box.sh EVAL_FORCE=1 eval/run.sh fake-oracle S1 e7-sandbox
+EVAL_WRAPPER=sandbox/run-in-box.sh EVAL_FORCE=1 eval/run.sh fake-oracle S2 e7-sandbox
 EVAL_WRAPPER=sandbox/run-in-box.sh FAKE_ORACLE_MODE=sleep:60 EVAL_TIMEOUT_S=5 \
-    EVAL_FORCE=1 eval/run.sh fake-oracle S3 e7-sandbox-timeout            # timeout pelo wrapper
+    EVAL_FORCE=1 eval/run.sh fake-oracle S3 e7-sandbox-timeout
 ```
 
-Não verificado até a fase 2:
+Para ver com os agentes de verdade, na E6:
 
-- se o Docker aceita `uid=`/`gid=` no `--tmpfs` da HOME (plano B: `mode=1777`);
-- se o seccomp padrão do Docker 29 bloqueia `AF_VSOCK` (se não bloquear, usar um perfil seccomp próprio passado pelo cliente, sem mexer no daemon);
-- se `--version` de cada agente sai com 0 no build;
 - se o OpenCode tenta instalar dependências de plugin pela rede ao iniciar e quanto isso atrasa;
 - se o Qwen Code (YOLO) tenta usar o próprio sandbox Docker/Podman;
 - se o Pi carrega `extensions/guard.ts` com `agents/` só leitura (o cache do jiti precisa ir para `/tmp`);
 - se algum agente tenta gravar fora da HOME temporária e do log-dir (a raiz é só leitura);
-- tamanho final da imagem.
+- o Codex avisa que não cria os "PATH aliases" quando o `CODEX_HOME` fica em `/tmp`; no eval ele fica no log-dir, e o efeito no `apply_patch` deve ser conferido.
 
 Abertas:
 
 - **Injetar a chave no host:** o encaminhador do host trocaria o `Authorization` de cada requisição pela chave da E5, e os agentes no container usariam uma chave falsa. Exige interpretar HTTP/1.1 (keep-alive, corpo chunked); hoje a cópia é de bytes.
 - **apt por snapshot** (`snapshot.ubuntu.com`) para a imagem ser reproduzível bit a bit.
 - **Lockfile npm** por agente, para fixar também as dependências transitivas.
+- **Imagem menor:** o OpenCode instala as variantes comum e `baseline` (205 MB cada; a `baseline` é para CPUs sem AVX2), e o Qwen Code traz o Bun (103 MB) como dependência opcional. Dá para remover no build, ao custo de diferir da instalação no host.
 - **Isolar a escrita das verificações:** montar só `checks.json`/`check.log`, e não a pasta do resultado inteira.

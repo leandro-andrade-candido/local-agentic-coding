@@ -143,8 +143,8 @@ PY
              .docker .aws .npmrc .netrc .bashrc .bash_history; do
         expect_fail "não vê ~/$f do host" test -e "$ET_HOST_HOME/$f"
     done
-    expect_empty "nenhum arquivo da HOME do host além de agents/" \
-        "$(find "$ET_HOST_HOME" -not -type d -not -path "$ET_AGENTS_DIR/*" 2>/dev/null | head -5)"
+    expect_empty "nenhum arquivo da HOME do host além de agents/ (e deste script)" \
+        "$(find "$ET_HOST_HOME" -not -type d -not -path "$ET_AGENTS_DIR/*" -not -path "$ET_SELF" 2>/dev/null | head -5)"
     expect_fail "não vê o canário fora das montagens" test -e "$ET_CANARY"
     expect_fail "não vê eval/ (testes ocultos e soluções)" test -e "$ET_REPO_ROOT/eval"
     expect_fail "não vê o resto do repositório" test -e "$ET_REPO_ROOT/DIAGNOSTICO-E-PLANO.md"
@@ -236,8 +236,8 @@ PY
     info "$(git --version), $(rg --version | head -n1), fd $(fd --version | awk '{print $2}'), $(jq --version), TZ=$TZ"
     f=/opt/agents/codex-local/current/bin/codex
     if [ -x "$f" ]; then
-        out="$(CODEX_HOME="$(mktemp -d)" timeout 30 "$f" sandbox linux -- true 2>&1)"
-        info "sandbox próprio do Codex (codex sandbox linux -- true): saída $?: $(short "$out")"
+        out="$(CODEX_HOME="$(mktemp -d)" timeout 30 "$f" sandbox -- true 2>&1)"
+        info "sandbox próprio do Codex (codex sandbox -- true): saída $?: $(short "$out")"
     fi
 }
 
@@ -357,7 +357,7 @@ LLM_BASE_URL="http://127.0.0.1:$dummy_port" BOX_MEMORY=3g BOX_PIDS=512 BOX_CPUS=
     --skills-dir "$scratch/skills-extra" \
     --env "ET_MODE=dummy" --env "ET_WORKDIR=$scratch/repo" --env "ET_LOGDIR=$scratch/logs" \
     --env "ET_HOST_HOME=$HOME" --env "ET_HOST_UID=$(id -u)" --env "ET_REPO_ROOT=$REPO_ROOT" \
-    --env "ET_AGENTS_DIR=$AGENTS_DIR" --env "ET_CANARY=$canary" --env "ET_HOST_ADDRS=$host_addrs" \
+    --env "ET_AGENTS_DIR=$AGENTS_DIR" --env "ET_SELF=$self" --env "ET_CANARY=$canary" --env "ET_HOST_ADDRS=$host_addrs" \
     --env "ET_MEMORY_BYTES=$mem_bytes" --env "ET_PIDS=512" --env "ET_CPUS=2" \
     -- bash "$self" --inside
 inside_rc=$?
@@ -373,7 +373,9 @@ expect_empty "estado temporário do wrapper removido" \
     "$(find "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}" -maxdepth 1 -name 'agent-box.*' -newer "$canary" 2>/dev/null)"
 
 real="${LLM_BASE_URL:-http://127.0.0.1:9931}"
-if curl -fsS --max-time 3 -o /dev/null "${real%/}/health" 2>/dev/null; then
+auth=()
+[ -z "${LLM_API_KEY:-}" ] || auth=(-H "Authorization: Bearer $LLM_API_KEY")
+if curl -fsS --max-time 3 -o /dev/null "${auth[@]}" "${real%/}/health" 2>/dev/null; then
     echo "-- llama-server real em $real"
     LLM_BASE_URL="$real" "$SANDBOX_DIR/run-in-box.sh" --no-skills --rw "$scratch/repo" --ro "$self" \
         --env ET_MODE=real --env "ET_WORKDIR=$scratch/repo" --env "ET_LOGDIR=$scratch/logs" \

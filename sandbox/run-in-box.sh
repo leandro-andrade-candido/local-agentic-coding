@@ -27,7 +27,8 @@
 # Definidas pelo wrapper (valores do host são ignorados): AGENT_BOX=1 (os run.sh no perfil
 # autonomous recusam rodar sem ela), AGENT_SKILLS_DIRS, LLM_BASE_URL (reescrita para o
 # encaminhador interno), HOME, TZ (fuso do host), TERM (com --tty).
-# Repassadas do host: LLM_* (inclui LLM_API_KEY), LOCAL_LLM_API_KEY, os ajustes AGENT_*
+# Repassadas do host: LLM_* (inclui LLM_API_KEY; sem ela, lida de LLM_API_KEY_FILE ou
+# ~/.config/local-agentic/llm-api-key), LOCAL_LLM_API_KEY, os ajustes AGENT_*
 # (menos AGENT_BIN/HOME/WORKDIR/LOG_DIR/GUARD), CLAUDE_LOCAL_*, CODEX_LOCAL_*, QWEN_LOCAL_*,
 # PI_LOCAL_*, OPENCODE_LOCAL_*, FAKE_ORACLE_*, GIT_AUTHOR_*, GIT_COMMITTER_*, EVAL_TEST_TIMEOUT_S.
 #
@@ -199,6 +200,16 @@ fi
 cwd="$(abs "$cwd")"
 
 # --- ambiente ---------------------------------------------------------------------
+# Chave do llama-server (E5): o arquivo fica fora do container; sem LLM_API_KEY no
+# ambiente, lê de LLM_API_KEY_FILE (~/.config/local-agentic/llm-api-key). Vai por nome
+# (-e LLM_API_KEY), nunca na linha de comando.
+if [ "$llm" = 1 ] && [ -z "${LLM_API_KEY:-}" ]; then
+    kf="${LLM_API_KEY_FILE:-$HOME/.config/local-agentic/llm-api-key}"
+    if [ -r "$kf" ]; then
+        LLM_API_KEY="$(tr -d '[:space:]' <"$kf")"
+        export LLM_API_KEY
+    fi
+fi
 envs=(-e "HOME=/home/agent" -e "TZ=$(host_tz)" -e AGENT_BOX=1
       -e "AGENT_SKILLS_DIRS=$(IFS=:; echo "${skill_dirs[*]}")")
 while IFS= read -r v; do
