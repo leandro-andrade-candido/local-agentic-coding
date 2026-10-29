@@ -1,0 +1,20 @@
+diff --git a/pypika/tests/test_selects.py b/pypika/tests/test_selects.py
+index 2d3b552..cc4e15b 100644
+--- a/pypika/tests/test_selects.py
++++ b/pypika/tests/test_selects.py
+@@ -184,15 +184,6 @@ class SelectTests(unittest.TestCase):
+ 
+         self.assertEqual('SELECT "foo" FROM "abc" LIMIT 10', str(q1))
+ 
+-    def test_select_with_limit_zero(self):
+-        with self.subTest('using python slice'):
+-            q1 = Query.from_("abc").select("foo")[:0]
+-            self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(q1))
+-
+-        with self.subTest('using limit method'):
+-            q2 = Query.from_("abc").select("foo").limit(0)
+-            self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(q2))
+-
+     def test_select_with_limit__func(self):
+         q1 = Query.from_("abc").select("foo").limit(10)
+ 

@@ -1,0 +1,21 @@
+{
+  "name": "chrono",
+  "url": "https://github.com/wanasit/chrono",
+  "commit": "d4fe7e39015c818b271d74789fb96f74777421d0",
+  "commit_date": "2026-10-12",
+  "version": "2.10.3",
+  "license": "MIT",
+  "kind": "node",
+  "test_roots": [
+    "test"
+  ],
+  "test_file_regex": "\\.test\\.ts$",
+  "protected_config": [
+    "package.json",
+    "tsconfig.json",
+    "jest.config.js",
+    "jest.config.ts",
+    "jest.config.mjs",
+    "babel.config.js"
+  ]
+}

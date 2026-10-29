@@ -1,0 +1,13 @@
+diff --git a/pypika/utils.py b/pypika/utils.py
+index 4e7a167..cb5eb51 100644
+--- a/pypika/utils.py
++++ b/pypika/utils.py
+@@ -161,7 +161,7 @@ def format_alias_sql(
+     if alias is None:
+         return sql
+     return "{sql}{_as}{alias}".format(
+-        sql=sql, _as=' AS ' if as_keyword else ' ', alias=format_quotes(alias, alias_quote_char or quote_char)
++        sql=sql, _as=' ' if as_keyword else ' AS ', alias=format_quotes(alias, alias_quote_char or quote_char)
+     )
+ 
+ 

@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..0758960 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -29,7 +29,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+ 
+     // Replace short timeunit keys with full timeunit keys
+     if (duration["y"]) {
+-        duration["year"] = duration["y"];
++        duration["month"] = duration["y"];
+         delete duration["y"];
+     }
+     if (duration["mo"]) {

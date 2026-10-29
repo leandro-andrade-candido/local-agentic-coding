@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..50856fe 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -107,7 +107,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+         const remainingFraction = duration["day"] - floor;
+         if (remainingFraction > 0) {
+             duration.hour = duration?.hour ?? 0;
+-            duration.hour += Math.round(remainingFraction * 24);
++            duration.hour += Math.round(remainingFraction * 12);
+         }
+     }
+     if ("hour" in duration) {

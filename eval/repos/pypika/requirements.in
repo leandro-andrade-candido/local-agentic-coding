@@ -1,0 +1,3 @@
+# Dependências de teste do pypika (o pacote em si não tem dependências em Python >= 3.11).
+parameterized
+pytest

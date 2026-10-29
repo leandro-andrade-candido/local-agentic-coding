@@ -1,0 +1,14 @@
+{
+  "id": "S3",
+  "title": "Escrever testes para helpers de formatação",
+  "repo": "pypika",
+  "category": "tests",
+  "plan_task": "E6 smoke - escrever um teste",
+  "timeout_min": 15,
+  "checks": [
+    {"type": "unchanged", "name": "utils_inalterado", "paths": ["pypika/utils.py"]},
+    {"type": "mutation", "name": "mutantes", "module": "pypika/utils.py", "mutants": "mutants/*.patch",
+     "min_score": 0.6, "min_tests": 3},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "T6",
+  "title": "Planejar e implementar CREATE VIEW (com dialetos)",
+  "repo": "pypika",
+  "category": "plan+implement",
+  "plan_task": "T6 - planejar uma mudança complexa antes de implementar, depois implementar",
+  "timeout_min": 45,
+  "notes": "Recurso inexistente no upstream (sem contaminação de solução). Sucesso = testes ocultos + nota >= 7 no rubric.md.",
+  "checks": [
+    {"type": "report", "name": "plano_existe", "file": ["PLANO.md", "plano.md"], "min_words": 150},
+    {"type": "rubric", "name": "gabarito_plano", "rubric": "rubric.md", "report": ["PLANO.md", "plano.md"],
+     "threshold": 7, "max": 10,
+     "hints": [["CreateQueryBuilder", "DropQueryBuilder", "CreateIndexBuilder"],
+               ["create_view"],
+               ["@builder", "imutáve", "imutabil", "immutab"],
+               ["cópia rasa", "copia rasa", "shallow", "copy.copy", "__copy__", "compartilh"],
+               ["dialects.py"],
+               ["TypeError"],
+               ["IF NOT EXISTS"],
+               ["str(query)", "quote_char", "QUOTE_CHAR", "_set_kwargs_defaults"],
+               ["schema"],
+               ["README"]]},
+    {"type": "hidden_tests", "name": "testes_ocultos",
+     "files": {"hidden/test_hidden_t6.py": "pypika/tests/test_hidden_t6.py"}},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}

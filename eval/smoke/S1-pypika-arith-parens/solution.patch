@@ -1,0 +1,30 @@
+diff --git a/pypika/terms.py b/pypika/terms.py
+index 00fe925..1c27b53 100644
+--- a/pypika/terms.py
++++ b/pypika/terms.py
+@@ -1248,7 +1248,7 @@ class ArithmeticExpression(Term):
+         if right_op is None:
+             # If the right expression is a single item.
+             return False
+-        if curr_op in self.add_order:
++        if curr_op == Arithmetic.add:
+             return False
+         if curr_op == Arithmetic.div:
+             return True
+diff --git a/pypika/tests/test_functions.py b/pypika/tests/test_functions.py
+index ca2c1ca..f7f5b46 100644
+--- a/pypika/tests/test_functions.py
++++ b/pypika/tests/test_functions.py
+@@ -834,3 +834,12 @@ class NullFunctionsTests(unittest.TestCase):
+         q = Q.from_("abc").select(fn.NVL(F("foo"), 0))
+ 
+         self.assertEqual('SELECT NVL("foo",0) FROM "abc"', str(q))
++
++
++class SubtractionParenthesesTests(unittest.TestCase):
++    def test_sub_of_sum_keeps_parentheses(self):
++        q = Q.from_("contas").select((F("receita") - (F("custo") + F("imposto"))).as_("saldo"))
++        self.assertEqual('SELECT "receita"-("custo"+"imposto") "saldo" FROM "contas"', str(q))
++
++    def test_sub_of_sub_keeps_parentheses(self):
++        self.assertEqual('"a"-("b"-"c")', str(F("a") - (F("b") - F("c"))))

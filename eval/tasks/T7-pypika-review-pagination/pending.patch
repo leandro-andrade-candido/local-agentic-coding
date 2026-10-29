@@ -1,0 +1,88 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 48d1b22..4203607 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,11 @@
+ # Changelog
+ 
++## Unreleased
++
++### New Features
++
++- **Pagination helper** - `QueryBuilder.paginate(page, per_page)` sets LIMIT/OFFSET from a 1-based page number
++
+ ## v0.50.0 (2025-01-14)
+ 
+ ### New Features
+diff --git a/pypika/queries.py b/pypika/queries.py
+index a10a345..96447fc 100644
+--- a/pypika/queries.py
++++ b/pypika/queries.py
+@@ -1101,6 +1101,24 @@ class QueryBuilder(Selectable, Term):
+     def offset(self, offset: int) -> None:
+         self._offset = offset
+ 
++    @builder
++    def paginate(self, page: int, per_page: int) -> None:
++        """
++        Sets LIMIT and OFFSET from a 1-based page number.
++
++        :param page:
++            The page number, starting at 1.
++        :param per_page:
++            The number of rows per page.
++
++        :raises QueryException:
++            If ``page`` or ``per_page`` is smaller than 1.
++        """
++        if page < 1 or per_page < 1:
++            raise QueryException("page and per_page must be positive integers")
++        self._limit = per_page
++        self._offset = (page - 1) * per_page
++
+     @builder
+     def union(self, other: QueryBuilder) -> _SetOperation:
+         return _SetOperation(self, other, SetOperation.union, wrapper_cls=self._wrapper_cls)
+@@ -1397,12 +1415,9 @@ class QueryBuilder(Selectable, Term):
+         return querystring
+ 
+     def _apply_pagination(self, querystring: str, **kwargs) -> str:
+-        if self._limit is not None:
+-            querystring += self._limit_sql()
+-
+-        if self._offset:
+-            querystring += self._offset_sql()
+-
++        for value, render in ((self._limit, self._limit_sql), (self._offset, self._offset_sql)):
++            if value:
++                querystring += render()
+         return querystring
+ 
+     def _with_sql(self, **kwargs: Any) -> str:
+diff --git a/pypika/tests/test_selects.py b/pypika/tests/test_selects.py
+index cc4e15b..4dca2a1 100644
+--- a/pypika/tests/test_selects.py
++++ b/pypika/tests/test_selects.py
+@@ -184,6 +184,22 @@ class SelectTests(unittest.TestCase):
+ 
+         self.assertEqual('SELECT "foo" FROM "abc" LIMIT 10', str(q1))
+ 
++    def test_paginate_first_page(self):
++        q = Query.from_("abc").select("foo").paginate(1, 25)
++
++        self.assertEqual('SELECT "foo" FROM "abc" LIMIT 25', str(q))
++
++    def test_paginate_third_page(self):
++        q = Query.from_("abc").select("foo").orderby("foo").paginate(3, 10)
++
++        self.assertEqual('SELECT "foo" FROM "abc" ORDER BY "foo" LIMIT 10 OFFSET 20', str(q))
++
++    def test_paginate_rejects_invalid_values(self):
++        with self.assertRaises(QueryException):
++            Query.from_("abc").select("foo").paginate(0, 10)
++        with self.assertRaises(QueryException):
++            Query.from_("abc").select("foo").paginate(1, 0)
++
+     def test_select_with_limit__func(self):
+         q1 = Query.from_("abc").select("foo").limit(10)
+ 

@@ -1,0 +1,106 @@
+diff --git a/src/calculation/years.ts b/src/calculation/years.ts
+index 2d86e68..c4d6fca 100644
+--- a/src/calculation/years.ts
++++ b/src/calculation/years.ts
+@@ -31,3 +31,26 @@ export function findYearClosestToRef(refDate: Date, day: number, month: number):
+     }
+     return date.getFullYear();
+ }
++
++/**
++ * Year with an optional era suffix, as written in Spanish and Portuguese:
++ * "2012", "88 a.C.", "234 AC", "1 d.C.".
++ */
++export const YEAR_WITH_ERA_PATTERN = "[0-9]{1,4}(?![^\\s]\\d)(?:\\s*[a|d]\\.?\\s*c\\.?|\\s*a\\.?\\s*d\\.?)?";
++
++/**
++ * Parses a year matched by {@link YEAR_WITH_ERA_PATTERN}. Two-digit years go to the most
++ * likely century and "a.C." (antes de Cristo) years become negative.
++ */
++export function parseYearWithEra(match: string): number {
++    if (match.match(/^[0-9]{1,4}$/)) {
++        return findMostLikelyADYear(parseInt(match));
++    }
++
++    if (match.match(/a\.?\s*c\.?/i)) {
++        match = match.replace(/a\.?\s*c\.?/i, "");
++        return -parseInt(match);
++    }
++
++    return parseInt(match);
++}
+diff --git a/src/locales/es/constants.ts b/src/locales/es/constants.ts
+index 199a781..0e67719 100644
+--- a/src/locales/es/constants.ts
++++ b/src/locales/es/constants.ts
+@@ -1,3 +1,4 @@
++import { YEAR_WITH_ERA_PATTERN, parseYearWithEra } from "../../calculation/years";
+ import { matchAnyPattern, repeatedTimeunitPattern } from "../../utils/pattern";
+ import { Timeunit } from "../../types";
+ 
+@@ -215,27 +216,8 @@ export function parseOrdinalNumberPattern(match: string): number {
+ //-----------------------------
+ // 88 p. Chr. n.
+ // 234 AC
+-export const YEAR_PATTERN = "[0-9]{1,4}(?![^\\s]\\d)(?:\\s*[a|d]\\.?\\s*c\\.?|\\s*a\\.?\\s*d\\.?)?";
+-export function parseYear(match: string): number {
+-    if (match.match(/^[0-9]{1,4}$/)) {
+-        let yearNumber = parseInt(match);
+-        if (yearNumber < 100) {
+-            if (yearNumber > 50) {
+-                yearNumber = yearNumber + 1900;
+-            } else {
+-                yearNumber = yearNumber + 2000;
+-            }
+-        }
+-        return yearNumber;
+-    }
+-
+-    if (match.match(/a\.?\s*c\.?/i)) {
+-        match = match.replace(/a\.?\s*c\.?/i, "");
+-        return -parseInt(match);
+-    }
+-
+-    return parseInt(match);
+-}
++export const YEAR_PATTERN = YEAR_WITH_ERA_PATTERN;
++export const parseYear = parseYearWithEra;
+ 
+ const SINGLE_TIME_UNIT_PATTERN = `(${NUMBER_PATTERN})\\s{0,5}(${matchAnyPattern(TIME_UNIT_DICTIONARY)})\\s{0,5}`;
+ const SINGLE_TIME_UNIT_REGEX = new RegExp(SINGLE_TIME_UNIT_PATTERN, "i");
+diff --git a/src/locales/pt/constants.ts b/src/locales/pt/constants.ts
+index 3f27dc5..bd3042e 100644
+--- a/src/locales/pt/constants.ts
++++ b/src/locales/pt/constants.ts
+@@ -1,3 +1,4 @@
++import { YEAR_WITH_ERA_PATTERN, parseYearWithEra } from "../../calculation/years";
+ export const WEEKDAY_DICTIONARY: { [word: string]: number } = {
+     "domingo": 0,
+     "dom": 0,
+@@ -63,24 +64,5 @@ export const MONTH_DICTIONARY: { [word: string]: number } = {
+ //-----------------------------
+ // 88 p. Chr. n.
+ // 234 AC
+-export const YEAR_PATTERN = "[0-9]{1,4}(?![^\\s]\\d)(?:\\s*[a|d]\\.?\\s*c\\.?|\\s*a\\.?\\s*d\\.?)?";
+-export function parseYear(match: string): number {
+-    if (match.match(/^[0-9]{1,4}$/)) {
+-        let yearNumber = parseInt(match);
+-        if (yearNumber < 100) {
+-            if (yearNumber > 50) {
+-                yearNumber = yearNumber + 1900;
+-            } else {
+-                yearNumber = yearNumber + 2000;
+-            }
+-        }
+-        return yearNumber;
+-    }
+-
+-    if (match.match(/a\.?\s*c\.?/i)) {
+-        match = match.replace(/a\.?\s*c\.?/i, "");
+-        return -parseInt(match);
+-    }
+-
+-    return parseInt(match);
+-}
++export const YEAR_PATTERN = YEAR_WITH_ERA_PATTERN;
++export const parseYear = parseYearWithEra;

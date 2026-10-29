@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..48d0e8b 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -98,7 +98,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+         const remainingFraction = duration["week"] - floor;
+         if (remainingFraction > 0) {
+             duration.day = duration?.day ?? 0;
+-            duration.day += Math.round(remainingFraction * 7);
++            duration.day += Math.floor(remainingFraction * 7);
+         }
+     }
+     if ("day" in duration) {

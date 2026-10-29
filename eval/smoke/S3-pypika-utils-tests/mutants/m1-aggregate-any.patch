@@ -1,0 +1,13 @@
+diff --git a/pypika/utils.py b/pypika/utils.py
+index 4e7a167..5a4ef67 100644
+--- a/pypika/utils.py
++++ b/pypika/utils.py
+@@ -123,7 +123,7 @@ def resolve_is_aggregate(values: list[bool | None]) -> bool | None:
+     """
+     result = [x for x in values if x is not None]
+     if result:
+-        return all(result)
++        return any(result)
+     return None
+ 
+ 

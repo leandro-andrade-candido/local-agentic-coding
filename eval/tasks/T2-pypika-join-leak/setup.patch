@@ -1,0 +1,33 @@
+diff --git a/pypika/queries.py b/pypika/queries.py
+index a10a345..eec7a17 100644
+--- a/pypika/queries.py
++++ b/pypika/queries.py
+@@ -792,7 +792,6 @@ class QueryBuilder(Selectable, Term):
+         newone._values = copy(self._values)
+         newone._groupbys = copy(self._groupbys)
+         newone._orderbys = copy(self._orderbys)
+-        newone._joins = copy(self._joins)
+         newone._unions = copy(self._unions)
+         newone._updates = copy(self._updates)
+         newone._force_indexes = copy(self._force_indexes)
+diff --git a/pypika/tests/test_immutability.py b/pypika/tests/test_immutability.py
+index ee539bf..0979ec8 100644
+--- a/pypika/tests/test_immutability.py
++++ b/pypika/tests/test_immutability.py
+@@ -83,16 +83,6 @@ class ImmutabilityTests(unittest.TestCase):
+         self.assertIsNot(query_a, query_b)
+         self.assertNotEqual(str(query_a), str(query_b))
+ 
+-    def test_queries_after_join(self):
+-        query1 = Query.from_(self.table_a).select(self.table_a.foo)
+-        query2 = query1.join(self.table_b).on(self.table_a.foo == self.table_b.bar).select(self.table_b.buz)
+-
+-        self.assertEqual('SELECT "foo" FROM "a"', str(query1))
+-        self.assertEqual(
+-            'SELECT "a"."foo","b"."buz" FROM "a" JOIN "b" ON "a"."foo"="b"."bar"',
+-            str(query2),
+-        )
+-
+     def test_immutable_kwarg_on_query_builder_disables_immutability(self):
+         query0 = Query.from_(self.table_a, immutable=False)
+         query1 = query0.select(self.table_a.foo)

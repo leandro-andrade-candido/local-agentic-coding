@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..0cc0fe1 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -61,7 +61,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+         delete duration["s"];
+     }
+     if (duration["ms"]) {
+-        duration["millisecond"] = duration["ms"];
++        duration["second"] = duration["ms"];
+         delete duration["ms"];
+     }
+ 

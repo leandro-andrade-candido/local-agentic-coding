@@ -1,0 +1,14 @@
+{
+  "id": "T3",
+  "title": "Expressões relativas com unidades de tempo em português (chrono.pt)",
+  "repo": "chrono",
+  "category": "feature",
+  "plan_task": "T3 - implementar funcionalidade que toca de 3 a 5 arquivos",
+  "timeout_min": 30,
+  "notes": "Recurso inexistente no upstream. Solução de referência: pt/constants.ts, dois parsers novos, pt/index.ts e um arquivo de teste.",
+  "checks": [
+    {"type": "hidden_tests", "name": "testes_aceitacao",
+     "files": {"hidden/hidden_t3.test.ts": "test/hidden_t3.test.ts"}},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}

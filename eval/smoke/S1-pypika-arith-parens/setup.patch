@@ -1,0 +1,35 @@
+diff --git a/pypika/terms.py b/pypika/terms.py
+index 1c27b53..00fe925 100644
+--- a/pypika/terms.py
++++ b/pypika/terms.py
+@@ -1248,7 +1248,7 @@ class ArithmeticExpression(Term):
+         if right_op is None:
+             # If the right expression is a single item.
+             return False
+-        if curr_op == Arithmetic.add:
++        if curr_op in self.add_order:
+             return False
+         if curr_op == Arithmetic.div:
+             return True
+diff --git a/pypika/tests/test_functions.py b/pypika/tests/test_functions.py
+index c713a68..ca2c1ca 100644
+--- a/pypika/tests/test_functions.py
++++ b/pypika/tests/test_functions.py
+@@ -221,17 +221,6 @@ class ArithmeticTests(unittest.TestCase):
+         self.assertEqual('SELECT "a"/1+"b"/5 FROM "abc"', str(q3))
+         self.assertEqual('SELECT "a"/1+"b"/5 FROM "abc"', str(q4))
+ 
+-    def test__complex_op_sub_parentheses(self):
+-        q1 = Q.from_("abc").select((F("a") + 1) - (F("b") - 5))
+-        q2 = Q.from_(self.t).select((self.t.a + 1) - (self.t.b - 5))
+-        q3 = Q.from_("abc").select((F("a") / 1) - (F("b") / 5))
+-        q4 = Q.from_(self.t).select((self.t.a / 1) - (self.t.b / 5))
+-
+-        self.assertEqual('SELECT "a"+1-("b"-5) FROM "abc"', str(q1))
+-        self.assertEqual('SELECT "a"+1-("b"-5) FROM "abc"', str(q2))
+-        self.assertEqual('SELECT "a"/1-"b"/5 FROM "abc"', str(q3))
+-        self.assertEqual('SELECT "a"/1-"b"/5 FROM "abc"', str(q4))
+-
+     def test__complex_op_mul_parentheses(self):
+         q1 = Q.from_("abc").select((F("a") + 1) * (F("b") - 5))
+         q2 = Q.from_(self.t).select((self.t.a + 1) * (self.t.b - 5))

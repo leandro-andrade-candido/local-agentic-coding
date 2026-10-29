@@ -1,0 +1,41 @@
+diff --git a/pypika/queries.py b/pypika/queries.py
+index 96447fc..7762af4 100644
+--- a/pypika/queries.py
++++ b/pypika/queries.py
+@@ -1415,9 +1415,13 @@ class QueryBuilder(Selectable, Term):
+         return querystring
+ 
+     def _apply_pagination(self, querystring: str, **kwargs) -> str:
+-        for value, render in ((self._limit, self._limit_sql), (self._offset, self._offset_sql)):
+-            if value:
+-                querystring += render()
++        # LIMIT 0 is meaningful (returns no rows), so only None disables the limit.
++        if self._limit is not None:
++            querystring += self._limit_sql()
++
++        if self._offset:
++            querystring += self._offset_sql()
++
+         return querystring
+ 
+     def _with_sql(self, **kwargs: Any) -> str:
+diff --git a/pypika/tests/test_selects.py b/pypika/tests/test_selects.py
+index 4dca2a1..f9453c9 100644
+--- a/pypika/tests/test_selects.py
++++ b/pypika/tests/test_selects.py
+@@ -200,6 +200,15 @@ class SelectTests(unittest.TestCase):
+         with self.assertRaises(QueryException):
+             Query.from_("abc").select("foo").paginate(1, 0)
+ 
++    def test_select_with_limit_zero(self):
++        with self.subTest('using python slice'):
++            q1 = Query.from_("abc").select("foo")[:0]
++            self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(q1))
++
++        with self.subTest('using limit method'):
++            q2 = Query.from_("abc").select("foo").limit(0)
++            self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(q2))
++
+     def test_select_with_limit__func(self):
+         q1 = Query.from_("abc").select("foo").limit(10)
+ 

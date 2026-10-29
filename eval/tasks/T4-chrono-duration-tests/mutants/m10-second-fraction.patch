@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..d61d0bc 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -134,7 +134,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+         const remainingFraction = duration["second"] - floor;
+         if (remainingFraction > 0) {
+             duration.millisecond = duration?.millisecond ?? 0;
+-            duration.millisecond += Math.round(remainingFraction * 1000);
++            duration.millisecond += Math.round(remainingFraction * 100);
+         }
+     }
+     if ("millisecond" in duration) {

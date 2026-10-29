@@ -1,0 +1,13 @@
+diff --git a/pypika/utils.py b/pypika/utils.py
+index 4e7a167..3782473 100644
+--- a/pypika/utils.py
++++ b/pypika/utils.py
+@@ -131,7 +131,7 @@ def format_quotes(value: Any, quote_char: str | None) -> str:
+     if quote_char:
+         value = str(value).replace(quote_char, quote_char * 2)
+ 
+-    return "{quote}{value}{quote}".format(value=value, quote=quote_char or "")
++    return "{quote}{value}{quote}".format(value=value, quote=quote_char or '"')
+ 
+ 
+ def escape_backslashes(value: str, dialect: Dialects | None) -> str:

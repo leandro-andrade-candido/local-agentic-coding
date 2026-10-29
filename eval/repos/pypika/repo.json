@@ -1,0 +1,22 @@
+{
+  "name": "pypika",
+  "url": "https://github.com/kayak/pypika",
+  "commit": "443e10f3c7b4c40afbed98216be63146c4fc4a1b",
+  "commit_date": "2026-10-27",
+  "version": "0.51.1+",
+  "license": "Apache-2.0",
+  "kind": "python",
+  "python": "3.12",
+  "test_roots": [
+    "pypika/tests"
+  ],
+  "test_file_regex": "(^|/)test_[^/]*\\.py$",
+  "protected_config": [
+    "pyproject.toml",
+    "setup.cfg",
+    "pytest.ini",
+    "tox.ini",
+    "conftest.py",
+    "pypika/tests/conftest.py"
+  ]
+}

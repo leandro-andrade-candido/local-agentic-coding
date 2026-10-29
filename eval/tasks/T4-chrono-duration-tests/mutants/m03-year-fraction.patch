@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..fa984a3 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -71,7 +71,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+         const remainingFraction = duration["year"] - floor;
+         if (remainingFraction > 0) {
+             duration.month = duration?.month ?? 0;
+-            duration.month += remainingFraction * 12;
++            duration.month += remainingFraction * 10;
+         }
+     }
+     if ("quarter" in duration) {

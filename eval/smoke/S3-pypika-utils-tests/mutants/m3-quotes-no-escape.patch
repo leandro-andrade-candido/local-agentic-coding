@@ -1,0 +1,13 @@
+diff --git a/pypika/utils.py b/pypika/utils.py
+index 4e7a167..2696a16 100644
+--- a/pypika/utils.py
++++ b/pypika/utils.py
+@@ -129,7 +129,7 @@ def resolve_is_aggregate(values: list[bool | None]) -> bool | None:
+ 
+ def format_quotes(value: Any, quote_char: str | None) -> str:
+     if quote_char:
+-        value = str(value).replace(quote_char, quote_char * 2)
++        value = str(value).replace(quote_char, quote_char)
+ 
+     return "{quote}{value}{quote}".format(value=value, quote=quote_char or "")
+ 

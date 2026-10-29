@@ -1,0 +1,13 @@
+{
+  "id": "S2",
+  "title": "Centralizar YEAR_PATTERN/parseYear duplicados de pt e es",
+  "repo": "chrono",
+  "category": "multi-file-edit",
+  "plan_task": "E6 smoke - edição pequena em vários arquivos",
+  "timeout_min": 15,
+  "checks": [
+    {"type": "hidden_tests", "name": "testes_ocultos",
+     "files": {"hidden/hidden_s2.test.ts": "test/hidden_s2.test.ts"}},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}

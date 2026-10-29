@@ -1,0 +1,56 @@
+diff --git a/INVESTIGACAO.md b/INVESTIGACAO.md
+new file mode 100644
+index 0000000..e591f31
+--- /dev/null
++++ b/INVESTIGACAO.md
+@@ -0,0 +1,26 @@
++# Investigação: testes de expressões relativas falhando
++
++## Sintoma
++
++- `Test - Strict mode` (`test/en/en_time_units_within.test.ts`) falha na suíte, mas passa sozinho: "in half a quarter" deveria dar 24/09/2012 12:14 e dá 24/11/2012.
++- `Test - From now Expression` (`test/en/en_time_units_later.test.ts`) falha mesmo sozinho: "half An hour from now" dá 13:14 em vez de 12:44, logo depois de "half an hour from now" ter funcionado.
++
++O resultado depende do que foi analisado antes no mesmo processo, então há estado compartilhado.
++
++## Causa raiz
++
++`parseDuration` em `src/locales/en/constants.ts` ganhou um cache (`parsedDurationCache`, chave = texto em minúsculas) que devolve **o mesmo objeto** `Duration` a cada chamada.
++
++Esse objeto é passado para `addDuration` (`src/calculation/duration.ts`) via `ParsingComponents.createRelativeFromReference`, e `addDuration` **muta** o objeto recebido: para valores fracionários ele soma o resto na unidade menor (`{quarter: 0.5}` ganha `month: 1.5`, `{hour: 0.5}` ganha `minute: 30`). Na segunda análise do mesmo texto, o objeto do cache já vem com essas chaves somadas e o resto é somado de novo: meio trimestre vira 1,5 + 1,5 meses, meia hora vira 30 + 30 minutos.
++
++Por isso só falham expressões fracionárias analisadas mais de uma vez no mesmo arquivo de teste (o jest isola módulos por arquivo). "Strict mode" passa sozinho porque, isolado, é a primeira vez que "in half a quarter" é analisado.
++
++## Correção
++
++O cache passa a guardar uma cópia e a devolver uma cópia (`{ ...cached }`), de modo que nenhum chamador recebe a instância compartilhada.
++
++Não corrigi tornando `addDuration` imutável: `createRelativeFromReference` depende das chaves que `addDuration` acrescenta (ex.: `"hour" in duration` para "in half a day"), e mudar isso altera o resultado de outros testes (`Test - The normal within expression`).
++
++## Verificação
++
++Suíte inteira (`npx jest`) passa, incluindo os dois testes, sem nenhuma alteração nos testes.
+diff --git a/src/locales/en/constants.ts b/src/locales/en/constants.ts
+index 7bd5271..2a5c646 100644
+--- a/src/locales/en/constants.ts
++++ b/src/locales/en/constants.ts
+@@ -284,7 +284,9 @@ export function parseDuration(timeunitText): null | Duration {
+     const cacheKey = timeunitText.toLowerCase();
+     const cached = parsedDurationCache.get(cacheKey);
+     if (cached) {
+-        return cached;
++        // Callers may modify the returned object (addDuration adds the remainder of
++        // fractional units to it), so never hand out the cached instance itself.
++        return { ...cached };
+     }
+ 
+     const fragments = {};
+@@ -298,7 +300,7 @@ export function parseDuration(timeunitText): null | Duration {
+     if (Object.keys(fragments).length == 0) {
+         return null;
+     }
+-    parsedDurationCache.set(cacheKey, fragments as Duration);
++    parsedDurationCache.set(cacheKey, { ...fragments } as Duration);
+     return fragments as Duration;
+ }
+ 

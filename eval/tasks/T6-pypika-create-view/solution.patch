@@ -1,0 +1,382 @@
+diff --git a/PLANO.md b/PLANO.md
+new file mode 100644
+index 0000000..7015511
+--- /dev/null
++++ b/PLANO.md
+@@ -0,0 +1,42 @@
++# Plano: suporte a CREATE VIEW no pypika
++
++## Como o projeto faz DDL hoje
++
++- `pypika/queries.py`: `Query` é a fábrica (métodos de classe `create_table`, `create_index`, `drop_*`), e cada comando tem um builder próprio (`CreateQueryBuilder`, `CreateIndexBuilder`, `DropQueryBuilder`).
++- Os builders são imutáveis via decorador `@builder` (`pypika/utils.py`), que faz `copy.copy(self)` antes de cada método. A cópia é rasa: listas precisam ser recriadas, não modificadas com `append`.
++- As aspas vêm de `QUOTE_CHAR`/`SECONDARY_QUOTE_CHAR` do builder, passadas como kwargs para `get_sql` via `_set_kwargs_defaults`.
++- Dialetos (`pypika/dialects.py`) sobrescrevem os métodos de fábrica de `Query` para devolver subclasses com outras aspas (ex.: `MySQLQuery.create_table` -> `MySQLCreateQueryBuilder` com crase).
++
++## Mudanças
++
++1. `pypika/queries.py`
++   - Nova classe `CreateViewBuilder` (ao lado de `CreateQueryBuilder`), com estado `_view`, `_columns`, `_as_select`, `_or_replace`, `_temporary`, `_materialized`, `_if_not_exists`, `dialect`.
++   - Métodos `@builder`: `create_view`, `columns`, `as_select`, `or_replace`, `temporary`, `if_not_exists`.
++   - `get_sql` monta `CREATE [OR REPLACE] [TEMPORARY|MATERIALIZED] VIEW [IF NOT EXISTS] nome [(colunas)] AS consulta`. Sem `as_select` devolve `""`, como o `create_table`.
++   - Novo `Query.create_view(view)`.
++2. `pypika/dialects.py`
++   - `MySQLQuery.create_view` -> `MySQLCreateViewBuilder` (`QUOTE_CHAR = "`"`, dialeto MySQL).
++   - `PostgreSQLQuery.create_view` -> `PostgreSQLCreateViewBuilder`, único com `materialized()`.
++3. Testes em `pypika/tests/test_create_view.py`. Documentação em `README.rst` (seção "Creating Views").
++
++## Decisões e validações
++
++- `view` aceita `str` ou `Table`; com `Table` o schema sai qualificado (`"s"."v"`), reaproveitando `Table.get_sql`.
++- `as_select` aceita `QueryBuilder` ou `_SetOperation` (UNION); outro tipo -> `TypeError`.
++- Conflitos levantam `QueryException` na chamada que cria o conflito: `or_replace` + `if_not_exists`; `materialized` + `or_replace`; `materialized` + `temporary`.
++- A consulta interna é renderizada com `get_sql()` sem repassar kwargs, para sair exatamente como `str(query)`. Repassar `dialect`/`quote_char` do builder da view poderia trocar aspas ou o escape de barras invertidas do MySQL.
++- `columns` cria uma lista nova a cada chamada, para que cópias do `@builder` não compartilhem estado.
++
++## Riscos
++
++- Cópia rasa do `@builder` compartilhando listas (coberto por teste de imutabilidade).
++- Divergência de aspas entre o nome da view e a consulta quando se mistura dialetos; documentado: use o mesmo dialeto nos dois.
++- Nenhuma mudança em código existente além de novos métodos; a suíte inteira deve continuar passando.
++
++## Testes
++
++- Um teste por modificador e pela ordem das palavras-chave combinadas.
++- Erros: `TypeError` em `as_select`, `QueryException` nos conflitos, `AttributeError` para `materialized()` fora do PostgreSQL.
++- Imutabilidade (o builder base não muda).
++- MySQL (crase) e PostgreSQL (materializada).
++- Rodar `.venv/bin/python -m pytest` completo no fim.
+diff --git a/README.rst b/README.rst
+index 1ed3ba2..90349e5 100644
+--- a/README.rst
++++ b/README.rst
+@@ -1424,6 +1424,22 @@ This produces:
+     DELETE FROM "abc"
+     FOR PORTION OF "valid_period" FROM '2020-01-01' TO '2020-02-01'
+ 
++Creating Views
++^^^^^^^^^^^^^^
++
++The entry point for creating views is ``pypika.Query.create_view``. The view is defined by a query passed to
++``as_select``. Optional modifiers are ``columns``, ``or_replace``, ``temporary`` and ``if_not_exists``;
++``PostgreSQLQuery.create_view`` also offers ``materialized``.
++
++.. code-block:: python
++
++    q = Query.from_("orders").select("id", "total").where(Field("status") == "paid")
++    Query.create_view("v_paid").or_replace().as_select(q)
++
++.. code-block:: sql
++
++    CREATE OR REPLACE VIEW "v_paid" AS SELECT "id","total" FROM "orders" WHERE "status"='paid'
++
+ Creating Tables
+ ^^^^^^^^^^^^^^^
+ 
+diff --git a/pypika/dialects.py b/pypika/dialects.py
+index 578f369..ed02649 100644
+--- a/pypika/dialects.py
++++ b/pypika/dialects.py
+@@ -8,6 +8,7 @@ from typing import Any
+ from pypika.enums import Dialects
+ from pypika.queries import (
+     CreateQueryBuilder,
++    CreateViewBuilder,
+     Database,
+     DropQueryBuilder,
+     Query,
+@@ -94,6 +95,10 @@ class MySQLQuery(Query):
+     def drop_table(cls, table: str | Table) -> MySQLDropQueryBuilder:
+         return MySQLDropQueryBuilder().drop_table(table)
+ 
++    @classmethod
++    def create_view(cls, view: str | Table) -> MySQLCreateViewBuilder:
++        return MySQLCreateViewBuilder().create_view(view)
++
+ 
+ class MySQLQueryBuilder(QueryBuilder):
+     QUOTE_CHAR = "`"
+@@ -239,6 +244,13 @@ class MySQLDropQueryBuilder(DropQueryBuilder):
+     QUOTE_CHAR = "`"
+ 
+ 
++class MySQLCreateViewBuilder(CreateViewBuilder):
++    QUOTE_CHAR = "`"
++
++    def __init__(self) -> None:
++        super().__init__(dialect=Dialects.MYSQL)
++
++
+ class VerticaQuery(Query):
+     """
+     Defines a query class for use with Vertica.
+@@ -414,6 +426,30 @@ class PostgreSQLQuery(Query):
+     def _builder(cls, **kwargs) -> PostgreSQLQueryBuilder:
+         return PostgreSQLQueryBuilder(**kwargs)
+ 
++    @classmethod
++    def create_view(cls, view: str | Table) -> PostgreSQLCreateViewBuilder:
++        return PostgreSQLCreateViewBuilder().create_view(view)
++
++
++class PostgreSQLCreateViewBuilder(CreateViewBuilder):
++    def __init__(self) -> None:
++        super().__init__(dialect=Dialects.POSTGRESQL)
++
++    @builder
++    def materialized(self) -> None:
++        """
++        Creates a materialized view (CREATE MATERIALIZED VIEW).
++
++        :raises QueryException:
++            If combined with OR REPLACE or TEMPORARY, which PostgreSQL does not support for materialized views.
++        """
++        if self._or_replace:
++            raise QueryException("OR REPLACE cannot be used with a materialized view")
++        if self._temporary:
++            raise QueryException("A materialized view cannot be temporary")
++
++        self._materialized = True
++
+ 
+ class PostgreSQLQueryBuilder(QueryBuilder):
+     ALIAS_QUOTE_CHAR = '"'
+diff --git a/pypika/queries.py b/pypika/queries.py
+index a10a345..027d8d7 100644
+--- a/pypika/queries.py
++++ b/pypika/queries.py
+@@ -410,6 +410,18 @@ class Query:
+         """
+         return CreateQueryBuilder().create_table(table)
+ 
++    @classmethod
++    def create_view(cls, view: str | Table) -> CreateViewBuilder:
++        """
++        Query builder entry point. Initializes query building and sets the name of the view to be created. When using
++        this function, the query becomes a CREATE VIEW statement.
++
++        :param view: An instance of a Table object or a string view name.
++
++        :return: CreateViewBuilder
++        """
++        return CreateViewBuilder().create_view(view)
++
+     @classmethod
+     def create_index(cls, index: str | Index) -> CreateIndexBuilder:
+         """
+@@ -2131,6 +2143,150 @@ class CreateQueryBuilder:
+         return self.__str__()
+ 
+ 
++class CreateViewBuilder:
++    """
++    Query builder used to build CREATE VIEW queries.
++
++    Syntax: CREATE [OR REPLACE] [TEMPORARY | MATERIALIZED] VIEW [IF NOT EXISTS] name [(columns)] AS query
++    """
++
++    QUOTE_CHAR = '"'
++    SECONDARY_QUOTE_CHAR = "'"
++    ALIAS_QUOTE_CHAR = None
++    QUERY_CLS = Query
++
++    def __init__(self, dialect: Dialects | None = None) -> None:
++        self._view = None
++        self._columns = []
++        self._as_select = None
++        self._or_replace = False
++        self._temporary = False
++        self._materialized = False
++        self._if_not_exists = False
++        self.dialect = dialect
++
++    def _set_kwargs_defaults(self, kwargs: dict) -> None:
++        kwargs.setdefault("quote_char", self.QUOTE_CHAR)
++        kwargs.setdefault("secondary_quote_char", self.SECONDARY_QUOTE_CHAR)
++        kwargs.setdefault("dialect", self.dialect)
++
++    @builder
++    def create_view(self, view: str | Table) -> None:
++        """
++        Sets the view to be created.
++
++        :raises AttributeError:
++            If the view is already set.
++        """
++        if self._view:
++            raise AttributeError("'Query' object already has attribute create_view")
++
++        self._view = view if isinstance(view, Table) else Table(view)
++
++    @builder
++    def columns(self, *columns: str | Column) -> None:
++        """
++        Sets the column names of the view.
++        """
++        # A new list keeps copies made by @builder independent from each other.
++        self._columns = self._columns + [
++            column if isinstance(column, Column) else Column(column) for column in columns
++        ]
++
++    @builder
++    def as_select(self, query_builder: QueryBuilder) -> None:
++        """
++        Sets the query that defines the view.
++
++        :raises TypeError:
++            If ``query_builder`` is not a query builder.
++        """
++        if not isinstance(query_builder, (QueryBuilder, _SetOperation)):
++            raise TypeError("Expected 'query_builder' to be instance of QueryBuilder")
++
++        self._as_select = query_builder
++
++    @builder
++    def or_replace(self) -> None:
++        """
++        Creates the view with CREATE OR REPLACE.
++
++        :raises QueryException:
++            If combined with IF NOT EXISTS or with a materialized view.
++        """
++        if self._if_not_exists:
++            raise QueryException("OR REPLACE cannot be combined with IF NOT EXISTS")
++        if self._materialized:
++            raise QueryException("OR REPLACE cannot be used with a materialized view")
++
++        self._or_replace = True
++
++    @builder
++    def temporary(self) -> None:
++        """
++        Makes the view temporary.
++
++        :raises QueryException:
++            If the view is materialized.
++        """
++        if self._materialized:
++            raise QueryException("A materialized view cannot be temporary")
++
++        self._temporary = True
++
++    @builder
++    def if_not_exists(self) -> None:
++        """
++        Adds IF NOT EXISTS.
++
++        :raises QueryException:
++            If combined with OR REPLACE.
++        """
++        if self._or_replace:
++            raise QueryException("IF NOT EXISTS cannot be combined with OR REPLACE")
++
++        self._if_not_exists = True
++
++    def get_sql(self, **kwargs: Any) -> str:
++        """
++        Gets the sql statement string.
++
++        :return: The create view statement, or an empty string while the view or its query is missing.
++        :rtype: str
++        """
++        self._set_kwargs_defaults(kwargs)
++
++        if not self._view or self._as_select is None:
++            return ""
++
++        columns = ""
++        if self._columns:
++            columns = " ({})".format(",".join(column.get_name_sql(**kwargs) for column in self._columns))
++
++        if self._materialized:
++            kind = "MATERIALIZED "
++        elif self._temporary:
++            kind = "TEMPORARY "
++        else:
++            kind = ""
++
++        # The inner query keeps its own dialect settings, so it renders exactly as str(query).
++        return "CREATE {or_replace}{kind}VIEW {if_not_exists}{view}{columns} AS {query}".format(
++            or_replace="OR REPLACE " if self._or_replace else "",
++            kind=kind,
++            if_not_exists="IF NOT EXISTS " if self._if_not_exists else "",
++            view=self._view.get_sql(**kwargs),
++            columns=columns,
++            query=self._as_select.get_sql(),
++        )
++
++    def __str__(self) -> str:
++        return self.get_sql()
++
++    def __repr__(self) -> str:
++        return self.__str__()
++
++
+ class CreateIndexBuilder:
+     def __init__(self) -> None:
+         self._index = None
+diff --git a/pypika/tests/test_create_view.py b/pypika/tests/test_create_view.py
+new file mode 100644
+index 0000000..1538d3a
+--- /dev/null
++++ b/pypika/tests/test_create_view.py
+@@ -0,0 +1,59 @@
++import unittest
++
++from pypika import Field, MySQLQuery, PostgreSQLQuery, Query, Table
++from pypika.utils import QueryException
++
++
++class CreateViewTests(unittest.TestCase):
++    select = Query.from_("orders").select("id", "total").where(Field("status") == "paid")
++
++    def test_create_view(self):
++        q = Query.create_view("v_paid").as_select(self.select)
++        self.assertEqual(
++            'CREATE VIEW "v_paid" AS SELECT "id","total" FROM "orders" WHERE "status"=\'paid\'', str(q)
++        )
++
++    def test_without_query_is_empty(self):
++        self.assertEqual("", str(Query.create_view("v_paid")))
++
++    def test_columns_and_or_replace(self):
++        q = Query.create_view("v").or_replace().columns("a", "b").as_select(self.select)
++        self.assertTrue(str(q).startswith('CREATE OR REPLACE VIEW "v" ("a","b") AS SELECT'))
++
++    def test_temporary_and_if_not_exists(self):
++        self.assertTrue(str(Query.create_view("v").temporary().as_select(self.select)).startswith("CREATE TEMPORARY VIEW"))
++        self.assertTrue(
++            str(Query.create_view(Table("v", schema="s")).if_not_exists().as_select(self.select)).startswith(
++                'CREATE VIEW IF NOT EXISTS "s"."v" AS'
++            )
++        )
++
++    def test_conflicts(self):
++        with self.assertRaises(QueryException):
++            Query.create_view("v").or_replace().if_not_exists()
++        with self.assertRaises(QueryException):
++            Query.create_view("v").if_not_exists().or_replace()
++
++    def test_as_select_requires_query(self):
++        with self.assertRaises(TypeError):
++            Query.create_view("v").as_select("SELECT 1")
++
++    def test_immutable(self):
++        base = Query.create_view("v")
++        base.or_replace()
++        base.columns("x")
++        self.assertEqual('CREATE VIEW "v" AS SELECT 1', str(base.as_select(Query.select(1))))
++
++    def test_mysql(self):
++        q = MySQLQuery.create_view("v").as_select(MySQLQuery.from_("t").select("a"))
++        self.assertEqual("CREATE VIEW `v` AS SELECT `a` FROM `t`", str(q))
++
++    def test_postgresql_materialized(self):
++        q = PostgreSQLQuery.create_view("mv").materialized().as_select(PostgreSQLQuery.from_("t").select("a"))
++        self.assertEqual('CREATE MATERIALIZED VIEW "mv" AS SELECT "a" FROM "t"', str(q))
++        with self.assertRaises(QueryException):
++            PostgreSQLQuery.create_view("mv").materialized().or_replace()
++        with self.assertRaises(QueryException):
++            PostgreSQLQuery.create_view("mv").temporary().materialized()
++        with self.assertRaises(AttributeError):
++            Query.create_view("v").materialized()

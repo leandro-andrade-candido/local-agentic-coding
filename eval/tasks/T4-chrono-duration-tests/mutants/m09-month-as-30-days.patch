@@ -1,0 +1,13 @@
+diff --git a/src/calculation/duration.ts b/src/calculation/duration.ts
+index 586308c..77cea67 100644
+--- a/src/calculation/duration.ts
++++ b/src/calculation/duration.ts
+@@ -85,7 +85,7 @@ export function addDuration(ref: Date, duration: Duration): Date {
+     }
+     if ("month" in duration) {
+         const floor = Math.floor(duration["month"]);
+-        date.setMonth(date.getMonth() + floor);
++        date.setDate(date.getDate() + floor * 30);
+         const remainingFraction = duration["month"] - floor;
+         if (remainingFraction > 0) {
+             duration.week = duration?.week ?? 0;

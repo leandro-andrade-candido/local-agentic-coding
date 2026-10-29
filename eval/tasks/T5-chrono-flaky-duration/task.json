@@ -1,0 +1,19 @@
+{
+  "id": "T5",
+  "title": "Testes falham por estado compartilhado (cache de parseDuration + addDuration que muta)",
+  "repo": "chrono",
+  "category": "investigation",
+  "plan_task": "T5 - investigar um teste que falha por causa não óbvia",
+  "timeout_min": 30,
+  "notes": "Causa plantada: cache em parseDuration (src/locales/en/constants.ts) devolve o mesmo objeto, e addDuration (src/calculation/duration.ts) muta o objeto recebido em valores fracionários. Tornar addDuration imutável NÃO é correção válida (quebra 'Test - The normal within expression'). Conferir no relatório se a causa está certa (needs_review).",
+  "checks": [
+    {"type": "unchanged", "name": "testes_visiveis_intactos", "paths": ["test"], "required": false},
+    {"type": "report", "name": "relatorio_causa_raiz", "file": ["INVESTIGACAO.md", "INVESTIGAÇÃO.md", "investigacao.md"],
+     "min_words": 60,
+     "keyword_groups": [["parsedDurationCache", "cache", "memo"],
+                        ["addDuration", "muta", "mutá", "mutav", "mutad", "mutate", "mesmo objeto", "same object", "compartilhad", "shared"]]},
+    {"type": "hidden_tests", "name": "testes_ocultos",
+     "files": {"hidden/hidden_t5.test.ts": "test/hidden_t5.test.ts"}},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}

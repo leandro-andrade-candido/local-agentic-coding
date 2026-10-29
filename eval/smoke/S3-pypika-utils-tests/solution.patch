@@ -1,0 +1,58 @@
+diff --git a/pypika/tests/test_utils_format.py b/pypika/tests/test_utils_format.py
+new file mode 100644
+index 0000000..aa3d92c
+--- /dev/null
++++ b/pypika/tests/test_utils_format.py
+@@ -0,0 +1,52 @@
++import unittest
++
++from pypika.utils import format_alias_sql, format_quotes, resolve_is_aggregate
++
++
++class ResolveIsAggregateTests(unittest.TestCase):
++    def test_all_true(self):
++        self.assertIs(True, resolve_is_aggregate([True, True]))
++
++    def test_true_and_none(self):
++        self.assertIs(True, resolve_is_aggregate([True, None]))
++
++    def test_mixed_is_false(self):
++        self.assertIs(False, resolve_is_aggregate([True, False]))
++        self.assertIs(False, resolve_is_aggregate([False, None]))
++
++    def test_all_none_is_none(self):
++        self.assertIsNone(resolve_is_aggregate([None, None]))
++        self.assertIsNone(resolve_is_aggregate([]))
++
++
++class FormatQuotesTests(unittest.TestCase):
++    def test_wraps_value(self):
++        self.assertEqual('"abc"', format_quotes("abc", '"'))
++        self.assertEqual("`abc`", format_quotes("abc", "`"))
++
++    def test_without_quote_char(self):
++        self.assertEqual("abc", format_quotes("abc", None))
++        self.assertEqual("abc", format_quotes("abc", ""))
++
++    def test_escapes_quote_char_by_doubling(self):
++        self.assertEqual('"a""b"', format_quotes('a"b', '"'))
++
++    def test_non_string_value(self):
++        self.assertEqual('"1"', format_quotes(1, '"'))
++
++
++class FormatAliasSqlTests(unittest.TestCase):
++    def test_no_alias_returns_sql(self):
++        self.assertEqual("x", format_alias_sql("x", None, quote_char='"'))
++
++    def test_alias_with_space(self):
++        self.assertEqual('x "a"', format_alias_sql("x", "a", quote_char='"'))
++
++    def test_alias_with_as_keyword(self):
++        self.assertEqual('x AS "a"', format_alias_sql("x", "a", quote_char='"', as_keyword=True))
++
++    def test_alias_quote_char_takes_precedence(self):
++        self.assertEqual("x `a`", format_alias_sql("x", "a", quote_char='"', alias_quote_char="`"))
++
++    def test_unquoted_alias(self):
++        self.assertEqual("x a", format_alias_sql("x", "a"))

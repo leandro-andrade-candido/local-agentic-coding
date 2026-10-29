@@ -1,0 +1,30 @@
+diff --git a/src/locales/en/constants.ts b/src/locales/en/constants.ts
+index 29fb188..7bd5271 100644
+--- a/src/locales/en/constants.ts
++++ b/src/locales/en/constants.ts
+@@ -276,7 +276,17 @@ export const TIME_UNITS_NO_ABBR_PATTERN = repeatedTimeunitPattern(
+     TIME_UNIT_CONNECTOR_PATTERN
+ );
+ 
++// Parsing the same time-unit text is common (every parser that handles relative
++// expressions calls this for each candidate match), so keep the parsed durations.
++const parsedDurationCache = new Map<string, Duration>();
++
+ export function parseDuration(timeunitText): null | Duration {
++    const cacheKey = timeunitText.toLowerCase();
++    const cached = parsedDurationCache.get(cacheKey);
++    if (cached) {
++        return cached;
++    }
++
+     const fragments = {};
+     let remainingText = timeunitText;
+     let match = SINGLE_TIME_UNIT_REGEX.exec(remainingText);
+@@ -288,6 +298,7 @@ export function parseDuration(timeunitText): null | Duration {
+     if (Object.keys(fragments).length == 0) {
+         return null;
+     }
++    parsedDurationCache.set(cacheKey, fragments as Duration);
+     return fragments as Duration;
+ }
+ 
