@@ -6,9 +6,10 @@
 # config.effective.toml, guard.log (bloqueios), home/codex (CODEX_HOME isolado,
 # com a sessão em sessions/) e métricas do servidor.
 #
-# CODEX_LOCAL_SANDBOX=workspace-write mantém o sandbox do Codex (bubblewrap) no
-# perfil autonomous, para rodar fora do container (no host, os namespaces de
-# usuário funcionam). Dentro do container da E7 deixe vazio.
+# O perfil autonomous só roda no agent-box (AGENT_BOX=1). Lá o sandbox do Codex
+# fica desligado (danger-full-access): o container é a barreira. Só com
+# AGENT_ALLOW_HOST_AUTONOMOUS=1 (inseguro) faz sentido CODEX_LOCAL_SANDBOX=workspace-write,
+# que liga o sandbox do Codex (bubblewrap) no host.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/../lib/common.sh"

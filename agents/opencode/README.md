@@ -53,14 +53,13 @@ Além disso:
 
 | Variável | Por quê |
 |---|---|
-| `OPENCODE_DISABLE_CLAUDE_CODE=1` | não ler `~/.claude/CLAUDE.md` nem `.claude/skills` |
-| `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` | não ler skills de `~/.claude` e `~/.agents` |
+| `OPENCODE_DISABLE_CLAUDE_CODE=1` (só no host) | não ler `~/.claude/CLAUDE.md` nem `.claude/skills` (da HOME e do projeto) |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` | os plugins internos são de login em nuvem (Codex, Copilot, GitLab, Azure, xAI...) |
 | `OPENCODE_DISABLE_MODELS_FETCH=1` | sem buscar o catálogo models.dev |
 | `OPENCODE_DISABLE_AUTOUPDATE=1`, `OPENCODE_DISABLE_LSP_DOWNLOAD=1` | sem rede automática |
 
-Todas constam de `packages/core/src/flag/flag.ts` da tag v1.19.5 e, menos
-`EXTERNAL_SKILLS`, da página de CLI **[verificado]**.
+Todas constam de `packages/core/src/flag/flag.ts` da tag v1.19.5 e da página de
+CLI **[verificado]**.
 `OPENCODE_DISABLE_PROJECT_CONFIG` **não** é usado: além de `opencode.json` do
 repositório, ele desliga a leitura do `AGENTS.md` do projeto.
 
@@ -105,6 +104,32 @@ trabalho disparam `external_directory` **[verificado: docs/permissions.mdx, tool
 `--auto` aprova o que seria `ask`; `deny` continua valendo **[verificado: docs]**.
 O plugin fica em `$XDG_CONFIG_HOME/opencode/plugins/` (link para o repositório) e
 lança erro em `tool.execute.before` para bloquear **[verificado: docs/plugins.mdx]**.
+
+## Skills (AGENT_SKILLS_DIRS)
+
+- **Descoberta:** os diretórios de `AGENT_SKILLS_DIRS` vão para `skills.paths` (chave da
+  config 1.x; cada diretório é varrido por `**/SKILL.md`) **[verificado: core/src/v1/config/skills.ts, skill/index.ts]**.
+  Também valem `skills/` do diretório de config isolado, `.opencode/skills` e
+  `.agents/skills` do projeto. `.claude/skills` e `~/.claude/CLAUDE.md` ficam de fora no
+  host (`OPENCODE_DISABLE_CLAUDE_CODE=1`); no agent-box (HOME vazia) valem.
+  `OPENCODE_DISABLE_EXTERNAL_SKILLS` saiu: ele também desligava `.agents/skills` do projeto.
+- **Sob demanda:** a ferramenta nativa `skill` lista nome e descrição e carrega o corpo
+  quando chamada.
+- **Chamada explícita:** pedir no prompt "use a ferramenta skill para carregar <nome>"
+  (é o que a doc do Superpowers para OpenCode indica).
+- **Bootstrap do Superpowers:** plugin `plugins/skills-bootstrap.js`, com o mesmo gancho
+  do plugin oficial para a 1.x (`experimental.chat.messages.transform`, bootstrap no
+  início da primeira mensagem do usuário, pulando subagentes).
+- **Mapa de ferramentas:** o do plugin oficial (V1), com uma correção: para modelos que
+  não são GPT o OpenCode oferece `edit`/`write`, não `apply_patch`
+  (`tool/registry.ts`), então o mapa diz `write`/`edit`.
+- **Não verificado (E6):** plugin carregado sem rede; skill carregada pelo modelo.
+
+> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
+> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
+> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
+> (ver `agents/README.md`).
 
 ## Uso não interativo
 

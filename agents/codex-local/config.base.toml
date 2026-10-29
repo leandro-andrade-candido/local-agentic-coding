@@ -30,7 +30,7 @@ check_for_update_on_startup = false
 name = "llama.cpp local"
 base_url = "@@LLM_BASE_URL@@/v1"
 wire_api = "responses"
-# Chave fictícia lida do ambiente; o servidor não confere.
+# Chave do llama-server lida do ambiente (LOCAL_LLM_API_KEY, ver agents/lib/common.sh).
 env_key = "LOCAL_LLM_API_KEY"
 request_max_retries = 2
 stream_max_retries = 2

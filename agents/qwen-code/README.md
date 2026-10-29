@@ -55,7 +55,7 @@ tentaria `npm install -g` no prefixo global.
 | Ajuste | Valor | Onde |
 |---|---|---|
 | Endpoint | `$LLM_BASE_URL/v1`, provedor `openai` (Chat Completions) | `modelProviders.openai[0]` |
-| Chave | fictícia, por `envKey: LOCAL_LLM_API_KEY` | idem |
+| Chave | a do llama-server, por `envKey: LOCAL_LLM_API_KEY` (ver chave em `agents/README.md`) | idem |
 | Amostragem | temperature 0.6, top_p 0.95, top_k 20, min_p 0, presence_penalty 0 | `generationConfig.samplingParams` |
 | Saída máxima | 32768 (`max_tokens` explícito; desliga a escalada automática para 64k) | idem |
 | Thinking | `chat_template_kwargs.preserve_thinking: true` | `generationConfig.extra_body` |
@@ -105,7 +105,7 @@ Regras `Bash(...)` sem `*` casam por prefixo de palavra (`Bash(git push)` pega
 | Edição | `allow: Edit(/**)`, só dentro do projeto (`/` = raiz do projeto). As ferramentas de edição recusam caminhos fora do workspace | livre dentro do workspace |
 | Shell | pergunta | livre |
 | Bloqueado (regra) | `git push`, `sudo`, `su`, `doas`, `pkexec` | os mesmos + `npm/pnpm/yarn/bun install/add/ci`, `pip install`, `uv add`, `apt`, `brew` |
-| Bloqueado (hook) | `lib/guard.py`: `git push` em qualquer forma, `curl \| sh`, `rm -r/-f` fora do projeto | o mesmo + instalações pela rede |
+| Bloqueado (hook, melhor esforço) | `lib/guard.py`: padrões de `git push`, `sudo`, `curl \| sh`, `rm` fora do projeto | o mesmo + instalações pela rede |
 
 No YOLO, `deny` continua bloqueando (`permissionFlow.ts`: `deny` é checado antes
 do modo) **[verificado: código]**; `ask` e `allow` não fazem efeito. O hook roda em
@@ -113,6 +113,33 @@ do modo) **[verificado: código]**; `ask` e `allow` não fazem efeito. O hook ro
 motivo vai para o modelo **[verificado: docs/users/features/hooks.md]**.
 Não usamos o modo `auto`: ele chama um classificador LLM a cada ação, o que
 custa uma requisição extra no slot único.
+
+## Skills (AGENT_SKILLS_DIRS)
+
+- **Descoberta:** os diretórios de `AGENT_SKILLS_DIRS` entram em `skills.directories`
+  (nível "user"; cada diretório é varrido um nível abaixo, `<nome>/SKILL.md`)
+  **[verificado: docs settings.md]**. O Qwen Code também lê `$QWEN_HOME/skills`,
+  `.qwen/skills` e `.agents/skills` do projeto e `~/.agents/skills` da HOME real
+  (no host; no agent-box a HOME é vazia).
+- **Sob demanda:** só nome e descrição entram na lista da ferramenta `skill`; o corpo
+  é carregado quando o modelo chama a skill **[verificado: docs features/skills.md]**.
+- **Chamada explícita:** `/<nome-da-skill>` (ou o painel `/skills`).
+- **Bootstrap do Superpowers:** hook `SessionStart` (`startup|resume|clear|compact`)
+  que devolve `hookSpecificOutput.additionalContext` com o `using-superpowers` e o mapa
+  `qwen-code/superpowers-tools.md` (`settings.skills-bootstrap.json`).
+- **Mapa de ferramentas:** o Qwen Code é um fork do Gemini CLI, mas os nomes das
+  ferramentas mudaram (`edit` e não `replace`, `skill` e não `activate_skill`, `agent`
+  e não `invoke_agent`, `todo_write` desligado por padrão; conferido em
+  `packages/core/src/tools/tool-names.ts`). Por isso o mapa é nosso, não o
+  `gemini-tools.md` do Superpowers.
+- **Não verificado (E6):** o `additionalContext` do `SessionStart` chega ao modelo no
+  modo `-p`; o modelo aciona a skill certa sozinho; custo de tokens da lista.
+
+> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
+> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
+> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
+> (ver `agents/README.md`).
 
 ## Uso não interativo
 

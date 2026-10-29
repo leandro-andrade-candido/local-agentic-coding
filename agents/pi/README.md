@@ -87,11 +87,32 @@ inativas (fora de `defaultTools`). O Pi não tem busca na web.
 | `write`/`edit` no projeto | livre | livre |
 | `write`/`edit` fora do projeto | pergunta | bloqueado |
 | `bash` | passa pela guarda; comandos que não sejam leitura simples (`ls`, `cat`, `rg`, `git status/diff/log`...) perguntam | passa pela guarda |
-| Bloqueado | `lib/guard.py`: `git push`, `sudo`, `curl \| sh`, `rm -r/-f` fora do projeto | o mesmo + instalações pela rede |
+| Bloqueado (melhor esforço) | `lib/guard.py`: padrões de `git push`, `sudo`, `curl \| sh`, `rm` fora do projeto | o mesmo + instalações pela rede |
 
 A extensão usa o evento `tool_call` e devolve `{ block: true, reason }`; a
 confirmação usa `ctx.ui.confirm` **[verificado: tipos em core/extensions/types.ts]**.
 Se a guarda faltar ou falhar, o comando é bloqueado.
+
+## Skills (AGENT_SKILLS_DIRS)
+
+- **Descoberta:** a extensão `extensions/skills.ts` devolve os diretórios de
+  `AGENT_SKILLS_DIRS` no evento `resources_discover` (mesmo mecanismo da extensão
+  oficial `.pi/extensions/superpowers.ts` do Superpowers) **[verificado: tipos da 1.4]**.
+  O Pi também lê `.agents/skills` do projeto e `~/.agents/skills`.
+- **Sob demanda:** só nome e descrição no prompt; o modelo lê o `SKILL.md` com `read`
+  quando a tarefa pede **[verificado: docs skills.md]**.
+- **Chamada explícita:** `/skill:nome` (argumentos depois do nome viram pedido).
+- **Bootstrap do Superpowers:** a mesma extensão insere o `using-superpowers` + mapa
+  (`pi/superpowers-tools.md`, texto da extensão oficial) como primeira mensagem do
+  usuário no evento `context`, no início e depois de compactação.
+- **Não verificado (E6):** carga de `-e skills.ts` em `--mode json`; o modelo lê o
+  `SKILL.md` sozinho.
+
+> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
+> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
+> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
+> (ver `agents/README.md`).
 
 ## Uso não interativo
 

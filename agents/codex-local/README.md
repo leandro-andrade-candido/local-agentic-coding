@@ -29,8 +29,8 @@ da plataforma **[verificado: tarball]**. Para reaproveitar o binário já instal
 - Interativo: `~/.local/state/local-agentic/agents/codex-local/codex`.
   Eval: `<log-dir>/home/codex`, novo a cada execução.
 - `env.sh` remove `OPENAI_API_KEY`, `CODEX_API_KEY` e `OPENAI_BASE_URL` do ambiente.
-  O diretório isolado não tem `auth.json`: o provedor local usa só a chave fictícia
-  de `LOCAL_LLM_API_KEY` (`env_key`).
+  O diretório isolado não tem `auth.json`: o provedor local usa só a chave do
+  llama-server, em `LOCAL_LLM_API_KEY` (`env_key`; ver `agents/README.md`).
 - Continuam valendo: `AGENTS.md` do projeto (`project_doc_max_bytes` no padrão) e,
   só em projeto confiável, `.codex/` do repositório. No `exec` o projeto não é
   confiável, então `.codex/` do repositório não carrega.
@@ -129,8 +129,34 @@ Todas as chaves constam da Configuration Reference atual **[verificado]**.
 - **Decisão:** no container da E7 o perfil autonomous usa `danger-full-access` com
   aprovação `never`, o que equivale a `--dangerously-bypass-approvals-and-sandbox`.
   A barreira é o container; regras `forbidden` e o hook continuam valendo.
-- Fora do container (E6, no WSL), `unshare -Ur` funciona e não há `bwrap` instalado:
-  `CODEX_LOCAL_SANDBOX=workspace-write` liga o sandbox do Codex no eval.
+- O perfil autonomous só roda dentro do agent-box (`AGENT_BOX=1`); a E7 vem antes
+  da E6, então todos os testes do perfil autonomous passam pelo container. Fora
+  dele, só com `AGENT_ALLOW_HOST_AUTONOMOUS=1` (inseguro); nesse caso
+  `CODEX_LOCAL_SANDBOX=workspace-write` liga o sandbox do Codex no host (no WSL,
+  `unshare -Ur` funciona e o Codex usa o auxiliar embutido, já que não há `bwrap`).
+
+## Skills (AGENT_SKILLS_DIRS)
+
+- **Descoberta:** as pastas de skill são copiadas para `$CODEX_HOME/skills`, local de
+  usuário que a 0.165 ainda lê (marcado como obsoleto no código; a doc atual cita
+  `~/.agents/skills`, que fica na HOME real) **[verificado: ext/skills/src/host_roots.rs]**.
+  Também valem `.agents/skills` do projeto e, no host, `~/.agents/skills`.
+- **Sob demanda:** o Codex põe no prompt só nome, descrição e caminho de cada skill e
+  lê o `SKILL.md` quando a tarefa pede ("progressive disclosure") **[verificado: docs skills]**.
+- **Chamada explícita:** `$nome-da-skill` no prompt, ou `/skills` na TUI.
+- **Bootstrap do Superpowers:** em `developer_instructions` (chave de topo inserida no
+  início do `config.toml`), com o `using-superpowers` e o `references/codex-tools.md`
+  do próprio Superpowers. O Superpowers oficial não usa hook no Codex (confia na
+  descrição da skill); aqui o texto vai sempre, porque o modelo local aciona skills com
+  menos precisão. O `codex-tools.md` fala sobretudo de multiagente, que está desligado.
+- **Não verificado (E6):** `$CODEX_HOME/skills` ainda carregado; `developer_instructions`
+  aplicado no `exec`; custo de tokens do mapa (~1,2 mil).
+
+> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
+> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
+> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
+> (ver `agents/README.md`).
 
 ## Uso não interativo
 

@@ -46,7 +46,7 @@ Todas conferidas na página de variáveis (code.claude.com/docs/en/env-vars) em 
 | Variável | Valor | Para quê |
 |---|---|---|
 | `ANTHROPIC_BASE_URL` | `$LLM_BASE_URL` (sem `/v1`) | endpoint Anthropic do llama-server |
-| `ANTHROPIC_AUTH_TOKEN` | fictícia | vai como `Authorization: Bearer`; o servidor não confere |
+| `ANTHROPIC_AUTH_TOKEN` | chave do llama-server (`LLM_API_KEY`) | vai como `Authorization: Bearer`; o servidor exige a chave em todas as rotas (E5) |
 | `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_MODEL` | `qwen3.6-35b` | modelo principal |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`, `_SONNET_`, `_HAIKU_` | idem | aliases; o haiku também faz as tarefas de fundo |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | idem | subagentes e agentes de workflow |
@@ -108,6 +108,26 @@ casa o comando exato e comandos compostos são separados, então `Bash(sh)` pega
 
 Só usamos chaves e tipos conferidos em `settings-reference`: um valor de tipo
 errado faz o Claude Code ignorar o arquivo inteiro, e com ele as permissões.
+
+## Skills (AGENT_SKILLS_DIRS)
+
+- **Descoberta:** as pastas de skill são copiadas para `$CLAUDE_CONFIG_DIR/skills`
+  (skills pessoais do diretório isolado). `.claude/skills` do projeto continua valendo.
+  Com skills, `Skill` entra em `--tools` (sem ela o modelo não carrega skills).
+- **Sob demanda:** só nome e descrição no prompt; a ferramenta `Skill` carrega o corpo.
+- **Chamada explícita:** `/nome-da-skill`.
+- **Bootstrap do Superpowers:** hook `SessionStart` (`startup|clear|compact`) com
+  `hookSpecificOutput.additionalContext`, igual ao hook do plugin oficial
+  (`hooks/session-start`), com o `using-superpowers` e o `references/claude-code-tools.md`.
+- `--bare` (`CLAUDE_LOCAL_BARE=1`) desliga skills e hooks.
+- **Não verificado (E6):** o hook roda com `--setting-sources user` no `-p`; o modelo
+  local usa a ferramenta `Skill`.
+
+> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
+> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
+> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
+> (ver `agents/README.md`).
 
 ## Uso não interativo
 

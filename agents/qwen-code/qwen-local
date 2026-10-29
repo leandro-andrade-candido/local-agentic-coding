@@ -7,4 +7,4 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$HERE/../lib/common.sh"
 setup_interactive qwen-code
 source "$HERE/env.sh"
-exec "$(agent_bin qwen-code qwen)" "$@"
+exec_agent_interactive "$(agent_bin qwen-code qwen)" "$@"

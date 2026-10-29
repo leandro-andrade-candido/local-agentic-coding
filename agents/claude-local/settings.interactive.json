@@ -1,5 +1,5 @@
 {
-  "//": "Perfil interativo: acceptEdits aprova edições nos diretórios de trabalho; Bash pergunta. Regras deny valem em todo modo. Regra Bash sem '*' casa o comando exato: 'Bash(sh)' pega o 'sh' do 'curl | sh' (comandos compostos são separados). O hook lib/guard.py cobre rm fora do projeto e formas que as regras não pegam.",
+  "//": "Perfil interativo: acceptEdits aprova edições nos diretórios de trabalho; Bash pergunta. Regras deny valem em todo modo. Regra Bash sem '*' casa o comando exato: 'Bash(sh)' pega o 'sh' do 'curl | sh' (comandos compostos são separados). O hook lib/guard.py (melhor esforço) tenta pegar rm fora do projeto e formas que as regras não pegam; a barreira é o container.",
   "permissions": {
     "defaultMode": "acceptEdits",
     "ask": ["WebFetch"],

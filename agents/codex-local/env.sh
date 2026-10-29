@@ -4,16 +4,30 @@
 # Nada aqui lê ou grava ~/.codex (onde fica o login ChatGPT do uso diário):
 # CODEX_HOME leva config, auth, regras, sessões, logs e estado para outro lugar.
 
-export CODEX_HOME="$AGENT_HOME/codex"
+keep CODEX_HOME="$AGENT_HOME/codex"
 mkdir -p "$CODEX_HOME/rules"
 
-# Credenciais da OpenAI não podem chegar a esta sessão (nem ao servidor local).
+# Credenciais da OpenAI não podem chegar a esta sessão (nem ao servidor local);
+# o run.sh e o lançador também limpam o ambiente.
 unset OPENAI_API_KEY CODEX_API_KEY OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_PROJECT_ID
 
 # Compactação automática a 75% da janela.
-export CODEX_AUTO_COMPACT=$(( LLM_CONTEXT * 3 / 4 ))
+keep CODEX_AUTO_COMPACT=$(( LLM_CONTEXT * 3 / 4 ))
 
 render "$CODEX_HOME/config.toml" "$AGENTS_DIR/codex-local/config.base.toml"
+
+# Skills: copiadas para $CODEX_HOME/skills (local "user" que o Codex 0.165 ainda lê;
+# a doc atual cita ~/.agents/skills, que fica na HOME real). Bootstrap do Superpowers
+# em developer_instructions (chave de topo, inserida no início do config.toml).
+setup_skills codex-local
+python3 -I "$AGENTS_DIR/lib/skills.py" copy "$CODEX_HOME/skills"
+if [ -n "$AGENT_SKILLS_BOOTSTRAP_FILE" ]; then
+  python3 -I -c 'import json, sys
+cfg, boot = sys.argv[1], sys.argv[2]
+text = open(cfg, encoding="utf-8").read()
+line = "developer_instructions = " + json.dumps(open(boot, encoding="utf-8").read()) + "\n"
+open(cfg, "w", encoding="utf-8").write(line + text)' "$CODEX_HOME/config.toml" "$AGENT_SKILLS_BOOTSTRAP_FILE"
+fi
 # Perfis nativos do Codex: --profile <nome> sobrepõe $CODEX_HOME/<nome>.config.toml.
 cp "$AGENTS_DIR/codex-local/interactive.config.toml" "$CODEX_HOME/interactive.config.toml"
 cp "$AGENTS_DIR/codex-local/autonomous.config.toml" "$CODEX_HOME/autonomous.config.toml"

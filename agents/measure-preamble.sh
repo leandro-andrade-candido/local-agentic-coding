@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Mede o tamanho do primeiro prompt (preâmbulo: system prompt + ferramentas +
 # instruções) que um agente envia ao llama-server, com uma tarefa trivial num
-# repositório git vazio. Usa o run.sh do agente (perfil autonomous).
+# repositório git vazio. Usa o run.sh do agente no perfil interactive: o
+# autonomous só roda dentro do agent-box. Para medir o perfil autonomous (as
+# listas de ferramentas mudam um pouco), rode este script pelo agent-box, onde
+# AGENT_BOX=1, com AGENT_PROFILE=autonomous.
 #
 # Uso: agents/measure-preamble.sh <qwen-code|pi|opencode|claude-local|codex-local> [<dir-de-saída>]
 #
@@ -31,11 +34,11 @@ git -C "$work" add README.md
 git -C "$work" -c user.name=measure -c user.email=measure@localhost commit -qm init
 printf 'Responda apenas com a palavra OK. Não use nenhuma ferramenta.\n' > "$out/prompt.txt"
 
-AGENT_LOG_REQUESTS=1 "$AGENTS_DIR/$harness/run.sh" \
+AGENT_PROFILE="${AGENT_PROFILE:-interactive}" AGENT_LOG_REQUESTS=1 "$AGENTS_DIR/$harness/run.sh" \
   --workdir "$work" --prompt-file "$out/prompt.txt" --log-dir "$out/log" || true
 
 log="$out/log"
-echo "== $harness ($(jq -r .version "$log/run-meta.json" 2>/dev/null)), saída em $log"
+echo "== $harness ($(jq -r '.version + ", perfil " + .profile' "$log/run-meta.json" 2>/dev/null)), saída em $log"
 if [ -f "$log/metrics-before.prom" ] && [ -f "$log/metrics-after.prom" ]; then
   python3 -I - "$log/metrics-before.prom" "$log/metrics-after.prom" <<'EOF'
 import sys

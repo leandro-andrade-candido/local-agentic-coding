@@ -1,0 +1,17 @@
+{
+  "//": "Só entra quando há a skill using-superpowers em AGENT_SKILLS_DIRS: o mesmo bootstrap do hook SessionStart do plugin oficial do Superpowers (hooks/session-start).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"@@AGENTS_DIR@@/lib/skills.py\" hook-json \"@@AGENT_SKILLS_BOOTSTRAP_FILE@@\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "//": "Só entra quando há a skill using-superpowers em AGENT_SKILLS_DIRS: injeta o bootstrap do Superpowers no início de cada sessão (e depois de /clear ou compactação).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "name": "superpowers-bootstrap",
+            "command": "python3 -I \"@@AGENTS_DIR@@/lib/skills.py\" hook-json \"@@AGENT_SKILLS_BOOTSTRAP_FILE@@\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

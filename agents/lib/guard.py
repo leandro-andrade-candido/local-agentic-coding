@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Guarda de comandos de shell, comum aos quatro agentes.
+"""Guarda de comandos de shell, comum aos cinco agentes. MELHOR ESFORÇO.
 
-Chamada como hook PreToolUse (Claude Code, Qwen Code), pelo plugin do OpenCode
-e pela extensão do Pi. É a segunda camada de proteção: a barreira real é o
-container da etapa E7. Comandos ofuscados (eval, base64, variáveis, scripts
-gerados) podem escapar; as regras nativas de cada agente continuam valendo.
+Chamada como hook PreToolUse (Claude Code, Qwen Code, Codex), pelo plugin do
+OpenCode e pela extensão do Pi. É uma segunda camada, conservadora: bloqueia
+padrões perigosos no texto do comando e aceita falsos positivos (por exemplo,
+`git commit -m "push"` é bloqueado). Não é uma barreira: código gerado e
+executado depois, `eval` de strings montadas, interpretadores (`python -c`) e
+redirecionamentos (`> ~/.bashrc`, `mv`, `truncate`) escapam. A barreira é o
+container da E7 (agent-box).
 
-Entrada (stdin, JSON), formato de hook do Claude Code / Qwen Code:
+Entrada (stdin, JSON), formato de hook do Claude Code / Qwen Code / Codex:
   {"tool_name": "Bash", "tool_input": {"command": "..."}, "cwd": "..."}
-ou o formato simples {"command": "...", "cwd": "..."}.
+ou o formato simples {"command": "...", "cwd": "..."}. `command` pode ser lista.
 Saída: código 0 libera; código 2 bloqueia, com o motivo em stderr (o agente
 repassa o motivo ao modelo, por isso as mensagens são em inglês).
 
@@ -17,15 +20,25 @@ Política (ambiente):
   AGENT_WORKDIR  raiz do projeto; senão CLAUDE_PROJECT_DIR/QWEN_PROJECT_DIR; senão cwd
   AGENT_LOG_DIR  se definido, cada bloqueio é registrado em guard.log (JSONL)
 
-Bloqueado nos dois perfis:
-  - git push (em qualquer forma: git -C x push, git -c k=v push ...)
-  - sudo, su, doas, pkexec, runuser
-  - download executado por shell: curl|sh, wget -O- | bash, sh -c "$(curl ...)", bash <(curl ...)
-  - rm recursivo ou forçado fora do projeto (e da raiz do projeto ou de .git);
-    /tmp é permitido. Alvos que não dá para resolver ($VAR, $(...)) são bloqueados.
-Bloqueado só no perfil autonomous:
-  - instalação de pacotes pela rede (npm/pnpm/yarn/bun install|add|ci, pip install,
-    uv add|pip install, poetry, cargo install, go install|get, gem, apt, brew ...)
+Duas passadas; qualquer uma bloqueia.
+1. Texto inteiro (sem aspas nem barras invertidas, heredocs incluídos), sem olhar
+   a estrutura:
+   - `git` e `push`/`send-pack`/`receive-pack` no mesmo comando
+   - `sudo`, `su`, `doas`, `pkexec`, `runuser` como palavra
+   - downloader (`curl`, `wget`...) junto de: pipe para shell/`source`/`eval`/
+     `xargs`/`env`/`if`, pipe para interpretador lendo o stdin, `<(curl`/`$(curl`,
+     ou arquivo baixado (`-o`) seguido de shell/interpretador
+   - autonomous: instalação de pacotes (npm/pnpm/yarn/bun/pip/uv/poetry/cargo/
+     go/gem/apt/brew..., nomes com versão como pip3.12), `yarn` sozinho, e
+     `npx`/`npm exec`/`pnpm dlx` de programa que não está em node_modules/.bin
+2. Estrutura (comandos separados, palavras-chave do shell como separadores,
+   opções de wrappers, `bash -c`, `env -S`, heredoc e here-string avaliados como
+   script, exceto o corpo de `apply_patch`):
+   - `rm` fora do projeto, na raiz do projeto, em `.git` ou com alvo não
+     resolvível; `rm -r/-f` vindo de `xargs`, depois de `cd`/`pushd` não
+     resolvível ou depois de `ln` no mesmo comando; `/tmp` é liberado, menos a
+     pasta que contém o projeto
+   - `find ... -delete` / `-exec rm` com ponto de partida fora do projeto
 """
 import fnmatch
 import json
@@ -35,14 +48,24 @@ import shlex
 import sys
 import time
 
-SHELL_TOOLS = {"bash", "run_shell_command", "shell"}
+SHELL_TOOLS = {"bash", "run_shell_command", "shell", "exec_command"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "ash"}
-INTERPRETERS = SHELLS | {"python", "python3", "perl", "ruby", "node", "bun", "deno"}
+INTERPRETERS = {"python", "perl", "ruby", "node", "bun", "deno"}
 DOWNLOADERS = {"curl", "wget", "fetch", "aria2c", "http", "https", "xh"}
 PRIV = {"sudo", "su", "doas", "pkexec", "runuser"}
-SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", "{", "}", "!", "\n"}
-WRAPPERS = {"time", "nice", "nohup", "command", "builtin", "noglob", "exec", "stdbuf", "ionice"}
-GIT_OPTS_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"}
+KEYWORDS = {"if", "then", "elif", "else", "fi", "for", "while", "until", "do", "done",
+            "case", "esac", "select", "function", "{", "}", "!", "in", "coproc"}
+SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", ";;", "\n"}
+# Wrappers e as opções que levam argumento.
+WRAPPER_OPTS = {
+    "nice": {"-n", "--adjustment"}, "time": {"-f", "--format", "-o", "--output"},
+    "command": set(), "builtin": set(), "noglob": set(), "exec": {"-a"}, "nohup": set(),
+    "stdbuf": {"-i", "-o", "-e"}, "ionice": {"-c", "-n", "-p", "-P", "-u"},
+    "timeout": {"-s", "--signal", "-k", "--kill-after"}, "chrt": set(), "setsid": set(),
+    "env": {"-u", "--unset", "-C", "--chdir"},
+    "xargs": {"-I", "-i", "-n", "-P", "-L", "-l", "-d", "-a", "-E", "-e", "-s", "--arg-file",
+              "--delimiter", "--max-args", "--max-procs", "--max-lines", "--replace"},
+}
 
 INSTALL_SUBCMDS = {
     "npm": {"install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta", "isntal",
@@ -51,8 +74,7 @@ INSTALL_SUBCMDS = {
     "yarn": {"install", "add", "upgrade", "dlx", "up"},
     "bun": {"install", "i", "add", "update", "x"},
     "pip": {"install", "download"},
-    "pip3": {"install", "download"},
-    "poetry": {"add", "install", "update", "self"},
+    "poetry": {"add", "install", "update", "self", "sync"},
     "pipx": {"install", "run", "inject"},
     "cargo": {"install", "add", "update", "fetch"},
     "go": {"install", "get"},
@@ -61,9 +83,10 @@ INSTALL_SUBCMDS = {
     "conda": {"install", "create", "update"},
     "mamba": {"install", "create", "update"},
     "composer": {"install", "require", "update"},
+    "uv": {"add", "sync", "pip", "tool"},
 }
 ALWAYS_INSTALLERS = {"apt", "apt-get", "aptitude", "dnf", "yum", "pacman", "brew", "snap",
-                     "flatpak", "zypper", "apk", "port", "bunx", "pnpx"}
+                     "flatpak", "zypper", "apk", "port", "bunx", "pnpx", "uvx"}
 
 
 class Deny(Exception):
@@ -77,12 +100,13 @@ def load_input():
     except json.JSONDecodeError:
         data = {"command": raw}
     tool = str(data.get("tool_name") or "").lower()
-    ti = data.get("tool_input") or {}
-    command = ti.get("command") if isinstance(ti, dict) else None
+    ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    command = ti.get("command", ti.get("cmd"))
     if command is None:
         command = data.get("command", "")
-    cwd = (ti.get("directory") or ti.get("workdir") or ti.get("cwd")) if isinstance(ti, dict) else None
-    cwd = cwd or data.get("cwd") or os.getcwd()
+    if isinstance(command, list):
+        command = shlex.join(str(c) for c in command)
+    cwd = ti.get("directory") or ti.get("workdir") or ti.get("cwd") or data.get("cwd") or os.getcwd()
     return tool, str(command or ""), str(cwd)
 
 
@@ -93,19 +117,110 @@ def project_root(cwd):
     return os.path.realpath(cwd)
 
 
-def strip_heredocs(cmd):
-    """Remove o corpo de heredocs (texto de arquivo, não comandos)."""
-    out, lines, i = [], cmd.split("\n"), 0
+def norm_prog(word):
+    """Nome do programa sem caminho e sem versão: /usr/bin/pip3.12 -> pip."""
+    base = word.rsplit("/", 1)[-1]
+    m = re.fullmatch(r"(pip|python|node|ruby|perl)[0-9.]*", base)
+    return m.group(1) if m else base
+
+
+# ---------------------------------------------------------------- texto inteiro
+
+def scan_text(command, cwd, root, profile, heredoc_skip):
+    text = command
+    for body in heredoc_skip:  # corpo de apply_patch: conteúdo de arquivo, nunca executado
+        text = text.replace(body, " ")
+    # apply_patch '<patch>' (forma de argumento do Codex): idem.
+    text = re.sub(r"\bapply_patch\s+(['\"])\*\*\* Begin Patch.*?\*\*\* End Patch\s*\1", "apply_patch ", text, flags=re.S)
+    flat = re.sub(r"\\\n", " ", text)
+    flat = re.sub(r"[\\'\"]", "", flat)
+    words = [norm_prog(w) for w in re.findall(r"[A-Za-z0-9_.+/~-]+", flat)]
+    wset = set(words)
+
+    if "git" in wset and wset & {"push", "send-pack", "receive-pack"}:
+        raise Deny("git push is not allowed: pushing is always done manually by the user "
+                   "(the guard is conservative: any command mentioning both git and push is refused)")
+    hit = wset & PRIV
+    if hit:
+        raise Deny(f"'{sorted(hit)[0]}' (privilege escalation) is not allowed")
+
+    if wset & DOWNLOADERS:
+        dl = r"(?:\S*/)?(?:curl|wget|fetch|aria2c|xh)\b"
+        sh = r"(?:\S*/)?(?:sh|bash|zsh|dash|ksh|fish|ash|source|eval|xargs|env|if|\.)\b"
+        interp = r"(?:\S*/)?(?:python[0-9.]*|perl|ruby|node|bun|deno)"
+        if (re.search(r"\|&?\s*" + sh, flat)
+                or re.search(r"\|&?\s*" + interp + r"\s*(?:-\s*)?(?:$|[|;&)])", flat, re.M)
+                or re.search(r"(?:<\(|\$\(|`)\s*" + dl, flat)
+                or re.search(r"/dev/stdin|/proc/self/fd/0", flat)):
+            raise Deny("executing downloaded code (curl | sh, bash <(curl ...), source /dev/stdin) is not allowed")
+        if re.search(dl + r".*\s(?:-o|-O|--output|--remote-name|-P)\b", flat) and \
+                re.search(r"(?:^|[;&|\s])(?:\S*/)?(?:sh|bash|zsh|dash|python[0-9.]*|perl|ruby|node|source|\.)\s+\S", flat):
+            raise Deny("downloading a file and running it with a shell/interpreter in the same command is not allowed")
+
+    if profile == "autonomous":
+        scan_installs(flat, cwd, root)
+
+
+def scan_installs(flat, cwd, root):
+    for chunk in re.split(r"[;&|\n(){}`]|\$\(|\b(?:then|do|else|elif)\b", flat):
+        w = [norm_prog(x) for x in re.findall(r"[A-Za-z0-9_.+/~=-]+", chunk)]
+        for i, prog in enumerate(w):
+            if prog in ALWAYS_INSTALLERS:
+                raise Deny(f"'{prog}' (package installation) is not allowed in autonomous mode")
+            rest = [a for a in w[i + 1:] if not a.startswith("-")]
+            flags = [a for a in w[i + 1:] if a.startswith("-")]
+            if prog == "python" and w[i + 1:i + 3] == ["-m", "pip"]:
+                prog, rest = "pip", [a for a in w[i + 3:] if not a.startswith("-")]
+            if prog == "uv" and ("--with" in flags or any(a.startswith("--with=") for a in flags)):
+                raise Deny("uv run --with installs packages; not allowed in autonomous mode")
+            if prog in INSTALL_SUBCMDS and rest and rest[0] in INSTALL_SUBCMDS[prog]:
+                raise Deny(f"'{prog} {rest[0]}' (network install) is not allowed in autonomous mode; "
+                           "dependencies are preinstalled")
+            if prog == "yarn" and not rest:
+                raise Deny("bare `yarn` installs dependencies; not allowed in autonomous mode")
+            target = None
+            if prog == "npx" or (prog in ("npm", "pnpm") and rest[:1] in (["exec"], ["x"], ["dlx"])):
+                cand = rest[1:] if prog != "npx" else rest
+                target = cand[0] if cand else None
+                if target is None or not local_bin(target, cwd, root):
+                    raise Deny(f"'{prog}' would download '{target}': only binaries already in "
+                               "node_modules/.bin are allowed in autonomous mode")
+
+
+def local_bin(name, cwd, root):
+    name = name.split("@")[0] if not name.startswith("@") else name
+    for base in {cwd or root, root}:
+        if os.path.exists(os.path.join(base, "node_modules", ".bin", os.path.basename(name))):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------- estrutura
+
+HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def split_heredocs(cmd):
+    """Devolve (comando sem os corpos, [(leitor, corpo)]). Leitor "apply_patch"
+    marca corpo de patch (conteúdo de arquivo, nunca executado)."""
+    out, bodies, lines, i = [], [], cmd.split("\n"), 0
     while i < len(lines):
         line = lines[i]
         out.append(line)
-        tags = re.findall(r"(?<!<)<<(?!<)-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
         i += 1
-        for tag in tags:
+        for m in HEREDOC.finditer(line):
+            tag = m.group(2)
+            prefix = line[:m.start()]
+            is_patch = re.search(r"(?:^|[\s;&|(\"'])apply_patch\s*$", prefix) is not None
+            words = prefix.split()
+            reader = "apply_patch" if is_patch else (norm_prog(words[0]) if words else "")
+            body = []
             while i < len(lines) and lines[i].strip() != tag:
+                body.append(lines[i])
                 i += 1
-            i += 1  # pula a linha do delimitador
-    return "\n".join(out)
+            i += 1
+            bodies.append((reader, "\n".join(body)))
+    return "\n".join(out), bodies
 
 
 def tokenize(cmd):
@@ -116,82 +231,79 @@ def tokenize(cmd):
 
 
 def segments(tokens):
-    """Divide em comandos simples; devolve (tokens, separador_anterior).
-    Redirecionamentos (> arquivo, 2>&1, < entrada) são retirados dos argumentos."""
-    segs, cur, prev, skip = [], [], None, False
+    """Comandos simples: [(tokens, separador_anterior, here_strings)].
+    Palavras-chave do shell (if/then/for/do...) separam; redirecionamentos saem."""
+    segs, cur, prev, skip, herestr = [], [], None, None, []
     for tok in tokens:
         if skip:
-            skip = False
+            if skip == "<<<":
+                herestr.append(tok)
+            skip = None
             continue
-        if tok in SEPARATORS or (tok and set(tok) <= set(";&|()")):
+        if tok in SEPARATORS or (tok and set(tok) <= set(";&|()")) or (not cur and tok in KEYWORDS):
             if cur:
-                segs.append((cur, prev))
-            cur, prev = [], tok
+                segs.append((cur, prev, herestr))
+            cur, prev, herestr = [], tok, []
         elif tok and set(tok) <= set("<>&|") and ("<" in tok or ">" in tok):
             if cur and cur[-1].isdigit():
-                cur.pop()  # descritor: 2>arquivo
-            skip = not tok.endswith("&") or tok in ("&>", "&>>")
-            if tok.endswith(">&") or tok.endswith("<&"):
-                skip = True  # 2>&1: o próximo token é o descritor
+                cur.pop()
+            skip = tok if (not tok.endswith("&") or tok in ("&>", "&>>") or tok.endswith((">&", "<&"))) else None
         else:
             cur.append(tok)
     if cur:
-        segs.append((cur, prev))
+        segs.append((cur, prev, herestr))
     return segs
 
 
 def program(tokens):
-    """Pula atribuições VAR=x e wrappers; devolve (programa, argumentos)."""
-    i = 0
+    """Pula VAR=x e wrappers com suas opções. Devolve (prog, args, via_xargs, env_s)."""
+    i, via_xargs, env_s = 0, False, None
     while i < len(tokens):
         t = tokens[i]
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t):
             i += 1
             continue
-        base = os.path.basename(t)
-        if base in WRAPPERS:
-            i += 1
-            continue
-        if base == "env":
-            i += 1
-            while i < len(tokens) and (tokens[i].startswith("-") or "=" in tokens[i]):
-                i += 1
-            continue
-        if base == "timeout":
+        base = norm_prog(t)
+        if base in WRAPPER_OPTS:
+            via_xargs = via_xargs or base == "xargs"
+            opts = WRAPPER_OPTS[base]
             i += 1
             while i < len(tokens) and tokens[i].startswith("-"):
-                i += 1
-            i += 1  # duração
+                o = tokens[i]
+                if base == "env" and o in ("-S", "--split-string") and i + 1 < len(tokens):
+                    env_s = tokens[i + 1]
+                    i += 2
+                    continue
+                i += 2 if o in opts else 1
+            if base == "timeout" and i < len(tokens):
+                i += 1  # duração
+            if base == "env":
+                while i < len(tokens) and "=" in tokens[i]:
+                    i += 1
             continue
-        if base == "xargs":
-            i += 1
-            while i < len(tokens) and tokens[i].startswith("-"):
-                i += 1
-            continue
-        return base, tokens[i + 1:]
-    return "", []
+        return base, tokens[i + 1:], via_xargs, env_s
+    return "", [], via_xargs, env_s
 
 
 def resolve(path, cwd):
-    """Resolve o alvo de um rm. Devolve (diretório, padrão):
-    sem curinga, (caminho absoluto, None); com curinga, (diretório fixo acima
-    do curinga, primeiro componente com curinga), pois os alvos reais ficam
-    abaixo desse diretório. (None, None) quando não dá para resolver
-    ($VAR, $(...), ~usuario)."""
+    """(diretório, padrão) do alvo; (None, None) se não dá para resolver."""
+    if cwd is None and not (path.startswith("/") or path.startswith("~") or path.startswith("$HOME")):
+        return None, None
     home = os.path.expanduser("~")
     p = re.sub(r"^\$\{?HOME\}?(?=/|$)", home, path)
-    p = re.sub(r"^\$\{?PWD\}?(?=/|$)", cwd, p)
+    if cwd is not None:
+        p = re.sub(r"^\$\{?PWD\}?(?=/|$)", cwd, p)
     if p == "~" or p.startswith("~/"):
         p = home + p[1:]
     if "$" in p or "`" in p or p.startswith("~"):
         return None, None
     glob_at = min([i for i, c in enumerate(p) if c in "*?["] or [len(p)])
     if glob_at == len(p):
-        return os.path.realpath(os.path.join(cwd, p)), None
+        return os.path.realpath(os.path.join(cwd or "/", p)), None
     head = p[:glob_at]
     base = head.rsplit("/", 1)[0] + "/" if "/" in head else ""
     pattern = p[len(base):].split("/", 1)[0]
-    return os.path.realpath(os.path.join(cwd, base or ".")), pattern
+    return os.path.realpath(os.path.join(cwd or "/", base or ".")), pattern
 
 
 def inside(path, root):
@@ -199,90 +311,67 @@ def inside(path, root):
 
 
 def may_hit(directory, pattern, protected):
-    """O alvo (directory[/pattern]) apaga `protected` ou algo acima dele?"""
     if pattern is None:
         return inside(protected, directory)
     if not inside(protected, directory) or protected == directory:
         return False
     first = os.path.relpath(protected, directory).split("/", 1)[0]
     if first.startswith(".") and not pattern.startswith("."):
-        return False  # o shell não expande * para arquivos ocultos
+        return False
     return fnmatch.fnmatchcase(first, pattern)
 
 
-def check_rm(args, cwd, root):
-    flags = [a for a in args if a.startswith("-") and a != "-"]
-    targets = [a for a in args if not (a.startswith("-") and a != "-")]
+def check_target(t, cwd, root, what):
+    parent = os.path.dirname(root)
+    d, pattern = resolve(t, cwd)
+    if d is None:
+        raise Deny(f"{what} with a target the guard cannot resolve ('{t}'); use a literal path inside the project")
+    if may_hit(d, pattern, root):
+        raise Deny(f"{what} on '{t}' would delete the project root or a parent of it")
+    if may_hit(d, pattern, os.path.join(root, ".git")):
+        raise Deny(f"{what} on .git is not allowed")
+    if inside(d, root):
+        return
+    if inside(d, "/tmp") and not may_hit(d, pattern, "/tmp") and not inside(d, parent):
+        return
+    if pattern is not None and d == "/tmp" and not may_hit(d, pattern, parent):
+        return
+    raise Deny(f"{what} outside the project is not allowed: '{t}'")
+
+
+def check_rm(args, cwd, root, via_xargs, link_made):
+    flags = [a for a in args if a.startswith("-") and a not in ("-", "--")]
+    targets = [a for a in args if not (a.startswith("-") and a not in ("-",))]
     recursive = any(f in ("--recursive", "-R") or (not f.startswith("--") and ("r" in f or "R" in f)) for f in flags)
     force = any(f == "--force" or (not f.startswith("--") and "f" in f) for f in flags)
-    if not (recursive or force):
-        return
-    # /tmp é liberado, exceto a pasta que contém o projeto (outros workdirs do eval).
-    parent = os.path.dirname(root)
+    if (recursive or force) and via_xargs:
+        raise Deny("rm -r/-f with targets from xargs is not allowed (the guard cannot see the targets)")
+    if (recursive or force) and link_made:
+        raise Deny("rm -r/-f after creating a link in the same command is not allowed")
+    if (recursive or force) and not targets:
+        raise Deny("rm -r/-f without explicit targets is not allowed")
     for t in targets:
-        d, pattern = resolve(t, cwd)
-        if d is None:
-            raise Deny(f"rm with an unresolvable target '{t}': use a literal path inside the project")
-        if may_hit(d, pattern, root):
-            raise Deny(f"rm -r/-f on '{t}' would delete the project root or a parent of it")
-        if may_hit(d, pattern, os.path.join(root, ".git")):
-            raise Deny("rm -r/-f on .git is not allowed")
-        if inside(d, root):
-            continue
-        if inside(d, "/tmp") and not may_hit(d, pattern, "/tmp") and not inside(d, parent):
-            continue
-        if pattern is not None and d == "/tmp" and not may_hit(d, pattern, parent):
-            continue
-        raise Deny(f"rm -r/-f outside the project is not allowed: '{t}'")
+        check_target(t, cwd, root, "rm -r/-f" if (recursive or force) else "rm")
 
 
-def check_git(args):
-    i = 0
-    while i < len(args):
-        a = args[i]
-        if a in GIT_OPTS_WITH_ARG:
-            i += 2
-            continue
-        if a.startswith("-"):
-            i += 1
-            continue
-        if a == "push":
-            raise Deny("git push is not allowed: pushing is always done manually by the user")
+def check_find(args, cwd, root):
+    deleting = "-delete" in args or any(
+        a in ("-exec", "-execdir", "-ok", "-okdir") and i + 1 < len(args) and norm_prog(args[i + 1]) in ("rm", "rmdir", "unlink", "shred")
+        for i, a in enumerate(args))
+    if not deleting:
         return
-    return
-
-
-def check_install(prog, args):
-    if prog in ALWAYS_INSTALLERS:
-        raise Deny(f"'{prog}' (package installation) is not allowed in autonomous mode")
-    sub = [a for a in args if not a.startswith("-")]
-    if prog in ("python", "python3") and len(args) >= 3 and args[0] == "-m" and args[1] in ("pip", "pip3"):
-        prog, sub = "pip", [a for a in args[2:] if not a.startswith("-")]
-    if prog == "uv" and sub[:2] in (["pip", "install"], ["tool", "install"]) or (prog == "uv" and sub[:1] == ["add"]):
-        raise Deny("uv install/add (network install) is not allowed in autonomous mode; dependencies are preinstalled")
-    if prog == "uvx":
-        raise Deny("uvx downloads packages; not allowed in autonomous mode")
-    if prog in INSTALL_SUBCMDS and sub and sub[0] in INSTALL_SUBCMDS[prog]:
-        raise Deny(f"'{prog} {sub[0]}' (network install) is not allowed in autonomous mode; dependencies are preinstalled")
-
-
-def check_raw(cmd):
-    dl = r"(?:curl|wget|fetch|aria2c)\b"
-    if re.search(r"(?:\b(?:ba|z|da|k|fi)?sh|\bsource|(?:^|[;&|(]\s*)\.)\s+[^;&|]*?(?:<\(|\$\(|`)\s*" + dl, cmd):
-        raise Deny("executing downloaded code (sh -c \"$(curl ...)\", bash <(curl ...)) is not allowed")
-
-
-def reads_stdin(prog, args):
-    """O interpretador vai executar o que chega pelo stdin (sh, bash -s, python -)?"""
-    if "-" in args or (prog in SHELLS and "-s" in args):
-        return True
-    if any(a in ("-c", "-m", "-e", "-E", "-p", "--eval", "--print") for a in args):
-        return False
-    return not [a for a in args if not a.startswith("-")]
+    starts = []
+    for a in args:
+        if a.startswith("-") or a in ("(", "!", ")"):
+            break
+        starts.append(a)
+    for t in starts or ["."]:
+        d, _ = resolve(t, cwd)
+        if d is None or not (inside(d, root) or (inside(d, "/tmp") and not inside(root, d))):
+            raise Deny(f"find with -delete/-exec rm starting at '{t}' (outside the project or unresolvable) is not allowed")
 
 
 def shell_script(prog, args):
-    """Script de `bash -c '...'`, `sh -lc '...'`, `zsh -c ...`; None se não houver."""
     if prog not in SHELLS:
         return None
     for i, a in enumerate(args):
@@ -291,47 +380,47 @@ def shell_script(prog, args):
     return None
 
 
-def evaluate(command, cwd, profile):
-    root = project_root(cwd)
-    cwd = os.path.realpath(cwd)
-    cmd = strip_heredocs(command)
-    check_raw(cmd)
+def structural(command, cwd, root, profile, depth):
     try:
-        tokens = tokenize(cmd)
+        tokens = tokenize(command)
     except ValueError:
-        # Aspas desbalanceadas: só as verificações por expressão regular.
-        for pat, why in ((r"\bgit\b[^;&|]*\bpush\b", "git push is not allowed"),
-                         (r"(?:^|[;&|]\s*)(?:sudo|su|doas|pkexec)\b", "privilege escalation is not allowed")):
-            if re.search(pat, cmd):
-                raise Deny(why)
-        return
-    pipeline_has_download = False
-    for toks, sep in segments(tokens):
-        if sep != "|" and sep != "|&":
-            pipeline_has_download = False
-        prog, args = program(toks)
+        return  # aspas desbalanceadas: fica só a passada de texto
+    link_made = False
+    for toks, _sep, herestr in segments(tokens):
+        prog, args, via_xargs, env_s = program(toks)
+        for s in herestr:
+            evaluate(s, cwd, profile, depth + 1)
+        if env_s:
+            evaluate(env_s, cwd, profile, depth + 1)
         if not prog:
             continue
-        if prog in PRIV:
-            raise Deny(f"'{prog}' (privilege escalation) is not allowed")
-        if prog in INTERPRETERS and sep in ("|", "|&") and pipeline_has_download and reads_stdin(prog, args):
-            raise Deny("piping a download into a shell/interpreter (curl | sh) is not allowed")
-        if prog in DOWNLOADERS:
-            pipeline_has_download = True
         script = shell_script(prog, args)
         if script is not None:
-            evaluate(script, cwd, profile)  # bash -lc "<script>": avalia o script interno
-        if prog == "git":
-            check_git(args)
-        elif prog == "rm":
-            check_rm(args, cwd, root)
-        elif prog == "cd":
-            target = args[0] if args else "~"
-            new = resolve(target, cwd)[0] if target != "-" else None
-            if new:
-                cwd = new
-        if profile == "autonomous":
-            check_install(prog, args)
+            evaluate(script, cwd, profile, depth + 1)
+        if prog in ("ln", "link"):
+            link_made = True
+        elif prog in ("rm", "unlink", "rmdir", "shred"):
+            check_rm(args, cwd, root, via_xargs, link_made)
+        elif prog == "find":
+            check_find(args, cwd, root)
+        elif prog in ("cd", "pushd"):
+            target = next((a for a in args if not a.startswith("-")), "~")
+            cwd = resolve(target, cwd)[0] if target != "-" else None
+        elif prog == "popd":
+            cwd = None
+
+
+def evaluate(command, cwd, profile, depth=0):
+    if depth > 4:
+        raise Deny("command nesting too deep for the guard")
+    root = project_root(cwd if cwd else ".")
+    cwd = os.path.realpath(cwd) if cwd else None
+    stripped, bodies = split_heredocs(command)
+    scan_text(command, cwd, root, profile, [b for prog, b in bodies if prog == "apply_patch" and b])
+    for prog, body in bodies:
+        if prog != "apply_patch":
+            evaluate(body, cwd, profile, depth + 1)
+    structural(stripped, cwd, root, profile, depth)
 
 
 def main():

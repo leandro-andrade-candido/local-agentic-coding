@@ -10,4 +10,4 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$HERE/../lib/common.sh"
 setup_interactive claude-local
 source "$HERE/env.sh"
-exec "$(agent_bin claude-local claude)" --model "$LLM_MODEL" --tools "$CLAUDE_LOCAL_TOOLS" "$@"
+exec_agent_interactive "$(agent_bin claude-local claude)" --model "$LLM_MODEL" --tools "$CLAUDE_LOCAL_TOOLS" "$@"

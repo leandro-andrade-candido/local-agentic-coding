@@ -7,4 +7,4 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$HERE/../lib/common.sh"
 setup_interactive opencode
 source "$HERE/env.sh"
-exec "$(agent_bin opencode opencode)" "$@"
+exec_agent_interactive "$(agent_bin opencode opencode)" "$@"

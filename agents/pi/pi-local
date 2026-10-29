@@ -7,4 +7,4 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$HERE/../lib/common.sh"
 setup_interactive pi
 source "$HERE/env.sh"
-exec "$(agent_bin pi pi)" --provider local --model "$LLM_MODEL" "${PI_EXT_ARGS[@]}" "$@"
+exec_agent_interactive "$(agent_bin pi pi)" --provider local --model "$LLM_MODEL" "${PI_EXT_ARGS[@]}" "$@"
