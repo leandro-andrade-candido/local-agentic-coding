@@ -34,6 +34,7 @@ def main() -> int:
     resources = load(os.path.join(run_dir, "resources.json"), {})
     agent_metrics = load(os.path.join(run_dir, "agent-logs", "agent-metrics.json"))
     llm = metrics.delta(os.path.join(run_dir, "metrics.before.prom"), os.path.join(run_dir, "metrics.after.prom"))
+    llm["warmup"] = load(os.path.join(run_dir, "warmup.json"))  # null = não feito (harness de teste ou EVAL_WARMUP=0)
 
     if checks is None:
         status, success, auto_ok = "error", None, None

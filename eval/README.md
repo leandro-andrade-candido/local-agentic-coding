@@ -97,6 +97,7 @@ Uso manual de uma tarefa: `eval/tasks/T2-*/setup.sh /tmp/wd` cria o workdir; o p
 | `EVAL_CLEANUP` | `deps` | `deps` apaga `.venv`/`node_modules` no fim e mantém as fontes; `all` apaga o workdir; `none` mantém tudo. |
 | `EVAL_FORCE` | `0` | `1` sobrescreve um `result.json` existente. |
 | `EVAL_OFFLINE` | `0` | `1` falha em vez de usar a rede quando o cache está frio. |
+| `EVAL_WARMUP` | `1` | Pedido curto ao modelo antes de medir, só com harnesses reais (E4, M4). `0` desliga. |
 | `EVAL_WRAPPER` | vazio | `sandbox/run-in-box.sh` roda o agente, a captura do diff e as verificações em containers (seção abaixo). |
 
 ### No container (E7)
@@ -248,6 +249,7 @@ Gravado em `eval/runs/<run-id>/<harness>/<task-id>/`, junto com:
 - **Tokens e velocidade:** diferença entre `GET $LLM_BASE_URL/metrics` antes e depois do agente, com `Authorization: Bearer $LLM_API_KEY` (o servidor da E5 exige a chave também no `/metrics`). O `llama-server` precisa rodar com `--metrics`. Os contadores usados são `llamacpp:prompt_tokens_total`, `prompt_seconds_total`, `tokens_predicted_total`, `tokens_predicted_seconds_total` e `n_decode_total`.
   - `tokens_in` conta só o prefill efetivamente processado: tokens reaproveitados do cache de prompt não entram. Assim, `tokens_in` mostra o custo real e `prefill_tps` a velocidade real.
   - O total enviado pelo cliente vem do `agent-metrics.json`, se o harness fornecer.
+  - **Aquecimento (E4, M4).** Com harness real, o `run.sh` manda um pedido curto (`max_tokens: 4`) **antes** do snapshot "antes", e por isso ele fica fora dos deltas. Motivo: os primeiros pedidos depois da carga geram ~10% mais devagar, e o primeiro pedido depois da carga, medido em 29/10, levou ~75 s. O resultado vai para `llm.warmup` (`done`, `http_status`, `seconds`, `reason`); 503 enquanto o modelo carrega é esperado por até 300 s. `EVAL_WARMUP=0` desliga.
   - Sem métricas, os campos ficam `null`, `available: false` e `reason` diz o motivo: servidor fora, 401 sem chave ou com chave inválida, 404 sem `--metrics`. O motivo fica também em `metrics.*.prom.err`, e o `summarize.py` mostra um aviso com a contagem por motivo. Se o servidor reiniciar no meio, `counter_reset: true` e os deltas são descartados.
 - **RAM e VRAM:** `lib/sampler.py` amostra a cada 3 s:
   - RAM usada = `MemTotal - MemAvailable` (sistema todo) e swap;
@@ -305,9 +307,7 @@ Os marcadores de formato do K3 (título "Implementation Plan", Goal, `### Task N
 
 ## Validação feita (29/10/2026, sem LLM)
 
-> **Precisa ser refeita.** Esta validação é anterior ao lote que trouxe I1, I5, I6, I7, as tarefas K1–K3 e a chave da API. O lote foi conferido só estaticamente (`bash -n`, `py_compile`, JSON e um teste de unidade da detecção de skills), porque a máquina estava ocupada pela E4. Com o T5 agora pedindo nota, (b) dele passa a ser "aguarda nota".
-
-`eval/validate.sh`: para cada tarefa, (a) logo após o setup as verificações **falham**, e (b) com a solução de referência elas **passam** (T1 e T6 ficam em "aguarda nota", com pista automática 10/10).
+`eval/validate.sh`: para cada tarefa, (a) logo após o setup as verificações **falham**, e (b) com a solução de referência elas **passam**. T1, T5 e T6 ficam em "aguarda nota", com pista automática no máximo. As tarefas K usam o transcript simulado de `oracle/`. Rodada no host, depois do lote I1/I5/I6/I7 + K1–K3 + chave da API, em 4 min 11 s:
 
 ```
 TAREFA                           (a) após setup        (b) após solução    RESULTADO
@@ -315,19 +315,29 @@ T1-chrono-architecture           falha (ok)             aguarda nota (ok)      O
 T2-pypika-join-leak              falha (ok)             passa (ok)             OK
 T3-chrono-pt-relative            falha (ok)             passa (ok)             OK
 T4-chrono-duration-tests         falha (ok)             passa (ok)             OK
-T5-chrono-flaky-duration         falha (ok)             passa (ok)             OK
+T5-chrono-flaky-duration         falha (ok)             aguarda nota (ok)      OK
 T6-pypika-create-view            falha (ok)             aguarda nota (ok)      OK
 T7-pypika-review-pagination      falha (ok)             passa (ok)             OK
 S1-pypika-arith-parens           falha (ok)             passa (ok)             OK
 S2-chrono-shared-year            falha (ok)             passa (ok)             OK
 S3-pypika-utils-tests            falha (ok)             passa (ok)             OK
+K1-pypika-brainstorming          falha (ok)             passa (ok)             OK
+K2-pypika-debugging              falha (ok)             passa (ok)             OK
+K3-pypika-writing-plans          falha (ok)             passa (ok)             OK
 ```
+
+Com o runner isolado (ambiente limpo, `pytest -c/--noconftest`, `jest --config`), as contagens são as mesmas de antes: pypika 1361 testes, chrono 753 (747 no T4, sem o arquivo removido). Mutantes: T4 12/12, S3 6/6. Skills: K1 (formato Claude, `Read`), K2 (Pi, `read`) e K3 (OpenCode, ferramenta `skill`) detectados; antes da solução, "não carregada".
 
 Ponta a ponta com o harness `fake-oracle`:
 
-- `eval/matrix.sh -r 1 e2e-oracle fake-oracle all`: 8 pass, 2 aguardando nota (T1, T6), 0 erros, ~1,5 min no total. Depois de `grade.py`, T1 e T6 viraram pass.
-- Caminhos negativos: `FAKE_ORACLE_MODE=noop` em S1 e T5 deu fail. `FAKE_ORACLE_MODE=sleep:60 EVAL_TIMEOUT_S=5` em S3 deu exit 124, `timed_out: true` e fail, sem processo remanescente.
-- Sem `llama-server` rodando, `/metrics` indisponível resultou em `llm.available: false`, sem erro.
+- `eval/matrix.sh -r 1 e2e2 fake-oracle all`, no host, sem wrapper, com o llama-server da E5 no ar: 10 pass, 3 aguardando nota (T1, T5, T6), 0 erros, 2 min 21 s.
+  - `llm.available: true` nas 13 execuções, com `api_key_source: file`.
+  - Tabela de skills: 1/1 carregada em K1, K2 e K3.
+- Aquecimento, conferido à parte contra o servidor, com o lock de execução: 200 em ~75 s, o primeiro pedido depois da carga. Com chave errada: 401 e `reason` preenchido.
+- Antes deste lote (`e2e-oracle`, `e2e-negative`):
+  - `FAKE_ORACLE_MODE=noop` deu fail;
+  - `sleep:60` com `EVAL_TIMEOUT_S=5` deu exit 124, `timed_out: true` e fail;
+  - sem servidor, `llm.available: false`.
 
 ## Limitações conhecidas
 

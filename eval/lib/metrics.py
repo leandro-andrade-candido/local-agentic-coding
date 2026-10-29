@@ -4,6 +4,7 @@
 Uso:
     python3 -I metrics.py snapshot <base_url> <saida.prom>   # nunca falha; sem servidor, não grava o .prom
     python3 -I metrics.py delta <antes.prom> <depois.prom>    # imprime JSON com as diferenças
+    python3 -I metrics.py warmup <base_url> <modelo> <saida.json>  # pedido de aquecimento (E4, M4)
 
 Chave (E5: o servidor exige a chave em todas as rotas, inclusive /metrics): enviada como
 "Authorization: Bearer <chave>", lida de LLM_API_KEY ou LOCAL_LLM_API_KEY. Nunca é impressa.
@@ -73,6 +74,48 @@ def snapshot(base: str, out: str) -> int:
     return 0
 
 
+def warmup(base: str, model: str, out: str, wait_s: int = 300) -> int:
+    """Pedido curto antes de medir (E4, M4: os 1-2 primeiros pedidos depois da carga geram
+    ~10% mais devagar; no primeiro pedido depois da carga, medido em 29/10, ~75 s). Roda antes
+    do snapshot "antes", então fica fora dos deltas. Espera o servidor sair do 503 (modelo
+    carregando) por até wait_s. Nunca falha."""
+    import json
+    import time
+    url = base.rstrip("/")
+    url = (url[:-3] if url.endswith("/v1") else url) + "/v1/chat/completions"
+    body = json.dumps({"model": model, "messages": [{"role": "user", "content": "Responda só: ok"}],
+                       "max_tokens": 4, "temperature": 0}).encode()
+    key = api_key()
+    t0, status, reason = time.time(), None, None
+    while True:
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        if key:
+            req.add_header("Authorization", f"Bearer {key}")
+        try:
+            with urllib.request.urlopen(req, timeout=max(5, wait_s)) as resp:
+                resp.read()
+                status, reason = resp.status, None
+            break
+        except urllib.error.HTTPError as e:
+            status, reason = e.code, f"HTTP {e.code}" + (": chave ausente ou inválida" if e.code in (401, 403) else "")
+            if e.code != 503 or time.time() - t0 > wait_s:
+                break
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            cause = getattr(e, "reason", e)
+            if isinstance(e, TimeoutError) or isinstance(cause, TimeoutError):
+                status, reason = None, f"tempo esgotado ({wait_s} s) no pedido de aquecimento"
+            else:
+                status, reason = None, f"servidor indisponível ({cause})"
+            break
+        time.sleep(3)
+    result = {"done": status == 200, "http_status": status, "seconds": round(time.time() - t0, 2), "reason": reason}
+    if reason:
+        print(f"[metrics] AVISO: aquecimento falhou: {reason}", file=sys.stderr)
+    with open(out, "w") as f:
+        json.dump(result, f)
+    return 0
+
+
 def _reason(path: str) -> str | None:
     try:
         with open(path + ".err") as f:
@@ -129,6 +172,8 @@ def delta(before: str, after: str) -> dict:
 def main() -> int:
     if len(sys.argv) == 4 and sys.argv[1] == "snapshot":
         return snapshot(sys.argv[2], sys.argv[3])
+    if len(sys.argv) == 5 and sys.argv[1] == "warmup":
+        return warmup(sys.argv[2], sys.argv[3], sys.argv[4])
     if len(sys.argv) == 4 and sys.argv[1] == "delta":
         print(json.dumps(delta(sys.argv[2], sys.argv[3]), indent=2))
         return 0

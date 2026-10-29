@@ -17,6 +17,8 @@
 #   EVAL_WORK_ROOT        onde ficam os workdirs (~/.cache/local-agentic/eval-work)
 #   EVAL_CLEANUP          deps (padrão: apaga .venv/node_modules do workdir no fim) | all | none
 #   EVAL_FORCE=1          sobrescreve um result.json existente
+#   EVAL_WARMUP=0         desliga o pedido de aquecimento antes de medir (padrão: liga, só
+#                         para harnesses reais; ver E4, M4)
 #   EVAL_WRAPPER          ex.: sandbox/run-in-box.sh: agente, captura do diff e verificações
 #                         rodam cada um num container novo (ver sandbox/README.md)
 #
@@ -110,7 +112,13 @@ fi
 
 agent_rc=""; timed_out=false; agent_wall_s=""
 if $setup_ok; then
-    # 2. Métricas do servidor antes, amostrador de memória durante, métricas depois.
+    # 2. Aquecimento (E4, M4: o 1º pedido depois da carga gera ~10% mais devagar), só para
+    #    harnesses reais; fica antes do snapshot "antes", portanto fora dos deltas.
+    #    Métricas do servidor antes, amostrador de memória durante, métricas depois.
+    case "$harness_sh" in
+        "$EVAL_DIR"/harnesses/*) ;;
+        *) [ "${EVAL_WARMUP:-1}" = 1 ] && $EVAL_PY "$here/lib/metrics.py" warmup "$LLM_BASE_URL" "$LLM_MODEL" "$out/warmup.json" ;;
+    esac
     $EVAL_PY "$here/lib/metrics.py" snapshot "$LLM_BASE_URL" "$out/metrics.before.prom"
     $EVAL_PY "$here/lib/sampler.py" --out "$out/resources.json" --tsv "$out/resources.tsv" \
         --interval "${EVAL_SAMPLE_INTERVAL:-3}" 9>&- &

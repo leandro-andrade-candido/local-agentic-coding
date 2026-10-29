@@ -111,18 +111,25 @@ ensure_deps_env() {
     dir="$(deps_env_dir "$name")"
     if [ -f "$dir/.complete" ]; then echo "$dir"; return; fi
     kind="$(json_get "$(repo_json "$name")" kind)"
-    rm -rf "$dir"; mkdir -p "$dir"
-    case "$kind" in
-        python) install_python_deps "$name" "$dir" ;;
-        node)
-            sha="$(json_get "$(repo_json "$name")" commit)"
-            mirror="$(ensure_mirror "$name")" || exit 2
-            git --git-dir="$mirror" archive --format=tar "$sha" package.json package-lock.json \
-                | tar -x -C "$dir" || die "package.json/package-lock.json ausentes em $name"
-            install_node_deps "$dir" ;;
-        *) die "tipo de repositório desconhecido: $kind" ;;
-    esac
-    touch "$dir/.complete"
+    mkdir -p "$(dirname "$dir")"
+    # Lock: outro setup (outra execução ou o validate.sh) pode estar criando o mesmo ambiente.
+    (
+        flock 8
+        if [ ! -f "$dir/.complete" ]; then
+            rm -rf "$dir"; mkdir -p "$dir"
+            case "$kind" in
+                python) install_python_deps "$name" "$dir" ;;
+                node)
+                    sha="$(json_get "$(repo_json "$name")" commit)"
+                    mirror="$(ensure_mirror "$name")" || exit 2
+                    git --git-dir="$mirror" archive --format=tar "$sha" package.json package-lock.json \
+                        | tar -x -C "$dir" || die "package.json/package-lock.json ausentes em $name"
+                    install_node_deps "$dir" ;;
+                *) die "tipo de repositório desconhecido: $kind" ;;
+            esac
+            touch "$dir/.complete"
+        fi
+    ) 8>"$dir.lock" || exit 2
     echo "$dir"
 }
 
