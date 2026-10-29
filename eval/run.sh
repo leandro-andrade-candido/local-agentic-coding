@@ -8,6 +8,9 @@
 #
 # Variáveis de ambiente:
 #   LLM_BASE_URL (http://127.0.0.1:9931)  LLM_MODEL (qwen3.6-35b)   repassadas ao harness
+#   LLM_API_KEY           chave do llama-server; se vazia, lida de LLM_API_KEY_FILE
+#                         (~/.config/local-agentic/llm-api-key). Exportada para o harness e
+#                         usada no /metrics; nunca impressa (result.json só diz a origem)
 #   EVAL_TIMEOUT_MIN      sobrepõe o timeout da tarefa (task.json; padrão 30)
 #   EVAL_TIMEOUT_S        idem, em segundos (útil para testar o runner)
 #   EVAL_SAMPLE_INTERVAL  intervalo do amostrador de RAM/VRAM em segundos (3)
@@ -39,6 +42,7 @@ timeout_s="${EVAL_TIMEOUT_S:-$(( timeout_min * 60 ))}"   # EVAL_TIMEOUT_S: só p
 
 export LLM_BASE_URL="${LLM_BASE_URL:-http://127.0.0.1:9931}"
 export LLM_MODEL="${LLM_MODEL:-qwen3.6-35b}"
+load_llm_api_key   # exporta LLM_API_KEY (o run-in-box.sh repassa LLM_* ao container)
 if [ -n "${EVAL_WRAPPER:-}" ]; then
     EVAL_WRAPPER="$(realpath -e "$EVAL_WRAPPER")" && [ -x "$EVAL_WRAPPER" ] \
         || die "EVAL_WRAPPER não executável: $EVAL_WRAPPER"
@@ -81,6 +85,11 @@ if $setup_ok; then
     start_ref="${start_ref:-$baseline}"
     cp "$task_dir/task.md" "$work/prompt.md"
 fi
+# Ambiente limpo de dependências (criado pelo setup, fora do workdir): as verificações
+# usam ele, não o .venv/node_modules que o agente pôde alterar.
+deps_env="$(deps_env_dir "$repo")"
+# Pastas de skills que o agente enxergou (para a verificação skill_usage dos K1-K3).
+if [ -n "${EVAL_WRAPPER:-}" ]; then skills_seen=/opt/skills; else skills_seen="${AGENT_SKILLS_DIRS:-}"; fi
 
 # E7: com EVAL_WRAPPER, tudo que executa ou lê o que o agente produziu roda num
 # container novo, e o host não executa nada do workdir depois que o agente o tocou:
@@ -94,9 +103,9 @@ if [ -n "${EVAL_WRAPPER:-}" ]; then
     # Harnesses de teste (eval/harnesses/, sem LLM) leem as soluções de referência.
     case "$harness_sh" in "$EVAL_DIR"/harnesses/*) box_agent+=(--ro "$EVAL_DIR") ;; esac
     box_agent+=(--)
-    box_post=("$EVAL_WRAPPER" --no-llm --rw "$wd" --rw "$out" --)
-    box_check=("$EVAL_WRAPPER" --no-llm --rw "$wd" --rw "$out" \
-               --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --)
+    box_post=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" --rw "$out" --)
+    box_check=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" --rw "$out" \
+               --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --ro "$deps_env" --)
 fi
 
 agent_rc=""; timed_out=false; agent_wall_s=""
@@ -135,6 +144,7 @@ if $setup_ok; then
     log "verificações ocultas"
     t0=$(date +%s.%N)
     "${box_check[@]}" "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
+        --deps-env "$deps_env" --agent-logs "$out/agent-logs" --skills-dirs "$skills_seen" \
         >"$out/check.stdout" 2>"$out/check.stderr" 9>&-
     check_rc=$?
     check_s=$(python3 -c "import sys;print(round($(date +%s.%N)-$t0,1))")
@@ -152,7 +162,7 @@ M_AGENT_EXIT_CODE="${agent_rc:-}" M_TIMED_OUT="$timed_out" M_AGENT_COMMITS="${ag
 M_NUMSTAT="${numstat:-}" M_STARTED_AT="$started_at" M_FINISHED_AT="$finished_at" \
 M_LLM_BASE_URL="$LLM_BASE_URL" M_LLM_MODEL="$LLM_MODEL" M_WORKDIR="$wd" M_BASELINE="$baseline" \
 M_EVAL_COMMIT="$eval_commit" M_EVAL_DIRTY="$eval_dirty" M_HOSTNAME="$(hostname)" M_KERNEL="$(uname -r)" \
-M_SANDBOX="${EVAL_WRAPPER:-}" \
+M_SANDBOX="${EVAL_WRAPPER:-}" M_LLM_API_KEY_SOURCE="${LLM_API_KEY_SOURCE:-none}" \
 $EVAL_PY - "$out/meta.json" <<'PY'
 import json, os, sys
 m = {k[2:].lower(): v for k, v in os.environ.items() if k.startswith("M_")}

@@ -11,7 +11,7 @@ source "$here/lib/common.sh"
 
 tasks=("$@")
 if [ ${#tasks[@]} -eq 0 ]; then
-    for d in "$here"/tasks/*/ "$here"/smoke/*/; do [ -f "$d/task.json" ] && tasks+=("$(basename "$d")"); done
+    for d in "$here"/tasks/*/ "$here"/smoke/*/ "$here"/skills/*/; do [ -f "$d/task.json" ] && tasks+=("$(basename "$d")"); done
 fi
 
 vroot="$EVAL_WORK_ROOT/_validate"
@@ -23,10 +23,16 @@ for t in "${tasks[@]}"; do
     if ! "$td/setup.sh" "$wd" >"$vroot/$name.setup.log" 2>&1; then
         printf '%-32s %s\n' "$name" "ERRO no setup (ver $vroot/$name.setup.log)"; rc=1; continue
     fi
-    "$td/check.sh" "$wd" --out "$vroot/$name.a.json" --log "$vroot/$name.a.log" >/dev/null 2>&1; a=$?
+    # (a) sem transcript do agente; (b) com o transcript simulado de oracle/ (tarefas K).
+    empty_logs="$(mktemp -d)"
+    "$td/check.sh" "$wd" --out "$vroot/$name.a.json" --log "$vroot/$name.a.log" \
+        --agent-logs "$empty_logs" >/dev/null 2>&1; a=$?
+    rmdir "$empty_logs"
     "$td/setup.sh" "$wd" >>"$vroot/$name.setup.log" 2>&1
     apply_solution "$td" "$wd"
-    "$td/check.sh" "$wd" --out "$vroot/$name.b.json" --log "$vroot/$name.b.log" >/dev/null 2>&1; b=$?
+    oracle_logs=(); [ -d "$td/oracle" ] && oracle_logs=(--agent-logs "$td/oracle")
+    "$td/check.sh" "$wd" --out "$vroot/$name.b.json" --log "$vroot/$name.b.log" \
+        "${oracle_logs[@]}" >/dev/null 2>&1; b=$?
     sa=$( [ $a -eq 1 ] && echo "falha (ok)" || echo "exit $a (ERRADO)" )
     case $b in 0) sb="passa (ok)";; 3) sb="aguarda nota (ok)";; *) sb="exit $b (ERRADO)";; esac
     if [ $a -eq 1 ] && { [ $b -eq 0 ] || [ $b -eq 3 ]; }; then res=OK; else res=FALHOU; rc=1; fi

@@ -2,16 +2,27 @@
 """Verificações ocultas da suíte de validação (somente stdlib; rodar com python3 -I).
 
 Uso:
-    python3 -I eval/lib/check.py <task_dir> <workdir> [--baseline SHA] [--out checks.json]
+    python3 -I eval/lib/check.py <task_dir> <workdir> [--baseline SHA] [--out checks.json] [--log check.log]
+        [--deps-env DIR] [--agent-logs DIR] [--skills-dirs D1:D2]
 
 Lê <task_dir>/task.json e executa, em ordem, as verificações declaradas em "checks".
 Tipos suportados:
     hidden_tests    copia testes ocultos para o workdir, roda, remove
     baseline_tests  restaura os testes originais do commit-base e roda a suíte inteira
     unchanged       caminhos que o agente não deveria ter alterado
-    report          arquivo de relatório (existência, tamanho, palavras-chave)
-    mutation        testes do agente contra mutantes plantados (T4)
-    rubric          gabarito de 10 itens; nota dada depois (orquestrador + usuário)
+    report          arquivo de relatório (existência, tamanho, palavras-chave, perguntas, opções)
+    mutation        testes NOVOS do agente contra mutantes plantados (T4, S3)
+    rubric          gabarito; nota dada depois (orquestrador + usuário) -> status pending_grading
+    skill_usage     o transcript do agente mostra a skill carregada (K1-K3)
+    plan_format     arquivo de plano no formato esperado (K3)
+
+Os testes nunca rodam com o que o agente pode ter alterado (I1):
+  - dependências do ambiente limpo (--deps-env, criado do cache antes do agente): Python
+    usa o .venv de lá; Node recebe uma cópia nova do node_modules de lá;
+  - configuração do runner dada na linha de comando: pytest com -c <ini vazio>,
+    --noconftest e autoload de plugins desligado; jest com --config <json do repo.json>
+    e --cacheDirectory novo; ambiente de processo limpo (sem PYTEST_*/NODE_OPTIONS...);
+  - arquivos de teste e de configuração versionados voltam ao commit-base antes de rodar.
 
 Código de saída: 0 passou, 1 falhou, 3 verificações automáticas ok mas aguarda nota
 do gabarito, 2 erro de infraestrutura.
@@ -19,7 +30,9 @@ do gabarito, 2 erro de infraestrutura.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import glob
+import hashlib
 import json
 import os
 import re
@@ -51,6 +64,60 @@ def changed_paths(wd: str, baseline: str, paths: list[str] | None = None) -> lis
     out = git(wd, "diff", "--name-only", baseline, *spec).splitlines()
     out += git(wd, "ls-files", "--others", "--exclude-standard", *spec).splitlines()
     return sorted(set(p for p in out if p))
+
+
+def baseline_files(ctx, paths: list[str]) -> set[str]:
+    return set(git(ctx["wd"], "ls-tree", "-r", "--name-only", ctx["baseline"], "--", *paths).splitlines())
+
+
+# --------------------------------------------------------------------------- ambiente limpo
+def default_deps_env(repo: dict) -> str:
+    """Mesmo caminho de deps_env_dir em lib/common.sh."""
+    cache = os.environ.get("EVAL_CACHE") or os.path.join(EVAL_DIR, ".cache")
+    req = os.path.join(EVAL_DIR, "repos", repo["name"], "requirements.txt")
+    if os.path.exists(req):
+        with open(req, "rb") as f:
+            key = hashlib.sha256(f.read()).hexdigest()[:8]
+    else:
+        key = "lock"
+    return os.path.join(cache, "envs", f"{repo['name']}-{repo['commit'][:12]}-{key}")
+
+
+def prepare_deps(ctx) -> dict:
+    """Confere o ambiente limpo e, no Node, troca o node_modules do workdir por uma cópia dele."""
+    env_dir, repo, wd = ctx["deps_env"], ctx["repo"], ctx["wd"]
+    if not os.path.isfile(os.path.join(env_dir, ".complete")):
+        raise RuntimeError(f"ambiente limpo de dependências ausente: {env_dir} (rode o setup.sh da tarefa)")
+    info = {"deps_env": env_dir}
+    if repo["kind"] == "python":
+        py = os.path.join(env_dir, ".venv", "bin", "python")
+        if not os.path.exists(py):
+            raise RuntimeError(f"python ausente no ambiente limpo: {py}")
+        ctx["python"] = py
+    elif repo["kind"] == "node":
+        src, dst = os.path.join(env_dir, "node_modules"), os.path.join(wd, "node_modules")
+        if os.path.islink(dst) or os.path.isfile(dst):
+            os.unlink(dst)
+        elif os.path.isdir(dst):
+            shutil.rmtree(dst)
+        subprocess.run(["cp", "-a", src, dst], check=True)
+        info["node_modules"] = "substituído por cópia do ambiente limpo"
+    return info
+
+
+def clean_env(ctx) -> dict:
+    """Ambiente de processo mínimo para os testes: nada de PYTEST_*, NODE_OPTIONS, PYTHON*..."""
+    env = {k: os.environ[k] for k in ("TZ", "LANG", "LC_ALL") if k in os.environ}
+    dirs = []
+    for exe in ("node", "git"):
+        w = shutil.which(exe)
+        if w:
+            dirs.append(os.path.dirname(w))
+    env["PATH"] = ":".join(dict.fromkeys(dirs + ["/usr/local/bin", "/usr/bin", "/bin"]))
+    env["HOME"] = ctx["home"]
+    env["CI"] = "true"
+    env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    return env
 
 
 # --------------------------------------------------------------------------- runners
@@ -86,20 +153,26 @@ def _run(cmd: list[str], cwd: str, env: dict, timeout: int, logf) -> tuple[int |
     return code, out, to
 
 
-def run_tests(repo: dict, wd: str, files: list[str], logf, timeout: int = TEST_TIMEOUT_S) -> TestRun:
+def run_tests(ctx, files: list[str], timeout: int = TEST_TIMEOUT_S) -> TestRun:
+    repo, wd, logf = ctx["repo"], ctx["wd"], ctx["logf"]
     tr = TestRun()
     if not files:
         tr.output_tail = "nenhum arquivo de teste"
         return tr
-    tmp = tempfile.mkdtemp(prefix="evalcheck-")
-    env = dict(os.environ)
+    tmp = tempfile.mkdtemp(prefix="evalcheck-", dir=ctx["tmp"])
+    env = clean_env(ctx)
     t0 = time.time()
     try:
         if repo["kind"] == "python":
             junit = os.path.join(tmp, "junit.xml")
-            env.update(PYTHONDONTWRITEBYTECODE="1")
-            cmd = [os.path.join(wd, ".venv/bin/python"), "-m", "pytest", "-q", "-p", "no:cacheprovider",
-                   f"--junitxml={junit}", *files]
+            ini = os.path.join(tmp, "pytest.ini")
+            with open(ini, "w") as f:
+                f.write("[pytest]\n")
+            # -I: sem cwd/PYTHON*/site do usuário no sys.path; -c: ignora pytest.toml, .pytest.ini,
+            # pyproject, setup.cfg e tox.ini do repo; --noconftest: ignora conftest.py (o
+            # upstream fixado não tem nenhum).
+            cmd = [ctx["python"], "-I", "-B", "-m", "pytest", "-q", "-c", ini, "--rootdir", wd,
+                   "--noconftest", "-p", "no:cacheprovider", f"--junitxml={junit}", *files]
             code, out, to = _run(cmd, wd, env, timeout, logf)
             tr.exit_code, tr.timed_out = code, to
             if os.path.exists(junit):
@@ -116,9 +189,11 @@ def run_tests(repo: dict, wd: str, files: list[str], logf, timeout: int = TEST_T
             tr.ok = (code == 0 and tr.total > 0 and tr.failed == 0 and tr.errors == 0)
         elif repo["kind"] == "node":
             jout = os.path.join(tmp, "jest.json")
-            env.update(CI="true")
-            cmd = [os.path.join(wd, "node_modules/.bin/jest"), "--ci", "--silent", "--coverage=false",
-                   "--json", f"--outputFile={jout}", "--runTestsByPath", *files]
+            # --config explícito: o "jest" do package.json e qualquer jest.config.* são ignorados.
+            config = json.dumps({**repo.get("jest_config", {}), "rootDir": wd})
+            cmd = [os.path.join(wd, "node_modules/.bin/jest"), "--config", config, "--ci", "--silent",
+                   "--coverage=false", "--cacheDirectory", ctx["jest_cache"], "--json",
+                   f"--outputFile={jout}", "--runTestsByPath", *files]
             code, out, to = _run(cmd, wd, env, timeout, logf)
             tr.exit_code, tr.timed_out = code, to
             if os.path.exists(jout):
@@ -144,55 +219,56 @@ def run_tests(repo: dict, wd: str, files: list[str], logf, timeout: int = TEST_T
     return tr
 
 
-def test_files_in(repo: dict, paths: list[str]) -> list[str]:
+def test_files_in(repo: dict, paths) -> list[str]:
     rx = re.compile(repo["test_file_regex"])
     return sorted(p for p in paths if rx.search(p) and any(
         p == r or p.startswith(r.rstrip("/") + "/") for r in repo["test_roots"]))
 
 
+def restore_test_roots(ctx) -> list[str]:
+    """Volta ao commit-base todo arquivo versionado sob test_roots que o agente alterou ou
+    apagou (testes, __init__.py, helpers como test/test_util.ts). Arquivos novos ficam."""
+    wd, base = ctx["wd"], ctx["baseline"]
+    roots = ctx["repo"]["test_roots"]
+    in_base = baseline_files(ctx, roots)
+    touched = [p for p in changed_paths(wd, base, roots) if p in in_base]
+    if touched:
+        git(wd, "checkout", base, "--", *touched)
+    return touched
+
+
 # --------------------------------------------------------------------------- checks
 def check_hidden_tests(ctx, spec) -> dict:
     wd, task_dir = ctx["wd"], ctx["task_dir"]
+    restored = restore_test_roots(ctx)
     placed = []
     try:
         for src, dst in spec["files"].items():
             dst_abs = os.path.join(wd, dst)
-            if os.path.exists(dst_abs):
+            if os.path.lexists(dst_abs):
                 # O agente criou um arquivo com o mesmo nome: preserva e restaura depois.
                 shutil.move(dst_abs, dst_abs + ".agent-orig")
             os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
             shutil.copyfile(os.path.join(task_dir, src), dst_abs)
             placed.append(dst_abs)
-        tr = run_tests(ctx["repo"], wd, list(spec["files"].values()), ctx["logf"])
+        tr = run_tests(ctx, list(spec["files"].values()))
     finally:
         for p in placed:
             os.remove(p)
-            if os.path.exists(p + ".agent-orig"):
+            if os.path.lexists(p + ".agent-orig"):
                 shutil.move(p + ".agent-orig", p)
-            cache = os.path.join(os.path.dirname(p), "__pycache__")
-            if os.path.isdir(cache) and not git(wd, "ls-files", os.path.relpath(cache, wd)).strip():
-                shutil.rmtree(cache, ignore_errors=True)
-    return {"pass": tr.ok, "tests": tr.summary(),
+    return {"pass": tr.ok, "tests": tr.summary(), "test_files_restored": restored,
             "detail": f"{tr.total - tr.failed - tr.errors}/{tr.total} testes ocultos passaram"}
 
 
-def baseline_test_files(ctx) -> list[str]:
-    repo = ctx["repo"]
-    files = git(ctx["wd"], "ls-tree", "-r", "--name-only", ctx["baseline"], "--", *repo["test_roots"]).splitlines()
-    return test_files_in(repo, files)
-
-
 def check_baseline_tests(ctx, spec) -> dict:
-    wd, base = ctx["wd"], ctx["baseline"]
-    files = baseline_test_files(ctx)
-    modified = [p for p in changed_paths(wd, base, files) if p in files]
-    if modified:
-        git(wd, "checkout", base, "--", *modified)
-    tr = run_tests(ctx["repo"], wd, files, ctx["logf"])
+    files = test_files_in(ctx["repo"], baseline_files(ctx, ctx["repo"]["test_roots"]))
+    restored = restore_test_roots(ctx)
+    tr = run_tests(ctx, files)
     detail = f"{tr.total - tr.failed - tr.errors}/{tr.total} testes da suíte original passaram"
-    if modified:
-        detail += f"; {len(modified)} arquivo(s) de teste alterado(s) pelo agente foram restaurados"
-    return {"pass": tr.ok, "tests": tr.summary(), "tests_modified_by_agent": modified, "detail": detail}
+    if restored:
+        detail += f"; {len(restored)} arquivo(s) de teste alterado(s) pelo agente foram restaurados"
+    return {"pass": tr.ok, "tests": tr.summary(), "tests_modified_by_agent": restored, "detail": detail}
 
 
 def check_unchanged(ctx, spec) -> dict:
@@ -217,6 +293,10 @@ def keyword_hits(text: str, groups: list[list[str]]) -> list[bool]:
     return [any(k.lower() in low for k in g) for g in groups]
 
 
+OPTION_RX = (r"(?im)^\s*(?:#{1,6}\s*|[-*]\s+|\d+[.)]\s+)?(?:\*\*)?"
+             r"(?:op[çc][ãa]o|option|abordagem|approach|alternativa|alternative)\b")
+
+
 def check_report(ctx, spec) -> dict:
     names = spec["file"] if isinstance(spec["file"], list) else [spec["file"]]
     found = find_report(ctx["wd"], names)
@@ -226,10 +306,17 @@ def check_report(ctx, spec) -> dict:
         text = f.read()
     words = len(text.split())
     hits = keyword_hits(text, spec.get("keyword_groups", []))
-    ok = words >= spec.get("min_words", 0) and all(hits)
+    questions = sum(1 for line in text.splitlines() if "?" in line)
+    options = len(re.findall(spec.get("option_regex", OPTION_RX), text))
+    ok = (words >= spec.get("min_words", 0) and all(hits)
+          and questions >= spec.get("min_questions", 0) and options >= spec.get("min_options", 0))
     ctx["reports"][found] = text
+    detail = f"{found}: {words} palavras; grupos de palavras-chave {sum(hits)}/{len(hits)}"
+    if "min_questions" in spec or "min_options" in spec:
+        detail += (f"; {questions} linhas com pergunta (mín. {spec.get('min_questions', 0)}); "
+                   f"{options} opções (mín. {spec.get('min_options', 0)})")
     return {"pass": ok, "file": found, "words": words, "keyword_groups_hit": hits,
-            "detail": f"{found}: {words} palavras; grupos de palavras-chave {sum(hits)}/{len(hits)}"}
+            "questions": questions, "options": options, "detail": detail}
 
 
 def check_rubric(ctx, spec) -> dict:
@@ -246,23 +333,35 @@ def check_rubric(ctx, spec) -> dict:
         "score": None, "graded_by": None, "notes": None,
         "auto_hint": sum(hits), "auto_hint_items": hits,
     }
-    return {"pass": None, "detail": f"aguarda nota (pista automática {sum(hits)}/{len(spec.get('hints', []))})"}
+    return {"pass": None,
+            "detail": f"aguarda nota (pista automática {sum(hits)}/{len(spec.get('hints', []))})"}
 
 
 def check_mutation(ctx, spec) -> dict:
+    """Só contam arquivos de teste NOVOS (inexistentes no commit-base): editar um teste que já
+    existe, e que talvez já exercite o módulo, não infla a nota (I7). Os arquivos versionados
+    sob test_roots voltam ao commit-base antes de rodar (inclusive helpers)."""
     wd, base, repo = ctx["wd"], ctx["baseline"], ctx["repo"]
     module = spec["module"]
     exclude = set(spec.get("exclude_tests", []))
-    agent_tests = [p for p in test_files_in(repo, changed_paths(wd, base)) if p not in exclude
+    in_base = baseline_files(ctx, repo["test_roots"])
+    changed_tests = test_files_in(repo, changed_paths(wd, base))
+    agent_tests = [p for p in changed_tests if p not in in_base and p not in exclude
                    and os.path.exists(os.path.join(wd, p))]
-    res = {"module": module, "agent_test_files": agent_tests}
+    if spec.get("test_paths"):
+        agent_tests = [p for p in agent_tests if p in spec["test_paths"]]
+    ignored = [p for p in changed_tests if p in in_base]
+    res = {"module": module, "agent_test_files": agent_tests, "ignored_existing_test_files": ignored}
     if not agent_tests:
-        return {**res, "pass": False, "detail": "nenhum arquivo de teste novo ou alterado"}
+        return {**res, "pass": False, "detail": "nenhum arquivo de teste novo"}
     notes = []
+    restored = restore_test_roots(ctx)
+    if restored:
+        notes.append(f"{len(restored)} arquivo(s) versionado(s) sob os testes restaurados antes da mutação")
     if changed_paths(wd, base, [module]):
         git(wd, "checkout", base, "--", module)
         notes.append("módulo alterado pelo agente foi restaurado antes da mutação")
-    clean = run_tests(repo, wd, agent_tests, ctx["logf"])
+    clean = run_tests(ctx, agent_tests)
     res["clean_run"] = clean.summary()
     if not clean.ok or clean.total < spec.get("min_tests", 1):
         return {**res, "pass": False, "notes": notes,
@@ -277,7 +376,7 @@ def check_mutation(ctx, spec) -> dict:
             rows.append({"mutant": name, "killed": None, "error": ap.stderr.strip()[:200]})
             continue
         try:
-            tr = run_tests(repo, wd, agent_tests, ctx["logf"], timeout=spec.get("mutant_timeout_s", 180))
+            tr = run_tests(ctx, agent_tests, timeout=spec.get("mutant_timeout_s", 180))
         finally:
             git(wd, "checkout", base, "--", module)
         k = not tr.ok
@@ -289,20 +388,164 @@ def check_mutation(ctx, spec) -> dict:
     return {**res, "pass": ok, "notes": notes, "mutants": rows, "killed": killed, "total": len(valid),
             "score": round(score, 3),
             "detail": f"{killed}/{len(valid)} mutantes mortos ({score:.0%}; mínimo {spec.get('min_score', 0.6):.0%}); "
-                      f"{clean.total} testes do agente"}
+                      f"{clean.total} testes em {len(agent_tests)} arquivo(s) novo(s)"}
+
+
+# --------------------------------------------------------------------------- skills (K1-K3)
+SKILL_PATH_RX = re.compile(r"([^\s\"'`]*?)([A-Za-z0-9][A-Za-z0-9._-]*)/SKILL\.md")
+ARG_KEYS = ("input", "arguments", "args", "parameters")
+
+
+def _looks_like_schema(args) -> bool:
+    return isinstance(args, dict) and ("properties" in args or args.get("type") == "object")
+
+
+def iter_tool_calls(obj):
+    """Chamadas de ferramenta em qualquer um dos formatos de events.jsonl dos harnesses, sem
+    olhar resultados: Claude/Qwen (tool_use: name+input), Pi (toolCall: name+arguments),
+    OpenCode (part.tool + part.state.input), Codex (command_execution.command)."""
+    if isinstance(obj, dict):
+        name = obj.get("name") or obj.get("tool") or obj.get("toolName")
+        args = None
+        for k in ARG_KEYS:
+            if k in obj:
+                args = obj[k]
+                break
+        if args is None and isinstance(obj.get("state"), dict) and "input" in obj["state"]:
+            args = obj["state"]["input"]
+        if args is None and obj.get("type") == "command_execution" and "command" in obj:
+            name, args = name or "exec_command", obj["command"]
+        if isinstance(name, str) and args is not None and not _looks_like_schema(args):
+            yield name, args
+        for k, v in obj.items():
+            if k in ARG_KEYS or k == "state":
+                continue  # argumentos não contêm chamadas
+            yield from iter_tool_calls(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from iter_tool_calls(v)
+
+
+def _skill_tool_names(args) -> list[str]:
+    vals = []
+    if isinstance(args, str):
+        vals.append(args)
+    elif isinstance(args, dict):
+        for k in ("skill", "name", "command", "skill_name", "skillName"):
+            if isinstance(args.get(k), str):
+                vals.append(args[k])
+    out = []
+    for v in vals:
+        v = v.strip().lstrip("/").split()[0] if v.strip() else ""
+        v = v.split(":")[-1]
+        if v:
+            out.append(v)
+    return out
+
+
+def scan_skill_usage(paths: list[str], skills_dirs: list[str]) -> dict:
+    """Skills carregadas segundo o transcript: (a) leitura de <skill>/SKILL.md pelo argumento de
+    qualquer ferramenta (read, cat, sed...), ou (b) chamada de uma ferramenta cujo nome contém
+    "skill" com o nome da skill no argumento. Resultados de ferramentas não contam (um
+    `find -name SKILL.md` listaria todas)."""
+    skills: dict[str, list] = {}
+    n_events = n_calls = 0
+    for path in paths:
+        with open(path, errors="replace") as f:
+            for lineno, line in enumerate(f, 1):
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                n_events += 1
+                for name, args in iter_tool_calls(event):
+                    n_calls += 1
+                    text = args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
+                    for m in SKILL_PATH_RX.finditer(text):
+                        full = m.group(1) + m.group(2) + "/SKILL.md"
+                        under = any(full.startswith(d.rstrip("/") + "/") for d in skills_dirs) if skills_dirs else None
+                        skills.setdefault(m.group(2), []).append(
+                            {"via": "read_path", "tool": name, "path": full, "under_skills_dirs": under,
+                             "file": os.path.basename(path), "line": lineno})
+                    if re.search(r"(?i)skill", name):
+                        for s in _skill_tool_names(args):
+                            skills.setdefault(s, []).append(
+                                {"via": "skill_tool", "tool": name, "arg": text[:120],
+                                 "file": os.path.basename(path), "line": lineno})
+    return {"skills": skills, "events": n_events, "tool_calls": n_calls}
+
+
+def check_skill_usage(ctx, spec) -> dict:
+    skill = spec["skill"]
+    logs = ctx["agent_logs"]
+    if not logs or not os.path.isdir(logs):
+        return {"pass": False, "loaded": None, "detail": "sem pasta de log do agente"}
+    files = [os.path.join(logs, f) for f in spec.get("transcript_files", ["events.jsonl"])
+             if os.path.isfile(os.path.join(logs, f))]
+    if not files:
+        return {"pass": False, "loaded": None,
+                "detail": f"transcript ausente ({', '.join(spec.get('transcript_files', ['events.jsonl']))})"}
+    usage = scan_skill_usage(files, ctx["skills_dirs"])
+    loaded = skill in usage["skills"]
+    ev = usage["skills"].get(skill, [])
+    return {"pass": loaded, "loaded": loaded, "skill": skill,
+            "skills_loaded": sorted(usage["skills"]), "evidence": ev[:5],
+            "events": usage["events"], "tool_calls_seen": usage["tool_calls"],
+            "detail": (f"skill {skill} carregada ({ev[0]['via']}, {ev[0]['tool']})" if loaded
+                       else f"skill {skill} não carregada; carregadas: {sorted(usage['skills']) or 'nenhuma'}"
+                            f" ({usage['tool_calls']} chamadas em {usage['events']} eventos)")}
+
+
+def check_plan_format(ctx, spec) -> dict:
+    """Procura, entre os .md novos ou alterados, o que melhor casa com os marcadores do formato."""
+    wd = ctx["wd"]
+    cands = [p for p in changed_paths(wd, ctx["baseline"])
+             if p.lower().endswith(".md") and os.path.isfile(os.path.join(wd, p))]
+    best = None
+    for p in cands:
+        with open(os.path.join(wd, p), errors="replace") as f:
+            text = f.read()
+        counts = {m["name"]: len(re.findall(m["regex"], text)) for m in spec["markers"]}
+        met = {m["name"]: counts[m["name"]] >= m.get("min", 1) for m in spec["markers"]}
+        extra = {m["name"]: len(re.findall(m["regex"], text)) for m in spec.get("optional_markers", [])}
+        row = {"file": p, "markers": counts, "met": met, "optional": extra,
+               "path_matches_convention": bool(re.search(spec.get("path_regex", r"$^"), p))}
+        if best is None or sum(met.values()) > sum(best["met"].values()):
+            best = row
+    if best is None:
+        return {"pass": False, "candidates": [], "detail": "nenhum arquivo .md novo ou alterado"}
+    ok = all(best["met"].values())
+    missing = [k for k, v in best["met"].items() if not v]
+    return {"pass": ok, **best, "candidates": cands[:20],
+            "detail": f"{best['file']}: marcadores {sum(best['met'].values())}/{len(best['met'])}"
+                      + (f" (faltam: {', '.join(missing)})" if missing else "")
+                      + f"; caminho da convenção: {'sim' if best['path_matches_convention'] else 'não'}"}
+
+
+def _match(path: str, pat: str) -> bool:
+    if fnmatch.fnmatch(path, pat):
+        return True
+    return pat.startswith("**/") and fnmatch.fnmatch(path, pat[3:])
 
 
 def restore_protected_config(ctx) -> list[str]:
-    """Volta arquivos de configuração do runner de testes ao commit-base (o agente não deve
-    conseguir esconder testes ocultos mudando, por exemplo, testPathIgnorePatterns)."""
+    """Volta ao commit-base (ou apaga, se novos) os arquivos de configuração do runner de testes
+    que casam com repo.json:protected_config (padrões fnmatch; "**/" = qualquer pasta).
+    Arquivos novos escondidos por .gitignore não aparecem aqui: contra eles valem as opções
+    explícitas na linha de comando (pytest -c/--noconftest, jest --config)."""
     wd, base = ctx["wd"], ctx["baseline"]
-    protected = ctx["repo"].get("protected_config", [])
-    changed = [p for p in changed_paths(wd, base, protected) if p in protected]
-    in_base = set(git(wd, "ls-tree", "-r", "--name-only", base, "--", *protected).split()) if protected else set()
+    pats = ctx["repo"].get("protected_config", [])
+    deps_dirs = ("node_modules/", ".venv/")  # trocados/ignorados pelo prepare_deps; não mexer aqui
+    changed = [p for p in changed_paths(wd, base)
+               if not p.startswith(deps_dirs) and any(_match(p, x) for x in pats)]
+    in_base = baseline_files(ctx, changed) if changed else set()
     for p in changed:
         if p in in_base:
             git(wd, "checkout", base, "--", p)
-        elif os.path.exists(os.path.join(wd, p)):
+        elif os.path.lexists(os.path.join(wd, p)):
             os.remove(os.path.join(wd, p))
     return changed
 
@@ -310,7 +553,7 @@ def restore_protected_config(ctx) -> list[str]:
 CHECKS = {
     "hidden_tests": check_hidden_tests, "baseline_tests": check_baseline_tests,
     "unchanged": check_unchanged, "report": check_report, "rubric": check_rubric,
-    "mutation": check_mutation,
+    "mutation": check_mutation, "skill_usage": check_skill_usage, "plan_format": check_plan_format,
 }
 
 
@@ -321,6 +564,10 @@ def main() -> int:
     ap.add_argument("--baseline")
     ap.add_argument("--out")
     ap.add_argument("--log")
+    ap.add_argument("--deps-env", help="ambiente limpo de dependências (padrão: calculado do repo.json)")
+    ap.add_argument("--agent-logs", help="pasta com o transcript do agente (events.jsonl)")
+    ap.add_argument("--skills-dirs", default=None,
+                    help="pastas de skills vistas pelo agente, separadas por ':' (padrão: $AGENT_SKILLS_DIRS)")
     a = ap.parse_args()
 
     task_dir, wd = os.path.abspath(a.task_dir), os.path.abspath(a.workdir)
@@ -330,16 +577,29 @@ def main() -> int:
         repo = json.load(f)
     baseline = a.baseline or git(wd, "rev-list", "--max-parents=0", "HEAD").split()[-1]
     logf = open(a.log, "a") if a.log else None
+    skills_dirs = a.skills_dirs if a.skills_dirs is not None else os.environ.get("AGENT_SKILLS_DIRS", "")
 
+    tmp = tempfile.mkdtemp(prefix="evalcheck-run-")
+    os.makedirs(os.path.join(tmp, "home"))
     ctx = {"wd": wd, "task_dir": task_dir, "repo": repo, "baseline": baseline, "logf": logf,
-           "reports": {}, "rubric": None}
+           "reports": {}, "rubric": None, "tmp": tmp, "home": os.path.join(tmp, "home"),
+           "jest_cache": os.path.join(tmp, "jest-cache"),
+           "deps_env": os.path.abspath(a.deps_env) if a.deps_env else default_deps_env(repo),
+           "agent_logs": os.path.abspath(a.agent_logs) if a.agent_logs else None,
+           "skills_dirs": [d for d in skills_dirs.split(":") if d]}
     t0 = time.time()
-    restored = restore_protected_config(ctx)
-    if restored:
-        log(f"{task['id']}: configuração de testes restaurada do commit-base: {', '.join(restored)}")
-    results, status = [], "pass"
+    results, restored, deps, setup_error = [], [], {}, None
     try:
-        for spec in task["checks"]:
+        try:
+            restored = restore_protected_config(ctx)
+            if restored:
+                log(f"{task['id']}: configuração de testes restaurada do commit-base: {', '.join(restored)}")
+            if any(c["type"] in ("hidden_tests", "baseline_tests", "mutation") for c in task["checks"]):
+                deps = prepare_deps(ctx)
+        except Exception as e:  # noqa: BLE001 - sem ambiente confiável, nada roda
+            setup_error = f"{e!r}"
+            log(f"{task['id']}: ERRO ao preparar as verificações: {setup_error}")
+        for spec in ([] if setup_error else task["checks"]):
             name = spec.get("name", spec["type"])
             log(f"{task['id']}: {name} ...")
             try:
@@ -354,25 +614,28 @@ def main() -> int:
     finally:
         if logf:
             logf.close()
+        shutil.rmtree(tmp, ignore_errors=True)
 
     failed = [r for r in results if r["required"] and r["pass"] is False]
     infra = [r for r in results if r.get("infra_error")]
-    if failed:
+    if setup_error:
+        status, passed = "error", None
+    elif failed:
         status, passed = "fail", False
     elif ctx["rubric"] is not None:
         status, passed = "pending_grading", None
     else:
         status, passed = "pass", True
     out = {"task_id": task["id"], "pass": passed, "status": status, "checks": results,
-           "rubric": ctx["rubric"], "baseline": baseline, "infra_errors": len(infra),
-           "protected_config_restored": restored,
+           "rubric": ctx["rubric"], "baseline": baseline, "infra_errors": len(infra) + bool(setup_error),
+           "setup_error": setup_error, "protected_config_restored": restored, **deps,
            "seconds": round(time.time() - t0, 1)}
     if a.out:
         with open(a.out, "w") as f:
             json.dump(out, f, indent=2, ensure_ascii=False)
     print(json.dumps({"task_id": task["id"], "status": status,
                       "checks": {r["name"]: r["pass"] for r in results}}, ensure_ascii=False))
-    if infra and not failed:
+    if setup_error or (infra and not failed):
         return 2
     return {"pass": 0, "fail": 1, "pending_grading": 3}[status]
 

@@ -92,6 +92,40 @@ install_node_deps() {
     fi
 }
 
+# deps_env_dir <repo> -> pasta do ambiente de dependências limpo desse repositório.
+# A chave depende só de eval/repos (commit fixado e, no Python, o requirements.txt com
+# hashes); o check.py calcula o mesmo caminho dentro do container das verificações.
+deps_env_dir() {
+    local name="$1" sha key req
+    sha="$(json_get "$(repo_json "$name")" commit)"
+    req="$EVAL_DIR/repos/$name/requirements.txt"
+    if [ -f "$req" ]; then key="$(sha256sum "$req" | cut -c1-8)"; else key=lock; fi
+    echo "$EVAL_CACHE/envs/$name-${sha:0:12}-$key"
+}
+
+# ensure_deps_env <repo> -> cria (uma vez) e imprime o ambiente limpo: .venv (Python) ou
+# node_modules (Node), instalados do cache, fora de qualquer workdir. As verificações
+# rodam com ele, nunca com o .venv/node_modules que o agente pôde alterar.
+ensure_deps_env() {
+    local name="$1" dir kind sha mirror
+    dir="$(deps_env_dir "$name")"
+    if [ -f "$dir/.complete" ]; then echo "$dir"; return; fi
+    kind="$(json_get "$(repo_json "$name")" kind)"
+    rm -rf "$dir"; mkdir -p "$dir"
+    case "$kind" in
+        python) install_python_deps "$name" "$dir" ;;
+        node)
+            sha="$(json_get "$(repo_json "$name")" commit)"
+            mirror="$(ensure_mirror "$name")" || exit 2
+            git --git-dir="$mirror" archive --format=tar "$sha" package.json package-lock.json \
+                | tar -x -C "$dir" || die "package.json/package-lock.json ausentes em $name"
+            install_node_deps "$dir" ;;
+        *) die "tipo de repositório desconhecido: $kind" ;;
+    esac
+    touch "$dir/.complete"
+    echo "$dir"
+}
+
 # prepare_workdir <task_dir> <workdir>
 # Cria um workdir novo: árvore do commit fixado + setup.patch (bug, remoção de testes...),
 # commit-base único (sem histórico do upstream, para não revelar o que foi plantado),
@@ -106,6 +140,8 @@ prepare_workdir() {
     repo="$(json_get "$tj" repo)"; kind="$(json_get "$(repo_json "$repo")" kind)"
     sha="$(json_get "$(repo_json "$repo")" commit)"
     mirror="$(ensure_mirror "$repo")" || exit 2
+    # Ambiente limpo para as verificações: criado antes de qualquer agente rodar.
+    ensure_deps_env "$repo" >/dev/null || exit 2
 
     case "$wd" in /|"$HOME"|"$REPO_ROOT"|"$EVAL_DIR"|"") die "workdir inválido: '$wd'";; esac
     rm -rf "$wd"; mkdir -p "$wd"
@@ -138,11 +174,11 @@ EOF
     fi
 }
 
-# resolve_task <id> -> diretório da tarefa (aceita T2, S1, T2-pypika-..., ou caminho)
+# resolve_task <id> -> diretório da tarefa (aceita T2, S1, K1, T2-pypika-..., ou caminho)
 resolve_task() {
     local id="$1" d
     if [ -d "$id" ] && [ -f "$id/task.json" ]; then (cd "$id" && pwd); return; fi
-    for d in "$EVAL_DIR"/tasks/"$id" "$EVAL_DIR"/smoke/"$id" "$EVAL_DIR"/tasks/"$id"-* "$EVAL_DIR"/smoke/"$id"-*; do
+    for d in "$EVAL_DIR"/{tasks,smoke,skills}/"$id" "$EVAL_DIR"/{tasks,smoke,skills}/"$id"-*; do
         if [ -f "$d/task.json" ]; then echo "$d"; return; fi
     done
     die "tarefa não encontrada: $id"
@@ -167,5 +203,27 @@ apply_solution() {
     fi
     if [ -d "$task_dir/solution" ]; then
         cp -r "$task_dir/solution/." "$wd/"
+    fi
+}
+
+# load_llm_api_key: chave do llama-server (E5). Usa LLM_API_KEY do ambiente; senão lê
+# LLM_API_KEY_FILE (padrão ~/.config/local-agentic/llm-api-key, criado por scripts/llm key).
+# Exporta LLM_API_KEY para o harness (o sandbox/run-in-box.sh repassa LLM_* ao container)
+# e para o metrics.py. Nunca imprime a chave. Define LLM_API_KEY_SOURCE: env | file | none.
+load_llm_api_key() {
+    local f="${LLM_API_KEY_FILE:-$HOME/.config/local-agentic/llm-api-key}" line
+    if [ -n "${LLM_API_KEY:-}" ]; then
+        LLM_API_KEY_SOURCE=env
+    elif [ -r "$f" ]; then
+        # Primeira linha que não é comentário nem vazia (o servidor aceita uma chave por linha).
+        line="$(grep -v -E '^[[:space:]]*(#|$)' "$f" | head -n 1)"
+        LLM_API_KEY="${line//[[:space:]]/}"
+        if [ -n "$LLM_API_KEY" ]; then LLM_API_KEY_SOURCE=file; else LLM_API_KEY_SOURCE=none; fi
+    else
+        LLM_API_KEY="" LLM_API_KEY_SOURCE=none
+    fi
+    export LLM_API_KEY LLM_API_KEY_SOURCE
+    if [ "$LLM_API_KEY_SOURCE" = none ]; then
+        log "AVISO: sem chave do llama-server (LLM_API_KEY ou $f): /metrics e o agente vão receber 401"
     fi
 }

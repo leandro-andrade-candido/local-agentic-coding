@@ -5,11 +5,27 @@
   "category": "tests",
   "plan_task": "T4 - escrever testes para um módulo sem testes",
   "timeout_min": 30,
-  "notes": "O teste original do upstream (test/calculation_duration.test.ts) é removido no setup e serve de solução de referência. 12 mutantes; meta >= 60% mortos.",
+  "notes": "O teste original do upstream (test/calculation_duration.test.ts) é removido no setup e serve de solução de referência. 12 mutantes; meta >= 60% mortos. Só contam arquivos de teste NOVOS (inexistentes no commit-base): editar test/en/*_time_units_* (que já passam por addDuration) não infla a nota; os arquivos versionados sob test/ voltam ao commit-base antes da mutação.",
   "checks": [
-    {"type": "unchanged", "name": "modulo_inalterado", "paths": ["src/calculation/duration.ts"]},
-    {"type": "mutation", "name": "mutantes", "module": "src/calculation/duration.ts", "mutants": "mutants/*.patch",
-     "min_score": 0.6, "min_tests": 3, "mutant_timeout_s": 180},
-    {"type": "baseline_tests", "name": "suite_original"}
+    {
+      "type": "unchanged",
+      "name": "modulo_inalterado",
+      "paths": [
+        "src/calculation/duration.ts"
+      ]
+    },
+    {
+      "type": "mutation",
+      "name": "mutantes",
+      "module": "src/calculation/duration.ts",
+      "mutants": "mutants/*.patch",
+      "min_score": 0.6,
+      "min_tests": 3,
+      "mutant_timeout_s": 180
+    },
+    {
+      "type": "baseline_tests",
+      "name": "suite_original"
+    }
   ]
 }

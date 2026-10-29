@@ -12,11 +12,17 @@
   ],
   "test_file_regex": "(^|/)test_[^/]*\\.py$",
   "protected_config": [
+    "**/conftest.py",
+    "pytest.toml",
+    ".pytest.toml",
+    "pytest.ini",
+    ".pytest.ini",
     "pyproject.toml",
     "setup.cfg",
-    "pytest.ini",
     "tox.ini",
-    "conftest.py",
-    "pypika/tests/conftest.py"
-  ]
+    "**/sitecustomize.py",
+    "**/usercustomize.py",
+    "**/*.pth"
+  ],
+  "notes": "Os testes rodam com o .venv do ambiente limpo (eval/.cache/envs), python -I, pytest -c <ini vazio> --noconftest e PYTEST_DISABLE_PLUGIN_AUTOLOAD=1. O upstream fixado não tem conftest.py nem configuração de pytest, então isso não muda o comportamento da suíte."
 }

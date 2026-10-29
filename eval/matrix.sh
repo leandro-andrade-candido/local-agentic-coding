@@ -3,7 +3,8 @@
 #
 # Uso: eval/matrix.sh [-r REPETICOES] <run-id> <harnesses> <tarefas>
 #   harnesses  lista separada por vírgula (ex.: qwen-code,pi)
-#   tarefas    lista separada por vírgula (ex.: T1,T2,S1) ou um grupo: full (T1-T7), smoke (S1-S3), all
+#   tarefas    lista separada por vírgula (ex.: T1,T2,S1) ou um grupo: full (T1-T7), smoke (S1-S3),
+#              skills (K1-K3), all (os três grupos)
 #   -r N       repetições (padrão 3). Cada repetição grava em eval/runs/<run-id>/r<k>/...
 #
 # A ordem é: repetição -> tarefa -> harness, para que os harnesses se alternem e
@@ -15,16 +16,17 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 reps=3
 while getopts "r:" opt; do
-    case "$opt" in r) reps="$OPTARG" ;; *) sed -n '2,13p' "$0" >&2; exit 2 ;; esac
+    case "$opt" in r) reps="$OPTARG" ;; *) sed -n '2,14p' "$0" >&2; exit 2 ;; esac
 done
 shift $((OPTIND - 1))
-[ $# -eq 3 ] || { sed -n '2,13p' "$0" >&2; exit 2; }
+[ $# -eq 3 ] || { sed -n '2,14p' "$0" >&2; exit 2; }
 run_id="$1"; IFS=, read -r -a harnesses <<<"$2"; tasks_arg="$3"
 
 case "$tasks_arg" in
     full) tasks=(T1 T2 T3 T4 T5 T6 T7) ;;
     smoke) tasks=(S1 S2 S3) ;;
-    all) tasks=(S1 S2 S3 T1 T2 T3 T4 T5 T6 T7) ;;
+    skills) tasks=(K1 K2 K3) ;;
+    all) tasks=(S1 S2 S3 K1 K2 K3 T1 T2 T3 T4 T5 T6 T7) ;;
     *) IFS=, read -r -a tasks <<<"$tasks_arg" ;;
 esac
 

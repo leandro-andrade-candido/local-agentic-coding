@@ -3,7 +3,7 @@
 # Segue o mesmo contrato dos harnesses reais em agents/<harness>/run.sh:
 #   run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
 #
-# Identifica a tarefa comparando o prompt com os task.md de eval/tasks e eval/smoke
+# Identifica a tarefa comparando o prompt com os task.md de eval/tasks, eval/smoke e eval/skills
 # (não recebe nenhuma variável com o caminho da tarefa, como um agente real) e aplica a
 # solução de referência (solution.patch e/ou solution/).
 #
@@ -28,7 +28,7 @@ mkdir -p "$logdir"
 transcript="$logdir/transcript.txt"
 
 task_dir=""
-for d in "$EVAL_DIR"/tasks/*/ "$EVAL_DIR"/smoke/*/; do
+for d in "$EVAL_DIR"/tasks/*/ "$EVAL_DIR"/smoke/*/ "$EVAL_DIR"/skills/*/; do
     if cmp -s "$d/task.md" "$prompt"; then task_dir="${d%/}"; break; fi
 done
 {
@@ -47,6 +47,11 @@ case "$mode" in
     *) echo "FAKE_ORACLE_MODE inválido: $mode" >&2; exit 2 ;;
 esac
 git -C "$workdir" status --short >>"$transcript" 2>&1 || true
+
+# Tarefas K: transcript simulado (events.jsonl no formato de algum harness) em oracle/.
+if [ "$mode" != noop ] && [ -d "$task_dir/oracle" ]; then
+    cp -r "$task_dir/oracle/." "$logdir/"
+fi
 
 # Exemplo do arquivo opcional de métricas do harness (ver eval/README.md).
 cat >"$logdir/agent-metrics.json" <<EOF

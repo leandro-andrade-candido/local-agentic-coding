@@ -2,8 +2,13 @@
 """Métricas Prometheus do llama-server (GET <base>/metrics; exige --metrics no servidor).
 
 Uso:
-    python3 -I metrics.py snapshot <base_url> <saida.prom>   # nunca falha; sem servidor, não grava nada
+    python3 -I metrics.py snapshot <base_url> <saida.prom>   # nunca falha; sem servidor, não grava o .prom
     python3 -I metrics.py delta <antes.prom> <depois.prom>    # imprime JSON com as diferenças
+
+Chave (E5: o servidor exige a chave em todas as rotas, inclusive /metrics): enviada como
+"Authorization: Bearer <chave>", lida de LLM_API_KEY ou LOCAL_LLM_API_KEY. Nunca é impressa.
+Quando o snapshot falha, o motivo vai para <saida.prom>.err e aparece no result.json
+(llm.available=false, llm.reason), em vez de sumir sem aviso.
 
 Contadores usados (nomes do llama-server):
     llamacpp:prompt_tokens_total            tokens de prompt processados (prefill; não conta cache)
@@ -29,20 +34,51 @@ def metrics_url(base: str) -> str:
     return base + "/metrics"
 
 
+def api_key() -> str:
+    return (os.environ.get("LLM_API_KEY") or os.environ.get("LOCAL_LLM_API_KEY") or "").strip()
+
+
 def snapshot(base: str, out: str) -> int:
+    err = out + ".err"
+    for p in (out, err):
+        if os.path.exists(p):
+            os.remove(p)
+    key = api_key()
+    req = urllib.request.Request(metrics_url(base))
+    if key:
+        req.add_header("Authorization", f"Bearer {key}")
+    reason = None
     try:
-        with urllib.request.urlopen(metrics_url(base), timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode("utf-8", errors="replace")
-        if resp.status != 200 or "llamacpp:" not in body:
-            raise ValueError(f"resposta inesperada (HTTP {resp.status})")
+        if "llamacpp:" not in body:
+            reason = f"resposta sem métricas do llama-server (HTTP {resp.status}; servidor sem --metrics?)"
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            reason = (f"HTTP {e.code}: " + ("chave inválida" if key else
+                      "sem chave (defina LLM_API_KEY ou crie ~/.config/local-agentic/llm-api-key)"))
+        elif e.code == 404:
+            reason = "HTTP 404: /metrics desligado (servidor sem --metrics)"
+        else:
+            reason = f"HTTP {e.code}"
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print(f"[metrics] indisponível em {metrics_url(base)}: {e}", file=sys.stderr)
-        if os.path.exists(out):
-            os.remove(out)
+        reason = f"servidor indisponível ({getattr(e, 'reason', e)})"
+    if reason:
+        print(f"[metrics] AVISO: sem métricas de {metrics_url(base)}: {reason}", file=sys.stderr)
+        with open(err, "w") as f:
+            f.write(reason + "\n")
         return 0
     with open(out, "w") as f:
         f.write(body)
     return 0
+
+
+def _reason(path: str) -> str | None:
+    try:
+        with open(path + ".err") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
 
 
 def parse(path: str) -> dict[str, float]:
@@ -62,7 +98,10 @@ def parse(path: str) -> dict[str, float]:
 
 def delta(before: str, after: str) -> dict:
     if not (os.path.exists(before) and os.path.exists(after)):
-        return {"available": False}
+        reasons = [r for r in (_reason(before), _reason(after)) if r]
+        missing = [os.path.basename(p) for p in (before, after) if not os.path.exists(p)]
+        return {"available": False,
+                "reason": "; ".join(dict.fromkeys(reasons)) or f"snapshot ausente: {', '.join(missing)}"}
     b, a = parse(before), parse(after)
     counters = {k: a[k] - b.get(k, 0.0) for k in a if k.endswith("_total")}
     reset = any(v < 0 for v in counters.values())

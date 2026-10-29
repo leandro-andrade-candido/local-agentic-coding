@@ -1,0 +1,5 @@
+{"type": "step_start", "note": "transcript simulado (opencode run --format json) para o fake-oracle e o validate.sh"}
+{"type": "tool_use", "part": {"type": "tool", "tool": "skill", "state": {"status": "completed", "input": {"name": "writing-plans"}, "output": "---\nname: writing-plans\n---"}}}
+{"type": "tool_use", "part": {"type": "tool", "tool": "read", "state": {"status": "completed", "input": {"filePath": "pypika/queries.py"}, "output": "..."}}}
+{"type": "tool_use", "part": {"type": "tool", "tool": "write", "state": {"status": "completed", "input": {"filePath": "docs/superpowers/plans/2026-10-29-truncate-table.md", "content": "..."}}}}
+{"type": "step_finish", "part": {"tokens": {"input": 2500, "output": 700, "reasoning": 0, "cache": {"read": 0, "write": 0}}}}

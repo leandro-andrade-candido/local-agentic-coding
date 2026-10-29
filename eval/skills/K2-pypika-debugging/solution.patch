@@ -1,0 +1,13 @@
+diff --git b/pypika/terms.py a/pypika/terms.py
+index d31277e..1c27b53 100644
+--- b/pypika/terms.py
++++ a/pypika/terms.py
+@@ -291,7 +291,7 @@ class Term(Node):
+     def __getitem__(self, item: slice) -> BetweenCriterion:
+         if not isinstance(item, slice):
+             raise TypeError("Field' object is not subscriptable")
+-        return self.between(item.stop, item.start)
++        return self.between(item.start, item.stop)
+ 
+     def __str__(self) -> str:
+         return self.get_sql(quote_char='"', secondary_quote_char="'")

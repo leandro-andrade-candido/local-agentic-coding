@@ -10,7 +10,9 @@ Tabelas:
   1. por harness x tarefa: execuções, sucessos, taxa de sucesso, mediana de tempo do agente,
      tokens (mediana), velocidade de prefill/geração (mediana), pico de RAM/VRAM, timeouts;
   2. por harness: critério da Meta 1 (tarefas T1-T7 resolvidas em pelo menos 2/3 das execuções);
-  3. execuções que aguardam nota do gabarito (T1, T6).
+  3. skills (K1-K3): em quantas execuções a skill foi carregada;
+  4. execuções sem métricas do servidor, com o motivo (ex.: 401 sem chave);
+  5. execuções que aguardam nota do gabarito (T1, T5, T6).
 Execuções "pending_grading" não entram na taxa até receberem nota (eval/grade.py).
 """
 from __future__ import annotations
@@ -107,7 +109,26 @@ def aggregate(results: list[dict]) -> dict:
             detail.append(f"{t}: {row['pass']}/{row['runs']}{pend}")
         meta[h] = {"tasks_solved_2of3": solved, "detail": detail}
     pending = [r for r in results if r.get("status") == "pending_grading"]
-    return {"rows": rows, "meta1": meta, "pending": pending}
+    skills = {}
+    for r in results:
+        for c in r.get("checks") or []:
+            if c.get("type") != "skill_usage":
+                continue
+            key = (r.get("harness"), r.get("task_id"), c.get("skill"))
+            row = skills.setdefault(key, {"harness": key[0], "task": key[1], "skill": key[2], "runs": 0,
+                                          "loaded": 0, "no_transcript": 0, "task_pass": 0, "required": c.get("required")})
+            row["runs"] += 1
+            row["loaded"] += int(c.get("loaded") is True)
+            row["no_transcript"] += int(c.get("loaded") is None)
+            row["task_pass"] += int(r.get("status") == "pass")
+    no_metrics = {}
+    for r in results:
+        llm = r.get("llm") or {}
+        if llm.get("available") is False:
+            reason = llm.get("reason") or "sem motivo registrado"
+            no_metrics[reason] = no_metrics.get(reason, 0) + 1
+    return {"rows": rows, "meta1": meta, "pending": pending,
+            "skills": sorted(skills.values(), key=lambda x: (x["harness"], x["task"])), "no_metrics": no_metrics}
 
 
 def render(agg: dict, n_results: int) -> str:
@@ -128,12 +149,26 @@ def render(agg: dict, n_results: int) -> str:
             "| Harness | Tarefas resolvidas | Detalhe (sucessos/execuções) |", "|---|---:|---|"]
     for h, m in agg["meta1"].items():
         out.append(f"| {h} | {m['tasks_solved_2of3']}/7 | {'; '.join(m['detail'])} |")
+    if agg["skills"]:
+        out += ["", "## Skills (K1–K3)", "",
+                "K1 e K3 pedem a skill pelo nome (carregar é obrigatório); no K2 ela não é citada e "
+                "\"carregada\" é só medição de acionamento automático.", "",
+                "| Harness | Tarefa | Skill | Exec. | Skill carregada | Sem transcript | Tarefa ok |",
+                "|---|---|---|---:|---:|---:|---:|"]
+        for k in agg["skills"]:
+            out.append(f"| {k['harness']} | {k['task']} | {k['skill']}{'' if k['required'] else ' (medição)'} | "
+                       f"{k['runs']} | {k['loaded']}/{k['runs']} | {k['no_transcript']} | {k['task_pass']}/{k['runs']} |")
+    if agg["no_metrics"]:
+        out += ["", "## AVISO: execuções sem métricas do servidor", ""]
+        for reason, n in sorted(agg["no_metrics"].items(), key=lambda kv: -kv[1]):
+            out.append(f"- {n} execução(ões): {reason}")
     if agg["pending"]:
         out += ["", "## Aguardando nota do gabarito", "",
                 "Registre com `python3 -I eval/grade.py <result.json> --score N --by NOME`.", ""]
         for r in agg["pending"]:
-            hint = (r.get("rubric") or {}).get("auto_hint")
-            out.append(f"- `{r.get('_path')}` ({r.get('harness')} {r.get('task_id')}, pista automática {hint}/10)")
+            rub = r.get("rubric") or {}
+            out.append(f"- `{r.get('_path')}` ({r.get('harness')} {r.get('task_id')}, "
+                       f"pista automática {rub.get('auto_hint')}/{rub.get('max', 10)})")
     out += ["", "Notas: tokens e velocidades vêm de /metrics do llama-server (\"-\" = indisponível); "
             "a taxa ignora execuções aguardando nota; tempo = parede do agente, sem setup e verificação."]
     return "\n".join(out) + "\n"
@@ -157,6 +192,7 @@ def main() -> int:
     agg = aggregate(results)
     if "--json" in sys.argv:
         agg = {**agg, "pending": [r["_path"] for r in agg["pending"]]}
+        agg["no_metrics"] = [{"reason": k, "runs": v} for k, v in agg["no_metrics"].items()]
         print(json.dumps(agg, indent=2, ensure_ascii=False))
     else:
         sys.stdout.write(render(agg, len(results)))

@@ -74,7 +74,8 @@ def main() -> int:
             "diff": meta.get("diff"),
             "metrics": agent_metrics,  # opcional: <log-dir>/agent-metrics.json do harness
         },
-        "llm": {"base_url": meta.get("llm_base_url"), "model": meta.get("llm_model"), **llm},
+        "llm": {"base_url": meta.get("llm_base_url"), "model": meta.get("llm_model"),
+                "api_key_source": meta.get("llm_api_key_source"), **llm},  # env | file | none; nunca a chave
         "resources": resources,
         "checks": check_list,
         "rubric": rubric,

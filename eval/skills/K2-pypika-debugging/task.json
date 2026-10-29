@@ -1,0 +1,17 @@
+{
+  "id": "K2",
+  "title": "Acionamento automático: systematic-debugging num bug sem citar a skill",
+  "repo": "pypika",
+  "category": "skills",
+  "plan_task": "E6 skills - acionamento automático (medição)",
+  "timeout_min": 15,
+  "notes": "Bug plantado: Term.__getitem__ inverte os limites do slice (Field[a:b] vira BETWEEN b AND a); .between() continua certo. O prompt não cita skills. 'skill_systematic_debugging' é MEDIÇÃO (required: false): registra se a skill foi carregada, não aprova nem reprova o harness. O sucesso da tarefa é a correção (testes ocultos + suíte).",
+  "checks": [
+    {"type": "skill_usage", "name": "skill_systematic_debugging", "skill": "systematic-debugging",
+     "required": false, "transcript_files": ["events.jsonl"]},
+    {"type": "unchanged", "name": "testes_intactos", "paths": ["pypika/tests"], "required": false},
+    {"type": "hidden_tests", "name": "testes_ocultos",
+     "files": {"hidden/test_hidden_k2.py": "pypika/tests/test_hidden_k2.py"}},
+    {"type": "baseline_tests", "name": "suite_original"}
+  ]
+}
