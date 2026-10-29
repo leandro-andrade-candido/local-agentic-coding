@@ -1,0 +1,64 @@
+# Perfil do llama-server para Qwen3.6-35B-A3B-UD-Q4_K_XL nesta máquina (E4, 29/10/2026).
+# Medições e justificativas: bench/RESULTADOS-E4.md.
+#
+# Formato: uma flag por linha (flag e valor separados por espaço, sem aspas e sem
+# espaços dentro do valor), cada uma com um comentário logo acima. Linhas que começam
+# com # e linhas vazias são ignoradas.
+# Ficam de fora, para o wrapper da E5 acrescentar: -m (MODELS_DIR), --host e --port
+# (versions.env) e --api-key (segredo fora do git).
+# Variável de ambiente obrigatória: runtime/llama-server.env (GGML_OP_OFFLOAD_MIN_BATCH=1024).
+
+# Nome do modelo exposto na API (usado pelos agentes no campo "model").
+-a qwen3.6-35b
+# Um único slot: há um agente por vez; slots extras dividiriam contexto e cache.
+-np 1
+# Contexto de 131072 tokens; o KV ocupa 1360 MiB em q8_0 (só 10 das 40 camadas têm atenção completa).
+-c 131072
+# Flash attention: exigida para o cache V quantizado.
+-fa on
+# Cache K em q8_0 (q4_0 degrada as chamadas de ferramenta).
+-ctk q8_0
+# Cache V em q8_0, pelo mesmo motivo.
+-ctv q8_0
+# Todas as camadas na GPU (atenção, DeltaNet, expert compartilhado, saída).
+-ngl 99
+# Experts roteados das camadas 0-37 na RAM e das 2 últimas na GPU (~1-2% por camada). Premissa: GPU dedicada;
+# sobram ~470 MiB livres (visão do CUDA) e o uso não cresce com o contexto (medido até 123k tokens).
+-ncmoe 38
+# --fit ligado só como conferência: com -ngl/-ncmoe explícitos ele não altera nada; se sobrar menos que o
+# alvo, apenas registra um aviso "failed to fit params" no log e carrega mesmo assim (vigiar no script de saúde).
+--fit on
+# Folga mínima de VRAM para o --fit (o padrão de 1024 MiB é para GPU compartilhada; aqui ela é dedicada).
+--fit-target 384
+# Lote lógico de 4096 tokens.
+-b 4096
+# Micro-lote de 4096: cada micro-lote paga ~0,9 s fixos (experts da RAM para a GPU), então 4096 rende +45% de prefill.
+-ub 4096
+# 8 threads na geração: 6-8 dão o melhor resultado; 12 fica ~3-5% abaixo e 16 cai ~25% (disputa os 16 vCPUs do WSL).
+-t 8
+# 12 threads para os lotes calculados na CPU (turnos curtos abaixo de 1024 tokens).
+-tb 12
+# Carga por DirectIO em memória fixada (pinned): +10-27% de prefill contra mmap e carga em ~30 s (none levou ~2,5 min).
+-lm dio
+# Template Jinja do modelo, com o parser de tool calls do Qwen3 (já é o padrão; explícito por clareza).
+--jinja
+# Mantém o raciocínio dos turnos anteriores: o histórico reenviado bate token a token com o cache (f_keep = 1,0).
+--reasoning-preserve
+# Até 48 checkpoints de contexto por slot (63 MiB cada, ~3 GiB de RAM no máximo).
+-ctxcp 48
+# Espaço mínimo de 2048 tokens entre checkpoints (padrão 8192). Mantido do plano; nos testes os checkpoints
+# ficaram no fim de cada prompt e o efeito deste valor não foi isolado (RESULTADOS-E4.md, questão 9).
+-cms 2048
+# Cache de prompts na RAM até 12 GiB: guarda a conversa principal quando entra outra (subagente, título) e a restaura.
+--cache-ram 12288
+# Métricas Prometheus em /metrics (usadas pelo runner da validação).
+--metrics
+# Depuração (desligado em produção): descomente para registrar checkpoints criados/restaurados e
+# "forcing full prompt re-processing" (~10 KB de log por pedido, sem o conteúdo dos pedidos).
+#-lv 4
+# Amostragem padrão do plano (seção 7, cartão do modelo); não medida na E4. O agente pode sobrescrever por pedido.
+--temp 0.6
+# Idem: top-p do cartão do modelo.
+--top-p 0.95
+# Idem: top-k do cartão do modelo.
+--top-k 20
