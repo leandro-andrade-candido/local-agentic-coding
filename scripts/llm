@@ -1,0 +1,407 @@
+#!/usr/bin/env bash
+# llm: o llama-server local como serviço do usuário (E5). Ver docs/etapas/E5-preparacao.md.
+#
+# Uso: scripts/llm <comando>
+#   key                  cria a chave (~/.config/local-agentic/llm-api-key, modo 0600) se não
+#                        existir; imprime o caminho, nunca a chave
+#   install [--enable] [--dry-run]
+#                        grava a unidade em ~/.config/systemd/user e roda daemon-reload;
+#                        --enable também liga o início com a sessão; --dry-run só mostra
+#   uninstall            para, desliga e remove a unidade (a chave fica)
+#   start | stop | restart | status
+#                        start e restart rodam o pré-voo antes e esperam o modelo carregar
+#   logs [-f] [-n N]     journal da unidade (padrão: últimas 200 linhas)
+#   health               /health, /v1/models e um chat de 1 token (latência), e confere a
+#                        política no servidor: chave exigida, CORS, /props, /slots, /tools
+#   preflight            scripts/preflight.sh
+#   dry-run              linha de comando final, sem iniciar (runtime/llama-server-start.sh --dry-run)
+#   env                  linhas export para os agentes: eval "$(scripts/llm env)"
+#   test [opções]        scripts/tool_calls.py contra o servidor, JSON em logs/tool_calls-<data>.json
+#   wait-ready [--timeout S]
+#                        espera GET /health = 200 (usado pela unidade em ExecStartPost)
+set -uo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd -P)"
+# shellcheck source=../runtime/common.sh
+source "$here/../runtime/common.sh"
+REPO="$LOCAL_AGENTIC_REPO"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+UNIT_FILE="$UNIT_DIR/$LLM_SERVICE"
+
+die() { echo "erro: $*" >&2; exit 2; }
+usage() { sed -n '2,24p' "$0"; }
+
+require_key() {
+  [ -f "$LLM_API_KEY_FILE" ] || die "chave ausente: $LLM_API_KEY_FILE (crie com: scripts/llm key)"
+}
+require_unit() {
+  [ -f "$UNIT_FILE" ] || die "unidade não instalada: $UNIT_FILE (scripts/llm install)"
+}
+
+cmd_key() {
+  [ $# -eq 0 ] || die "uso: llm key"
+  if [ -e "$LLM_API_KEY_FILE" ]; then
+    local mode
+    mode="$(stat -c %a "$LLM_API_KEY_FILE")"
+    case "$mode" in
+      600|400) echo "chave já existe (modo $mode)" >&2 ;;
+      *) echo "aviso: chave com modo $mode; o servidor recusa: chmod 600 $LLM_API_KEY_FILE" >&2 ;;
+    esac
+    printf '%s\n' "$LLM_API_KEY_FILE"
+    return 0
+  fi
+  local dir tmp
+  dir="$(dirname "$LLM_API_KEY_FILE")"
+  (umask 077 && mkdir -p "$dir") || die "não consegui criar $dir"
+  tmp="$(umask 077 && mktemp "$dir/.llm-api-key.XXXXXX")" || die "não consegui criar arquivo em $dir"
+  if ! python3 -I -c 'import secrets; print("sk-llama-" + secrets.token_hex(32))' > "$tmp"; then
+    rm -f "$tmp"; die "não consegui gerar a chave"
+  fi
+  chmod 600 "$tmp"
+  # Sem sobrescrever: se outra execução criou a chave no meio-tempo, fica a dela.
+  mv -n "$tmp" "$LLM_API_KEY_FILE"
+  rm -f "$tmp"
+  echo "chave criada (modo 600; conteúdo não exibido)" >&2
+  printf '%s\n' "$LLM_API_KEY_FILE"
+}
+
+render_unit() {
+  case "$REPO$LLM_API_KEY_FILE" in
+    *[[:space:]%\|\\]*) die "caminho com espaço, %, | ou \\ não é suportado na unidade: $REPO / $LLM_API_KEY_FILE" ;;
+  esac
+  local out
+  out="$(sed -e "s|@@REPO@@|$REPO|g" -e "s|@@KEY_FILE@@|$LLM_API_KEY_FILE|g" \
+    "$REPO/runtime/llama-server.service.in")" || die "não consegui ler o modelo da unidade"
+  ! grep -q '@@' <<< "$out" || die "modelo da unidade com @@...@@ não trocado"
+  printf '%s\n' "$out"
+}
+
+cmd_install() {
+  local enable=false dry=false a
+  for a in "$@"; do
+    case "$a" in
+      --enable) enable=true ;;
+      --dry-run) dry=true ;;
+      *) die "uso: llm install [--enable] [--dry-run]" ;;
+    esac
+  done
+  local rendered
+  rendered="$(render_unit)" || exit 2
+  if $dry; then
+    echo "# --dry-run: nada gravado nem recarregado. Conteúdo de $UNIT_FILE:"
+    printf '%s\n' "$rendered"
+    echo "# comandos que seriam executados:"
+    [ -f "$LLM_API_KEY_FILE" ] || echo "#   scripts/llm key"
+    echo "#   mkdir -p $UNIT_DIR && (grava $UNIT_FILE)"
+    echo "#   systemctl --user daemon-reload"
+    if $enable; then echo "#   systemctl --user enable $LLM_SERVICE"; fi
+    local tmpd
+    tmpd="$(mktemp -d)"
+    printf '%s\n' "$rendered" > "$tmpd/$LLM_SERVICE"
+    echo "# systemd-analyze --user verify (cópia temporária):"
+    if systemd-analyze --user verify "$tmpd/$LLM_SERVICE" 2>&1 | sed 's/^/#   /'; then
+      echo "#   (sem erros)"
+    fi
+    rm -rf "$tmpd"
+    return 0
+  fi
+  [ -f "$LLM_API_KEY_FILE" ] || cmd_key > /dev/null
+  mkdir -p "$UNIT_DIR" || die "não consegui criar $UNIT_DIR"
+  printf '%s\n' "$rendered" > "$UNIT_FILE.tmp" && mv "$UNIT_FILE.tmp" "$UNIT_FILE" \
+    || die "não consegui gravar $UNIT_FILE"
+  systemctl --user daemon-reload || die "daemon-reload falhou"
+  echo "instalado: $UNIT_FILE"
+  if $enable; then
+    systemctl --user enable "$LLM_SERVICE" || die "enable falhou"
+    echo "ligado: sobe com o gerenciador do usuário (desligar: systemctl --user disable $LLM_SERVICE)"
+  fi
+  echo "próximo passo: scripts/llm start && scripts/llm health"
+}
+
+cmd_uninstall() {
+  [ $# -eq 0 ] || die "uso: llm uninstall"
+  systemctl --user stop "$LLM_SERVICE" 2> /dev/null
+  systemctl --user disable "$LLM_SERVICE" 2> /dev/null
+  rm -f "$UNIT_FILE"
+  systemctl --user daemon-reload
+  systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
+  echo "unidade removida ($UNIT_FILE). A chave continua em $LLM_API_KEY_FILE."
+}
+
+run_preflight() {
+  local rc=0
+  "$REPO/scripts/preflight.sh" || rc=$?
+  [ "$rc" -ne 2 ] || die "pré-voo bloqueou o início (resolva o BLOQUEIO acima)"
+}
+
+cmd_start() {
+  [ $# -eq 0 ] || die "uso: llm start"
+  require_unit
+  local pid
+  pid="$(llm_unit_mainpid)"
+  if [ "$pid" != 0 ]; then
+    echo "já está no ar (PID $pid): $LLM_BASE_URL_LOCAL"
+    return 0
+  fi
+  run_preflight
+  systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
+  echo "iniciando; o comando espera o modelo carregar (até 10 min)..."
+  local t0=$SECONDS
+  if ! systemctl --user start "$LLM_SERVICE"; then
+    echo "falhou; veja: scripts/llm logs" >&2
+    return 1
+  fi
+  echo "no ar em $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL (confira: scripts/llm health)"
+}
+
+cmd_restart() {
+  [ $# -eq 0 ] || die "uso: llm restart"
+  require_unit
+  run_preflight
+  systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
+  echo "reiniciando; o comando espera o modelo carregar (até 10 min)..."
+  local t0=$SECONDS
+  systemctl --user restart "$LLM_SERVICE" || { echo "falhou; veja: scripts/llm logs" >&2; return 1; }
+  echo "no ar em $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL"
+}
+
+cmd_logs() {
+  local follow=() n=200
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -f) follow=(-f); shift ;;
+      -n) n="${2:-}"; shift 2 ;;
+      *) die "uso: llm logs [-f] [-n N]" ;;
+    esac
+  done
+  exec journalctl --user -u "$LLM_SERVICE" --no-pager -n "$n" "${follow[@]}"
+}
+
+cmd_wait_ready() {
+  local timeout=600
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --timeout) timeout="${2:-}"; shift 2 ;;
+      *) die "uso: llm wait-ready [--timeout S]" ;;
+    esac
+  done
+  local start=$SECONDS last=$SECONDS code
+  while :; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$LLM_BASE_URL_LOCAL/health" 2> /dev/null)"
+    if [ "$code" = 200 ]; then
+      echo "pronto em $((SECONDS - start)) s: $LLM_BASE_URL_LOCAL"
+      return 0
+    fi
+    # MAINPID: definido pelo systemd para ExecStartPost.
+    if [ -n "${MAINPID:-}" ] && ! kill -0 "$MAINPID" 2> /dev/null; then
+      echo "o llama-server (PID $MAINPID) saiu antes de ficar pronto" >&2
+      return 1
+    fi
+    if [ $((SECONDS - start)) -ge "$timeout" ]; then
+      echo "não ficou pronto em $timeout s (último HTTP ${code:-000})" >&2
+      return 1
+    fi
+    if [ $((SECONDS - last)) -ge 15 ]; then
+      echo "aguardando /health (HTTP ${code:-000}, $((SECONDS - start)) s)"
+      last=$SECONDS
+    fi
+    sleep 1
+  done
+}
+
+cmd_env() {
+  [ $# -eq 0 ] || die "uso: llm env"
+  require_key
+  local alias
+  alias="$(llm_model_alias)"
+  printf 'export LLM_BASE_URL=%q\n' "$LLM_BASE_URL_LOCAL"
+  printf 'export LLM_MODEL=%q\n' "$alias"
+  # A chave é lida na hora do eval; a saída deste comando não a contém.
+  printf 'export LLM_API_KEY="$(cat %q)"\n' "$LLM_API_KEY_FILE"
+  # Nome que os 5 agentes (agents/lib/common.sh) leem hoje.
+  printf 'export LOCAL_LLM_API_KEY="$LLM_API_KEY"\n'
+}
+
+cmd_test() {
+  require_key
+  local ts out rc=0
+  ts="$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$REPO/logs"
+  out="$REPO/logs/tool_calls-$ts.json"
+  python3 -I "$REPO/scripts/tool_calls.py" --base "$LLM_BASE_URL_LOCAL" --model "$(llm_model_alias)" \
+    --api-key-file "$LLM_API_KEY_FILE" --json-out "$out" "$@" || rc=$?
+  echo "resultado: $out (código $rc)"
+  return "$rc"
+}
+
+cmd_health() {
+  [ $# -eq 0 ] || die "uso: llm health"
+  require_key
+  local expected="{}"
+  if llm_resolve_model; then
+    expected="$(env LLAMA_SERVER_HOST="$LLAMA_SERVER_HOST" LLAMA_SERVER_PORT="$LLAMA_SERVER_PORT" \
+      LLM_API_KEY_FILE="$LLM_API_KEY_FILE" LOCAL_AGENTIC_REPO="$REPO" \
+      python3 -I "$LLAMA_SERVER_ARGS_PY" --bin "$LLAMA_SERVER_BIN" --profile "$LLAMA_SERVER_PROFILE" \
+      --policy "$LLAMA_SERVER_POLICY" --model "$MODEL_PATH" --format json 2> /dev/null)" || expected="{}"
+  fi
+  # Log da execução atual da unidade: o --fit só avisa ("failed to fit params") quando
+  # falta VRAM para a folga do perfil, e carrega mesmo assim (runtime/llama-server.args).
+  local inv fit_warn=""
+  inv="$(systemctl --user show -p InvocationID --value "$LLM_SERVICE" 2> /dev/null)"
+  if [ -n "$inv" ] && [ "$(llm_unit_mainpid)" != 0 ]; then
+    fit_warn="$(journalctl --user _SYSTEMD_INVOCATION_ID="$inv" --no-pager -o cat 2> /dev/null \
+      | grep -c 'failed to fit params')"
+  fi
+  LLM_HEALTH_FIT_WARN="$fit_warn" LLM_HEALTH_EXPECTED="$expected" \
+    python3 -I - "$LLM_BASE_URL_LOCAL" "$LLM_API_KEY_FILE" \
+    "$(llm_model_alias)" "$LLAMA_SERVER_PORT" <<'PY'
+import json, os, subprocess, sys, time, urllib.error, urllib.request
+
+base, key_file, alias, port = sys.argv[1:5]
+expected = json.loads(os.environ.get("LLM_HEALTH_EXPECTED") or "{}")
+with open(key_file, encoding="utf-8") as f:
+    key = next((l for l in f.read().splitlines() if l and not l.startswith("#")), "")
+results = []
+
+
+def rec(ok, name, detail, ms=None):
+    results.append((ok, name, detail, ms))
+
+
+def req(method, path, body=None, auth=True, headers=None, timeout=15):
+    h = {"Content-Type": "application/json"} if body is not None else {}
+    if auth:
+        h["Authorization"] = "Bearer " + key
+    h.update(headers or {})
+    data = json.dumps(body).encode() if body is not None else None
+    r = urllib.request.Request(base + path, data=data, method=method, headers=h)
+    t0 = time.perf_counter()
+    try:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
+            raw, status, hdrs = resp.read(), resp.status, resp.headers
+    except urllib.error.HTTPError as e:
+        raw, status, hdrs = e.read(), e.code, e.headers
+    except (urllib.error.URLError, OSError) as e:  # recusa, tempo esgotado
+        raw, status, hdrs = str(getattr(e, "reason", e)).encode(), 0, {}
+    ms = (time.perf_counter() - t0) * 1000
+    try:
+        js = json.loads(raw) if raw else None
+    except ValueError:
+        js = None
+    return status, js, raw, hdrs, ms
+
+
+def exp(name):
+    e = expected.get(name)
+    return None if e is None else e["value"]
+
+
+st, js, raw, _, ms = req("GET", "/health", auth=False)
+if st == 0:
+    print(f"servidor fora do ar em {base}: {raw.decode()} (scripts/llm status / scripts/llm logs)")
+    sys.exit(1)
+if st == 503:
+    print(f"servidor em {base} ainda carregando o modelo (HTTP 503); repita em alguns segundos")
+    sys.exit(1)
+
+# 1. Disponibilidade e latência.
+rec(st == 200 and (js or {}).get("status") == "ok", "GET /health (sem chave)", f"HTTP {st}", ms)
+st, js, _, _, ms = req("GET", "/v1/models")
+ids = [m.get("id") for m in (js or {}).get("data", [])] if st == 200 else []
+rec(st == 200 and alias in ids, "GET /v1/models (com chave)", f"HTTP {st}, modelos {ids}", ms)
+st, js, _raw, _, ms = req("POST", "/v1/chat/completions", {
+    "model": alias, "max_tokens": 1,
+    "messages": [{"role": "user", "content": "Responda só: ok"}]}, timeout=300)
+t = (js or {}).get("timings", {})
+detail = f"HTTP {st}" if st else f"sem resposta: {_raw.decode()[:80]}"
+if st == 200:
+    detail += (f", prompt {t.get('prompt_n', '?')} tok em {t.get('prompt_ms', 0):.0f} ms,"
+               f" 1º token em {t.get('predicted_ms', 0):.0f} ms")
+rec(st == 200, "POST /v1/chat/completions, 1 token", detail, ms)
+st, _, raw, _, ms = req("GET", "/metrics")
+rec(st == 200 and b"llamacpp:prompt_tokens_total" in raw, "GET /metrics (com chave)", f"HTTP {st}", ms)
+
+# 2. Política aplicada.
+st, _, _, _, _ = req("GET", "/v1/models", auth=False)
+rec(st == 401, "chave exigida (GET /v1/models sem chave)", f"HTTP {st} (esperado 401)")
+st, js, _, _, _ = req("GET", "/props")
+if st == 200 and js:
+    params = js.get("default_generation_settings", {}).get("params", {})
+    checks = [("endpoint_props", js.get("endpoint_props"), False),
+              ("cors_proxy_enabled", js.get("cors_proxy_enabled"), False),
+              ("endpoint_metrics", js.get("endpoint_metrics"), True)]
+    for field, flag in (("temperature", "--temp"), ("top_p", "--top-p"), ("top_k", "--top-k"),
+                        ("min_p", "--min-p"), ("presence_penalty", "--presence-penalty"),
+                        ("max_tokens", "-n")):
+        if exp(flag) is not None:
+            checks.append((field, params.get(field), float(exp(flag))))
+    if exp("-np") is not None:
+        checks.append(("total_slots", js.get("total_slots"), int(exp("-np"))))
+    if exp("-c") is not None:
+        checks.append(("n_ctx", js.get("default_generation_settings", {}).get("n_ctx"), int(exp("-c"))))
+    bad = [f"{f}={got!r} (esperado {want!r})" for f, got, want in checks
+           if not (got == want or (isinstance(got, (int, float)) and not isinstance(got, bool)
+                                   and isinstance(want, float) and abs(got - want) < 1e-6))]
+    rec(not bad, "GET /props: padrões e rotas", "; ".join(bad) or
+        ", ".join(f"{f}={got}" for f, got, _ in checks))
+else:
+    rec(False, "GET /props", f"HTTP {st}")
+st, _, _, _, _ = req("POST", "/props", {})
+rec(st == 501, "POST /props desligado (sem --props)", f"HTTP {st} (esperado 501)")
+# Ação inválida de propósito: sem --slot-save-path a rota responde 501 antes de olhar a
+# ação; com ela ligada responderia 400 ("Invalid action"). Nada é gravado nos dois casos.
+st, _, _, _, _ = req("POST", "/slots/0?action=llm-health-probe", {})
+rec(st == 501, "POST /slots desligado (sem --slot-save-path)", f"HTTP {st} (esperado 501)")
+st, _, _, _, _ = req("GET", "/tools")
+rec(st == 403, "GET /tools desligado (sem --tools/--agent)", f"HTTP {st} (esperado 403)")
+st, _, _, _, _ = req("GET", "/cors-proxy")
+rec(st == 403, "GET /cors-proxy desligado (sem --ui-mcp-proxy)", f"HTTP {st} (esperado 403)")
+evil = "http://exemplo.invalid"
+st, _, _, h, _ = req("OPTIONS", "/v1/chat/completions", auth=False,
+                     headers={"Origin": evil, "Access-Control-Request-Method": "POST"})
+acao, acac = h.get("Access-Control-Allow-Origin"), h.get("Access-Control-Allow-Credentials")
+rec(acao not in (evil, "*") and acac == "false", "CORS para outra origem",
+    f"Allow-Origin={acao!r}, Allow-Credentials={acac!r}")
+fit = os.environ.get("LLM_HEALTH_FIT_WARN", "")
+if fit:
+    rec(fit == "0", "log: VRAM coube com a folga do perfil (--fit)",
+        "sem 'failed to fit params'" if fit == "0" else f"{fit}x 'failed to fit params' (pouca VRAM livre na carga)")
+try:
+    out = subprocess.run(["ss", "-Hltn", f"sport = :{port}"], capture_output=True, text=True,
+                         timeout=5).stdout.split()
+    addrs = [w for w in out if w.endswith(f":{port}")]
+    rec(bool(addrs) and all(a.startswith(("127.", "[::1]", "::1")) for a in addrs),
+        "escuta só no loopback", ", ".join(addrs) or "nenhum socket")
+except (OSError, subprocess.TimeoutExpired) as e:
+    rec(False, "escuta só no loopback", str(e))
+
+print(f"saúde do llama-server em {base}")
+for ok, name, detail, ms in results:
+    lat = f"{ms:7.0f} ms" if ms is not None else " " * 10
+    print(f"  {'ok   ' if ok else 'FALHA'}  {name:<46} {lat}  {detail}")
+fails = sum(1 for r in results if not r[0])
+print(f"resultado: {len(results) - fails} ok, {fails} falha(s)")
+sys.exit(1 if fails else 0)
+PY
+}
+
+cmd="${1:-}"
+[ $# -eq 0 ] || shift
+case "$cmd" in
+  key) cmd_key "$@" ;;
+  install) cmd_install "$@" ;;
+  uninstall) cmd_uninstall "$@" ;;
+  start) cmd_start "$@" ;;
+  stop) require_unit; systemctl --user stop "$LLM_SERVICE" ;;
+  restart) cmd_restart "$@" ;;
+  status) require_unit; systemctl --user status "$LLM_SERVICE" --no-pager -n 5 ;;
+  logs) cmd_logs "$@" ;;
+  health) cmd_health "$@" ;;
+  preflight) exec "$REPO/scripts/preflight.sh" "$@" ;;
+  dry-run) exec "$REPO/runtime/llama-server-start.sh" --dry-run ;;
+  env) cmd_env "$@" ;;
+  test) cmd_test "$@" ;;
+  wait-ready) cmd_wait_ready "$@" ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

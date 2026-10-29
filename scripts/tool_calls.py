@@ -18,10 +18,12 @@ Sai com código 1 se houver RUNTIME ou TRUNCADO. MODELO é registrado, mas não
 reprova: mede o modelo, não o runtime.
 
 Uso: python3 -I scripts/tool_calls.py [--base URL] [--model alias] [--reps N]
-                                      [--api-key K] [--json-out arquivo]
+                                      [--api-key-file arquivo | --api-key K] [--json-out arquivo]
+     (sem chave nos argumentos, usa $LLM_API_KEY; scripts/llm test já passa o arquivo)
 """
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -313,10 +315,20 @@ def main():
     ap.add_argument("--base", default="http://127.0.0.1:9931")
     ap.add_argument("--model", default="local")
     ap.add_argument("--reps", type=int, default=3)
-    ap.add_argument("--api-key", default=None)
+    ap.add_argument("--api-key", default=None,
+                    help="chave na linha de comando (visível no ps); prefira --api-key-file")
+    ap.add_argument("--api-key-file", default=None,
+                    help="arquivo com a chave (primeira linha que não começa com #); "
+                         "sem --api-key nem --api-key-file, usa $LLM_API_KEY")
     ap.add_argument("--json-out", default=None, help="grava o resultado detalhado em JSON")
     args = ap.parse_args()
-    client = Client(args.base, args.model, args.api_key)
+    api_key = args.api_key
+    if api_key is None and args.api_key_file:
+        with open(args.api_key_file, encoding="utf-8") as f:
+            api_key = next((ln for ln in f.read().splitlines() if ln and not ln.startswith("#")), None)
+    if api_key is None:
+        api_key = os.environ.get("LLM_API_KEY") or None
+    client = Client(args.base, args.model, api_key)
 
     results = []
 

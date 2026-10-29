@@ -1,0 +1,68 @@
+# Unidade systemd --user do llama-server (E5). Modelo: `scripts/llm install` troca os
+# marcadores do repositório e do arquivo da chave e grava em
+# ~/.config/systemd/user/llama-server.service.
+# Sem root e sem unidade do sistema. Desfazer: `scripts/llm uninstall`.
+#
+# O que vem de onde:
+#   - build, porta, pastas: versions.env, lido pelo wrapper a cada início
+#     (mudou o versions.env ou o perfil? basta `scripts/llm restart`);
+#   - argumentos: runtime/llama-server.args (E4) + runtime/llama-server.policy.args (E5);
+#   - ambiente: runtime/llama-server.env, carregado pelo wrapper (não por
+#     EnvironmentFile=, para valer igual no início à mão);
+#   - chave: só o caminho do arquivo; o conteúdo nunca aparece na unidade.
+# `scripts/llm install` de novo só é preciso se o repositório mudar de lugar ou se
+# este modelo mudar.
+
+[Unit]
+Description=llama-server local (modelo dos agentes de código, só em 127.0.0.1)
+Documentation=file://@@REPO@@/docs/etapas/E5-preparacao.md
+# Até 5 inícios em 30 min; depois fica em "failed" até `scripts/llm start`
+# (que roda reset-failed). Evita laço com a GPU ou o modelo com problema.
+StartLimitIntervalSec=30min
+StartLimitBurst=5
+
+[Service]
+# exec: o wrapper faz exec do llama-server, que vira o processo principal (MainPID).
+# Parar = sinal para esse PID; nada de pkill por padrão de nome (problema da E3).
+Type=exec
+Environment=LLM_API_KEY_FILE=@@KEY_FILE@@
+ExecStart=@@REPO@@/runtime/llama-server-start.sh
+# Pronto só quando GET /health responde 200 (modelo carregado): `systemctl --user start`
+# espera aqui. Desiste em 10 min ou se o processo principal morrer.
+ExecStartPost=@@REPO@@/scripts/llm wait-ready --timeout 600
+# Carga do modelo de 22 GB: ~30 s com -lm dio e cache de disco frio na E4; mmap levou
+# ~2,5 min. 11 min cobre o pior caso e a espera acima.
+TimeoutStartSec=11min
+
+# Reinício automático só em falha (saída != 0, sinal, falha da espera acima), com
+# espera crescente: 10 s, ... até 5 min em 5 passos.
+Restart=on-failure
+# Código 2 = recusa do wrapper (argumentos, modelo, chave, pré-voo bloqueado): reiniciar
+# não resolve; fica em "failed" com o motivo no log.
+RestartPreventExitStatus=2
+RestartSec=10s
+RestartSteps=5
+RestartMaxDelaySec=5min
+
+# Parada limpa: SIGTERM só no llama-server (ele termina o pedido em curso e libera a
+# memória fixada); se não sair em 90 s, SIGKILL em todo o grupo.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=90s
+SendSIGKILL=yes
+
+# Logs no journald: `scripts/llm logs [-f]` ou journalctl --user -u llama-server.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=llama-server
+
+# Endurecimento que funciona em unidade de usuário sem namespaces. ProtectSystem=,
+# PrivateTmp= e afins exigem namespaces de usuário e não foram testados com o /dev/dxg do WSL.
+NoNewPrivileges=yes
+UMask=0077
+WorkingDirectory=%h
+
+[Install]
+# Só com `scripts/llm install --enable`: sobe junto com o gerenciador do usuário
+# (primeiro shell do WSL). Ocupa a VRAM inteira e ~20 GB de RAM fixada.
+WantedBy=default.target

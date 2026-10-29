@@ -1,0 +1,71 @@
+# Política do llama-server (E5): segurança e padrões de uso, 29/10/2026.
+# Dono: E5. O desempenho fica no perfil da E4 (runtime/llama-server.args), que
+# este arquivo não repete. Requisitos: docs/etapas/E5-requisitos.md.
+#
+# Formato: igual ao do perfil (uma flag por linha; flag e valor separados por um
+# espaço, sem aspas e sem espaço no valor; comentário logo acima). O wrapper
+# (runtime/llama-server-start.sh) troca nos valores: ${LLAMA_SERVER_HOST} e
+# ${LLAMA_SERVER_PORT} (versions.env) e ${LLM_API_KEY_FILE}
+# (padrão ~/.config/local-agentic/llm-api-key).
+#
+# Linha final: -m <modelo do models.tsv> + perfil + esta política. Este arquivo só traz
+# o que o perfil não tem (hoje não há flag nos dois).
+# Sobreposição, se um dia houver: no b11982 vale a última ocorrência de cada flag
+# (common/arg.cpp), com o aviso "DEPRECATED: argument specified multiple times". Por
+# isso o wrapper tira do perfil toda flag que também está aqui, aliases incluídos
+# (-n = --predict): A POLÍTICA VENCE, e a linha final não tem repetição. Valor
+# diferente gera uma nota no log.
+# Host, porta, chave, CORS e rede (lista POLICY_ONLY em runtime/llama-server-args.py)
+# não podem aparecer no perfil: o wrapper recusa iniciar.
+#
+# DESLIGADO DE PROPÓSITO. O encaminhador do container da E7 expõe todas as rotas do
+# servidor aos agentes, então nada abaixo pode ser ligado. Todas já vêm desligadas no
+# b11982; o wrapper recusa iniciar se alguma aparecer no perfil ou aqui (lista FORBIDDEN),
+# e `scripts/llm health` confere com o servidor no ar (POST /props e POST /slots
+# respondem 501, /tools e /cors-proxy respondem 403).
+#   --props             POST /props mudaria propriedades globais em execução
+#   --slot-save-path    POST /slots/<id>?action=save|restore gravaria e leria o cache em disco
+#   -ag/--agent, --tools, --tools-runtime, --mcp-servers-config, --mcp-servers-json,
+#   --ui-mcp-proxy      ferramentas embutidas (shell, arquivos), MCP e proxy em /cors-proxy
+#   --media-path, --path  leitura de arquivos locais por file:// e arquivos estáticos
+#   --connect           túnel peer-to-peer para fora da máquina
+#   --log-prompts-dir   gravaria os prompts (código dos projetos) em disco
+#   --api-key           chave na linha de comando (visível no ps) e no git
+#   -hf, -mu, -dr, --models-dir, --models-preset   downloads e modo roteador
+#   --cors-credentials, --reuse-port
+
+# Só a interface de loopback (127.0.0.1, do versions.env). O WSL repassa o localhost
+# ao Windows, então o navegador de lá alcança o servidor: daí a chave e o CORS abaixo.
+--host ${LLAMA_SERVER_HOST}
+# Porta do versions.env (9931; a 8080 é de outro serviço local).
+--port ${LLAMA_SERVER_PORT}
+# Chave exigida em todas as rotas, menos /health e /v1/health (a interface web carrega,
+# mas pede a chave). Arquivo fora do git, modo 0600, criado por `scripts/llm key`.
+# Aceita "Authorization: Bearer <chave>" (OpenAI) e "x-api-key: <chave>" (Anthropic).
+--api-key-file ${LLM_API_KEY_FILE}
+# CORS só para a própria origem: uma página de outra origem aberta no navegador não lê
+# as respostas. No b11982 o valor vai literal no Access-Control-Allow-Origin (a "lista
+# separada por vírgulas" da ajuda não é tratada), então é uma origem só; o valor
+# especial "localhost" aceitaria qualquer porta de localhost. A barreira principal é a chave.
+--cors-origins http://${LLAMA_SERVER_HOST}:${LLAMA_SERVER_PORT}
+# Sem credenciais do navegador em CORS (o padrão do b11982 é ligado).
+--no-cors-credentials
+# Ferramentas embutidas e proxy CORS desligados (já é o padrão). Explícito e depois
+# do perfil: esvazia --tools e desliga --ui-mcp-proxy mesmo que algo os tenha ligado.
+--no-agent
+# Sem acesso à rede para baixar modelos: o modelo vem só do disco (models.tsv).
+--offline
+#
+# Já estão no perfil da E4 e não se repetem aqui: --metrics (/metrics, exige a chave),
+# --temp 0.6, --top-p 0.95 e --top-k 20 (cartão do modelo). O wrapper exige que os
+# quatro estejam na linha final (perfil ou política) e recusa iniciar sem eles.
+#
+# Amostragem do cartão que falta no perfil. Vale para quem não envia os parâmetros (o
+# Codex não envia nenhum); cada pedido pode sobrescrever. min-p 0 (padrão do llama.cpp: 0.05).
+--min-p 0
+# Idem: presence penalty 0 (já é o padrão; explícito por ser do cartão).
+--presence-penalty 0
+# Limite padrão de saída por pedido: o Codex não envia max_output_tokens, e argumentos
+# longos de ferramenta não podem ser cortados. Não é teto: no b11982 o max_tokens do
+# pedido vence (server-context.cpp, "the per-request limit takes priority").
+-n 32768
