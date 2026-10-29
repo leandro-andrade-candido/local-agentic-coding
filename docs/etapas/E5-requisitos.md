@@ -13,3 +13,4 @@ Pedidos que chegaram das outras frentes até 29/10, para entrar no serviço do `
 | `--reasoning-preserve` | plano | Redundante no b11982, que já liga o `preserve_reasoning` por padrão; pode ficar explícito |
 | Primeira execução real de `scripts/tool_calls.py` contra o Qwen3.6-35B, com saída em JSON | verificação E1–E3 | É o primeiro teste de chamadas de ferramenta do modelo principal |
 | Serviço `systemd --user` com reinício automático e encerramento pelo PID | E3 | Evita o problema do `pkill` |
+| Checagem antes de iniciar (pré-voo): avisar se há outro processo usando a GPU (jogo, NVIDIA Broadcast etc.), com VRAM livre, temperatura e RAM disponível, consultando o `nvidia-smi.exe` do Windows | E4, teste do autor com jogo e Broadcast | Condição de uso decidida: a GPU fica dedicada à IA enquanto ela é usada. A checagem torna visível quando essa condição não vale |

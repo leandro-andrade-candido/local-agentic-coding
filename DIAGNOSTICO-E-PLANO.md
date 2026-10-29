@@ -387,6 +387,10 @@ Repositórios usados:
    - **A favor dele:** o autor já domina o fluxo (skills, hooks, subagentes, plugins).
    - **Ordem na E6:** o Claude Code local e o Codex local rodam primeiro, para dar logo o sinal com as ferramentas já conhecidas.
 
+8. **Condição de uso (29/10): GPU dedicada à IA enquanto ela é usada.** Sem jogos e com o NVIDIA Broadcast fechado. O perfil do servidor usa a VRAM inteira, guardando só uma margem pequena para variações do driver.
+   - Num teste deliberado, o autor abriu um jogo durante a E4: o servidor continuou funcionando. A degradação medida fica registrada nos resultados da E4.
+   - A E5 inclui uma checagem antes de iniciar que avisa quando há outro processo usando a GPU.
+
 ### Pendentes
 
 - Confirmar cada download acima de 5 GB quando chegar a etapa correspondente.
