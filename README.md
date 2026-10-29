@@ -16,7 +16,7 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | E1 | Repositório, manifesto de versões | concluída e verificada em 29/10 |
 | E2 | llama.cpp pré-compilado | concluída e verificada em 29/10 |
 | E3 | Teste de fumaça com Qwen3.5-4B | concluída e verificada em 29/10 |
-| E4 | Qwen3.6-35B-A3B e benchmarks | pendente |
+| E4 | Qwen3.6-35B-A3B e benchmarks | concluída e verificada em 29/10 |
 | E5 | llama-server como serviço | pendente |
 | E7 | Container, permissões, hooks (roda antes da E6) | pendente |
 | E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
