@@ -4,7 +4,7 @@ Ambiente de desenvolvimento com agentes de IA rodando localmente, com modelos e 
 
 - **Runtime:** llama.cpp (`llama-server`).
 - **Modelo principal:** Qwen3.6-35B-A3B, em modo híbrido: experts na RAM, atenção na GPU RTX 5050.
-- **Agente:** escolhido por teste. A ordem de prioridade é Qwen Code, depois Pi, depois OpenCode.
+- **Agente:** escolhido por teste entre Qwen Code, Codex CLI, Pi e OpenCode, todos com o modelo local. O Claude Code com o modelo local fica como alternativa.
 
 O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estão em [DIAGNOSTICO-E-PLANO.md](DIAGNOSTICO-E-PLANO.md).
 

@@ -365,12 +365,21 @@ Repositórios usados:
 
    | Nível | Agente | Modelo | Custo recorrente | Passa se |
    |---|---|---|---|---|
-   | Meta 1 | Qwen Code, depois Pi, depois OpenCode | local | zero | ≥ 5 de 7 tarefas sem intervenção em 2 de 3 execuções, nenhuma ação destrutiva, e o piloto aprovado pelo autor e pelo orquestrador |
+   | Meta 1 | Qwen Code, Codex CLI, Pi e OpenCode; a ordem final vem do resultado da E6 | local | zero | ≥ 5 de 7 tarefas sem intervenção em 2 de 3 execuções, nenhuma ação destrutiva, e o piloto aprovado pelo autor e pelo orquestrador |
    | Meta 2 | Claude Code (fechado, gratuito) | local | zero de API | Mesmo critério. Só é testada se a falha da Meta 1 for do agente: erros de formato de ferramenta, loops, perda de cache. |
-   | Meta 3 | qualquer um | local na maior parte, Claude para planejar e revisar | sua assinatura | A parcela de tarefas resolvida localmente, a definir. Contraria a restrição original e só vale como decisão sua, explícita. |
+   | Meta 3 | qualquer um | local na maior parte, nuvem para planejar e revisar. Opções: Codex com o plano ChatGPT Go (custo baixo) ou Claude | assinatura do autor | A parcela de tarefas resolvida localmente, a definir. Contraria a restrição original e só vale como decisão sua, explícita. |
 
    Se o limite for do modelo (chamadas de ferramenta corretas, mas soluções erradas), trocar de agente não resolve. O próximo passo, nesse caso, é um modelo local maior (Coder-Next 80B ou Qwen3.8-27B como revisor) e, depois, a Meta 3.
 5. **O piloto de validação é um projeto real e privado**, fora deste repositório (ver seção 9).
+6. **Codex adicionado ao plano (29/10)**, de duas formas que não se misturam:
+   - **Codex CLI com o modelo local:** entra na Meta 1 e no teste da E6 (`agents/codex-local/`).
+     - É open source (Apache-2.0), não usa conta nem plano, e o llama-server tem o endpoint `/v1/responses` que ele exige.
+     - Riscos a medir: ele é ajustado para modelos da OpenAI, usa o formato de edição `apply_patch` e passa pelo caminho Responses do llama.cpp, o menos testado.
+     - Configuração isolada em `CODEX_HOME` próprio; o `~/.codex` do autor não é tocado.
+   - **Codex com os modelos da OpenAI pelo plano ChatGPT Go:** é nuvem, então fica como régua de comparação na validação e como opção da Meta 3.
+     - Antes de cada uso, o orquestrador informa o que vai rodar e o consumo estimado, e espera aprovação.
+     - Os limites do plano Go ainda precisam ser confirmados.
+     - No piloto, conferir a confidencialidade contratual antes de enviar código à nuvem. Documentos pessoais nunca são enviados.
 
 ### Pendentes
 
