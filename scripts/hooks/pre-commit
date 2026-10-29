@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Bloqueia o commit se alguma linha adicionada casar com um padrão de
+# .publish-denylist.local (regex estendida por linha, sem distinção de maiúsculas).
+# A lista fica fora do git para que os próprios termos sensíveis não sejam publicados.
+# Ativação: git config core.hooksPath scripts/hooks
+set -euo pipefail
+list="$(git rev-parse --show-toplevel)/.publish-denylist.local"
+[ -f "$list" ] || exit 0
+
+patterns="$(grep -vE '^[[:space:]]*(#|$)' "$list" || true)"
+[ -n "$patterns" ] || exit 0
+
+hits="$(git diff --cached -U0 --no-color \
+  | grep -E '^(\+\+\+ b/|\+)' \
+  | awk '/^\+\+\+ b\//{file=substr($0,7); next} {print file": "substr($0,2)}' \
+  | grep -iE -f <(printf '%s\n' "$patterns") || true)"
+
+if [ -n "$hits" ]; then
+  echo "pre-commit: conteúdo bloqueado por .publish-denylist.local:" >&2
+  printf '%s\n' "$hits" | cut -c1-200 >&2
+  exit 1
+fi
