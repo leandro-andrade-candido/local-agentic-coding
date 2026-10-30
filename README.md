@@ -6,6 +6,8 @@ Ambiente de desenvolvimento com agentes de IA rodando localmente, com modelos e 
 - **Modelo principal:** Qwen3.6-35B-A3B, em modo híbrido: experts na RAM, atenção na GPU RTX 5050.
 - **Agente:** escolhido por teste entre Qwen Code, Codex CLI, Pi e OpenCode, todos com o modelo local. O Claude Code com o modelo local fica como alternativa.
 
+**Para usar e testar manualmente, comece pelo [GUIA-DE-USO.md](GUIA-DE-USO.md).**
+
 O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estão em [DIAGNOSTICO-E-PLANO.md](DIAGNOSTICO-E-PLANO.md).
 
 ## Etapas
@@ -18,7 +20,7 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | E3 | Teste de fumaça com Qwen3.5-4B | concluída e verificada em 29/10 |
 | E4 | Qwen3.6-35B-A3B e benchmarks | concluída e verificada em 29/10 |
 | E5 | llama-server como serviço | em andamento: serviço instalado e saudável; bateria de tool calling parcial (ver `docs/etapas/E5.md`) |
-| E7 | Container, permissões, hooks (roda antes da E6) | concluída em 29/10; verificação adversária pendente |
+| E7 | Container, permissões, hooks (roda antes da E6) | concluída; furo do host corrigido (150/150); reverificação adversária pendente |
 | E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
 | E8 | Validação (T1–T7 e piloto em projeto real privado) | suíte pronta e validada sem modelo; execução pendente |
 | E9 | Documentação de operação | pendente |
