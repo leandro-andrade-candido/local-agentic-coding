@@ -76,14 +76,27 @@ def strip_frontmatter(text):
     return (m.group(1) if m else text).strip()
 
 
+def make_writable(root):
+    # A origem é montada só leitura e copytree preserva as permissões; sem escrita
+    # nas pastas, a próxima sessão não consegue apagar a cópia (PermissionError).
+    for d, dirs, files in os.walk(root):
+        os.chmod(d, os.stat(d).st_mode | 0o700)
+        for f in files:
+            p = os.path.join(d, f)
+            if not os.path.islink(p):
+                os.chmod(p, os.stat(p).st_mode | 0o600)
+
+
 def cmd_copy(dest):
     if os.path.islink(dest) or os.path.isfile(dest):
         os.unlink(dest)
     elif os.path.isdir(dest):
+        make_writable(dest)
         shutil.rmtree(dest)
     os.makedirs(dest)
     for name, path in skills():
         shutil.copytree(path, os.path.join(dest, name), symlinks=False)
+    make_writable(dest)
 
 
 def cmd_bootstrap(harness, out):
