@@ -33,6 +33,40 @@ sandbox/agent-shell.sh shell        ~/caminho/do/projeto   # bash no mesmo conta
 - **Primeiro uso:** se a imagem não existir, rode `sandbox/build.sh` (~2,9 GB).
 - **Push:** faça você mesmo, fora do container, depois de revisar o diff.
 
+## 2.1 Começar um projeto novo com brainstorm
+
+```bash
+mkdir -p ~/me/projeto-novo && cd ~/me/projeto-novo && git init -q
+cat > AGENTS.md <<'EOF'
+# Como trabalhar neste projeto
+- Fluxo: brainstorming → writing-plans → executing-plans (ou subagent-driven-development)
+  → requesting-code-review → finishing-a-development-branch.
+- Sempre escreva testes e rode-os antes de declarar uma tarefa pronta.
+- Documentos de desenho e planos ficam em docs/.
+EOF
+cd ~/me/local
+scripts/llm start                                   # se o servidor não estiver no ar
+sandbox/agent-shell.sh codex-local ~/me/projeto-novo     # ou claude-local, qwen-code, pi, opencode
+```
+
+Dentro do agente, peça o brainstorm pelo nome e descreva a dor, não a solução:
+
+> Use a skill brainstorming. Quero criar um sistema para <problema>. Hoje a dor é <o que acontece>, para <quem>. Uma boa entrega seria <resultado esperado>.
+
+O agente faz perguntas uma a uma, propõe 2 ou 3 abordagens e grava um documento de desenho em `docs/`. Depois de você aprovar:
+- `Use a skill writing-plans` gera o plano de tarefas.
+- `Use a skill executing-plans` implementa tarefa a tarefa, com testes.
+- `Use a skill requesting-code-review` revisa o resultado.
+- `Use a skill finishing-a-development-branch` fecha a branch.
+
+O push você faz fora do container.
+
+**Dicas para o modelo local**
+- **Chame as skills pelo nome.** O acionamento automático é menos confiável que no Claude.
+- **Comece novas sessões a cada fase.** Contexto curto deixa o modelo mais rápido e mais preciso; o documento de desenho e o plano em `docs/` levam o estado de uma fase para a outra.
+- **Planejamento aberto é o ponto mais fraco do modelo local.** Se o desenho sair raso, uma opção é fazer o brainstorm com um modelo mais forte e executar o plano localmente.
+- **Não testado:** esse fluxo ainda não rodou com o modelo de verdade, porque a E6 não foi executada. O primeiro uso é também o teste.
+
 ## 3. Testar o ambiente
 
 | O quê | Comando | Esperado |
