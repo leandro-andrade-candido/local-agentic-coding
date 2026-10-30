@@ -105,7 +105,10 @@ if [ -n "${EVAL_WRAPPER:-}" ]; then
     # Harnesses de teste (eval/harnesses/, sem LLM) leem as soluções de referência.
     case "$harness_sh" in "$EVAL_DIR"/harnesses/*) box_agent+=(--ro "$EVAL_DIR") ;; esac
     box_agent+=(--)
-    box_post=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" --rw "$out" --)
+    # Captura do diff: workdir SÓ LEITURA e $out NÃO montado. Assim o git do agente
+    # (fsmonitor/filtros/hooks), mesmo se executar aqui, não enxerga nem escreve em
+    # nenhum caminho do host; o diff sai pela stdout (tar) e o host grava com boxio.
+    box_post=("$EVAL_WRAPPER" --no-llm --no-skills --ro "$wd" --)
     box_check=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" --rw "$out" \
                --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --ro "$deps_env" --)
 fi
@@ -139,14 +142,34 @@ if $setup_ok; then
     $EVAL_PY "$here/lib/metrics.py" snapshot "$LLM_BASE_URL" "$out/metrics.after.prom"
 
     # 4. Diff do agente (inclui arquivos novos), capturado antes das verificações.
-    numstat="$("${box_post[@]}" bash -c '
-        export GIT_INDEX_FILE="$(mktemp -u)"
-        git -C "$1" add -A >/dev/null 2>&1
-        git -C "$1" diff --cached --binary "$2" >"$3/agent.patch"
-        git -C "$1" diff --cached --numstat "$2"
-        rm -f "$GIT_INDEX_FILE"' _ "$wd" "$start_ref" "$out" 9>&-)"
-    agent_commits="$("${box_post[@]}" git -C "$wd" rev-list --count "$baseline..HEAD" 2>/dev/null 9>&- || echo 0)"
-    cp -r "$work/agent-logs" "$out/agent-logs"
+    # Roda no container com o workdir só leitura; a config do agente é neutralizada
+    # (fsmonitor/hooks/filtros off, config de sistema/global ignorada) e os objetos
+    # e o índice vão para um tmpfs do container. Emite um tar (agent.patch,
+    # numstat.txt, commits.txt) na stdout; o host grava com boxio, sem seguir symlink.
+    post_tar="$work/diff.tar"
+    "${box_post[@]}" bash -c '
+        set -e
+        wd="$1"; ref="$2"; base="$3"
+        t="$(mktemp -d)"; trap "rm -rf \"$t\"" EXIT
+        export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+        export GIT_INDEX_FILE="$t/index" GIT_OBJECT_DIRECTORY="$t/objects"
+        export GIT_ALTERNATE_OBJECT_DIRECTORIES="$wd/.git/objects"
+        mkdir -p "$t/objects"
+        gf="-c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.fileMode=false"
+        gf="$gf -c core.autocrlf=false -c core.attributesFile=/dev/null -c core.pager=cat"
+        git -C "$wd" $gf add -A >/dev/null 2>&1 || true
+        git -C "$wd" $gf diff --cached --binary --no-ext-diff --no-textconv "$ref" >"$t/agent.patch" 2>/dev/null || :
+        git -C "$wd" $gf diff --cached --numstat --no-ext-diff "$ref" >"$t/numstat.txt" 2>/dev/null || :
+        git -C "$wd" $gf rev-list --count "$base..HEAD" >"$t/commits.txt" 2>/dev/null || echo 0 >"$t/commits.txt"
+        tar -C "$t" -cf - agent.patch numstat.txt commits.txt' \
+        _ "$wd" "$start_ref" "$baseline" 9>&- >"$post_tar" || log "aviso: captura do diff falhou"
+    diff_out="$($EVAL_PY "$here/lib/boxio.py" extract-diff "$post_tar" "$out")"
+    agent_commits="$(printf '%s\n' "$diff_out" | head -n1)"
+    numstat="$(printf '%s\n' "$diff_out" | tail -n +2)"
+    rm -f "$post_tar"
+    # agent-logs vem do container do agente (ele a monta rw): copia só arquivos
+    # regulares, sem seguir nem recriar symlinks.
+    $EVAL_PY "$here/lib/boxio.py" copy-logs "$work/agent-logs" "$out/agent-logs"
 
     # 5. Verificações ocultas.
     log "verificações ocultas"
@@ -158,6 +181,13 @@ if $setup_ok; then
     check_s=$(python3 -c "import sys;print(round($(date +%s.%N)-$t0,1))")
 fi
 finished_at="$(date -Iseconds)"
+
+# E7 (item 7 da verificação): box_post e box_check podem rodar código do agente com
+# $out montado. Antes de o host ler ou escrever qualquer coisa em $out, varre e apaga
+# todo symlink plantado ali. Depois disso nada mais do agente roda, então as escritas
+# seguintes (meta.json, result.json) não têm corrida; ainda assim são feitas sem seguir
+# symlink (boxio / os.replace).
+[ -d "$out" ] && $EVAL_PY "$here/lib/boxio.py" sanitize "$out"
 
 # 6. result.json
 eval_commit="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -171,8 +201,10 @@ M_NUMSTAT="${numstat:-}" M_STARTED_AT="$started_at" M_FINISHED_AT="$finished_at"
 M_LLM_BASE_URL="$LLM_BASE_URL" M_LLM_MODEL="$LLM_MODEL" M_WORKDIR="$wd" M_BASELINE="$baseline" \
 M_EVAL_COMMIT="$eval_commit" M_EVAL_DIRTY="$eval_dirty" M_HOSTNAME="$(hostname)" M_KERNEL="$(uname -r)" \
 M_SANDBOX="${EVAL_WRAPPER:-}" M_LLM_API_KEY_SOURCE="${LLM_API_KEY_SOURCE:-none}" \
-$EVAL_PY - "$out/meta.json" <<'PY'
+EVAL_LIB="$here/lib" $EVAL_PY - "$out/meta.json" <<'PY'
 import json, os, sys
+sys.path.insert(0, os.environ["EVAL_LIB"])
+import boxio  # escrita sem seguir symlink
 m = {k[2:].lower(): v for k, v in os.environ.items() if k.startswith("M_")}
 def num(v):
     try:
@@ -193,8 +225,7 @@ for line in m.pop("numstat", "").splitlines():
     ins += int(a) if a.isdigit() else 0
     dels += int(d) if d.isdigit() else 0
 m["diff"] = {"files_changed": files, "insertions": ins, "deletions": dels}
-with open(sys.argv[1], "w") as f:
-    json.dump(m, f, indent=2, ensure_ascii=False)
+boxio.write_json_atomic(sys.argv[1], m)
 PY
 $EVAL_PY "$here/lib/result.py" "$out"
 

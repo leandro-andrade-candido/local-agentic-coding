@@ -15,16 +15,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.dont_write_bytecode = True
 sys.path.insert(0, HERE)
 import metrics  # noqa: E402
+import boxio  # noqa: E402  (leitura/escrita sem seguir symlink; E7 item 7)
 
 SCHEMA_VERSION = 1
 
 
-def load(path: str, default=None):
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return default
+def load(path: str, default=None, max_bytes: int = 16 << 20):
+    # Sem seguir symlink: estes arquivos ficam em $out/ e agent-logs/, onde o
+    # agente pôde plantar symlinks para arquivos do host (docs/verificacoes/E7.md).
+    return boxio.read_json_nofollow(path, max_bytes=max_bytes, default=default)
 
 
 def main() -> int:
@@ -32,7 +31,9 @@ def main() -> int:
     meta = load(os.path.join(run_dir, "meta.json"), {})
     checks = load(os.path.join(run_dir, "checks.json"))
     resources = load(os.path.join(run_dir, "resources.json"), {})
-    agent_metrics = load(os.path.join(run_dir, "agent-logs", "agent-metrics.json"))
+    # agent-metrics.json é fornecido pelo harness (conteúdo do agente): leitura
+    # sem seguir symlink e com teto pequeno (E7 item 7).
+    agent_metrics = load(os.path.join(run_dir, "agent-logs", "agent-metrics.json"), max_bytes=boxio.MAX_JSON)
     llm = metrics.delta(os.path.join(run_dir, "metrics.before.prom"), os.path.join(run_dir, "metrics.after.prom"))
     llm["warmup"] = load(os.path.join(run_dir, "warmup.json"))  # null = não feito (harness de teste ou EVAL_WARMUP=0)
 
@@ -94,9 +95,9 @@ def main() -> int:
             "kernel": meta.get("kernel"),
         },
     }
-    with open(os.path.join(run_dir, "result.json"), "w") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    # Escrita sem seguir symlink (um $out/result.json plantado como symlink não
+    # é seguido): temporário exclusivo + os.replace (E7 item 7).
+    boxio.write_json_atomic(os.path.join(run_dir, "result.json"), result)
     return 0
 
 

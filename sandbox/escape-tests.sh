@@ -385,6 +385,84 @@ else
     info "llama-server real não respondeu em $real/health; teste com o servidor real pulado"
 fi
 
+echo "-- item 7 (docs/verificacoes/E7.md): host não segue symlinks do agente"
+# R1: processamento de saída no host (boxio + result.py), do jeito que o eval/run.sh
+# faz depois do agente, contra um $out/agent-logs com symlinks plantados apontando
+# para arquivos do host. Prova leitura e sobrescrita arbitrárias BLOQUEADAS.
+reg="$scratch/item7"; mkdir -p "$reg"
+vitima_r="$reg/vitima-leitura.txt"; printf 'SEGREDO_HOST_LEITURA\n' >"$vitima_r"
+vitima_w="$reg/vitima-escrita.sh"; printf 'conteudo-original-do-bashrc\n' >"$vitima_w"
+vitima_w_sum="$(sha256sum <"$vitima_w")"
+out="$reg/out"; work="$reg/work"; mkdir -p "$out" "$work/agent-logs"
+# (a) leitura: agent-metrics.json como symlink -> arquivo do host (direto na agent-logs,
+#     que o agente controla) e, redundante, dentro de $out.
+ln -s "$vitima_r" "$work/agent-logs/agent-metrics.json"
+# (b) escrita: result.json e meta.json como symlink -> arquivo do host (o que um
+#     box_post/box_check comprometido plantaria em $out).
+ln -s "$vitima_w" "$out/result.json"
+ln -s "$vitima_w" "$out/meta.json"
+ln -s "$vitima_r" "$out/agent-logs"   # symlink de diretório, para o caso dir-symlink
+printf '{"checks":[],"status":"pass","pass":true}\n' >"$scratch/checks-src.json"
+LIB="$REPO_ROOT/eval/lib"
+# exatamente os passos do run.sh: copia de logs, varredura de symlinks, meta, result.
+python3 -I "$LIB/boxio.py" copy-logs "$work/agent-logs" "$out/agent-logs" 2>/dev/null || true
+python3 -I "$LIB/boxio.py" sanitize "$out" >/dev/null 2>&1 || true
+cp "$scratch/checks-src.json" "$out/checks.json"
+EVAL_LIB="$LIB" python3 -I - "$out/meta.json" <<'PY'
+import os, sys; sys.path.insert(0, os.environ["EVAL_LIB"]); import boxio
+boxio.write_json_atomic(sys.argv[1], {"run_id":"r","harness":"h","task_id":"S","setup_ok":True})
+PY
+python3 -I "$LIB/result.py" "$out" >/dev/null 2>&1 || true
+expect_ok "vítima de escrita intacta (sem sobrescrita via symlink)" test "$(sha256sum <"$vitima_w")" = "$vitima_w_sum"
+expect_ok "result.json é arquivo regular, não symlink" sh -c '[ -f "'"$out"'/result.json" ] && [ ! -L "'"$out"'/result.json" ]'
+expect_ok "meta.json é arquivo regular, não symlink" sh -c '[ -f "'"$out"'/meta.json" ] && [ ! -L "'"$out"'/meta.json" ]'
+if grep -q SEGREDO_HOST_LEITURA "$out/result.json" 2>/dev/null; then
+    bad "conteúdo do host NÃO vazou para result.json"
+else ok "conteúdo do host NÃO vazou para result.json"; fi
+expect_empty "nenhum symlink restante em \$out" "$(find "$out" -type l 2>/dev/null | head -3)"
+expect_ok "vítima de leitura intacta" test "$(cat "$vitima_r")" = SEGREDO_HOST_LEITURA
+
+# R2: a captura do diff (box_post) roda com o workdir só leitura e SEM $out montado;
+# nem o fsmonitor/filtro do .git/config do agente nem qualquer código alcança o host.
+echo "-- item 7: captura do diff (box_post) contida, com .git/config malicioso"
+mrepo="$scratch/malrepo"; mkdir -p "$mrepo"
+git -C "$mrepo" init -q -b main
+printf 'hook() { : ; }\n' >"$mrepo/a.txt"
+git -C "$mrepo" add a.txt
+git -C "$mrepo" -c user.name=t -c user.email=t@localhost commit -qm base
+base_ref="$(git -C "$mrepo" rev-parse HEAD)"
+canary_box="$reg/CANARIO-DO-BOX"   # caminho do host; não montado no box_post
+evil="$mrepo/.git/evil.sh"
+cat >"$evil" <<EOF
+#!/bin/sh
+echo PWNED > "$canary_box"
+true
+EOF
+chmod +x "$evil"
+# Vetor do item 6/7: fsmonitor roda no git add/status. A captura o desliga com
+# -c core.fsmonitor=false (precedência da linha de comando); e mesmo se rodasse,
+# o workdir é só leitura e $out não é montado, então não alcançaria o host.
+git -C "$mrepo" config core.fsmonitor "$evil"
+git -C "$mrepo" config core.hooksPath "$mrepo/.git/hooks-evil"
+printf 'mudanca do agente\n' >>"$mrepo/a.txt"
+post_tar="$reg/diff.tar"
+LLM_BASE_URL="http://127.0.0.1:1" "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills --ro "$mrepo" -- bash -c '
+    set -e; wd="$1"; ref="$2"; base="$3"
+    t="$(mktemp -d)"; trap "rm -rf \"$t\"" EXIT
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+    export GIT_INDEX_FILE="$t/index" GIT_OBJECT_DIRECTORY="$t/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES="$wd/.git/objects"
+    mkdir -p "$t/objects"
+    gf="-c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.fileMode=false -c core.autocrlf=false -c core.attributesFile=/dev/null -c core.pager=cat"
+    git -C "$wd" $gf add -A >/dev/null 2>&1 || true
+    git -C "$wd" $gf diff --cached --binary --no-ext-diff --no-textconv "$ref" >"$t/agent.patch" 2>/dev/null || :
+    git -C "$wd" $gf diff --cached --numstat --no-ext-diff "$ref" >"$t/numstat.txt" 2>/dev/null || :
+    git -C "$wd" $gf rev-list --count "$base..HEAD" >"$t/commits.txt" 2>/dev/null || echo 0 >"$t/commits.txt"
+    tar -C "$t" -cf - agent.patch numstat.txt commits.txt' \
+    _ "$mrepo" "$base_ref" "$base_ref" >"$post_tar" 2>/dev/null || true
+expect_fail "fsmonitor/filtro do agente NÃO escreveu no host" test -e "$canary_box"
+ns="$(python3 -I "$LIB/boxio.py" extract-diff "$post_tar" "$reg" | tail -n +2)"
+expect_ok "o diff ainda foi capturado apesar do .git/config hostil" sh -c 'grep -q "mudanca do agente" "'"$reg"'/agent.patch"'
+
 echo "-- timeout do eval derruba o container"
 t0=$SECONDS
 timeout -k 5 3 "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills -- sleep 120 >/dev/null 2>&1

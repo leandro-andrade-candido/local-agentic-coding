@@ -115,11 +115,13 @@ Com `EVAL_WRAPPER`, o `run.sh` usa três containers novos por execução. O setu
 | Passo | Montado (fora isso, nada do host) | Rede |
 |---|---|---|
 | Agente (`agents/<h>/run.sh`) | workdir e log-dir (leitura e escrita); `prompt.md`, `agents/` e o perfil base de skills (só leitura) | só o llama-server, pelo encaminhador |
-| Captura do diff (`git add -A`/`diff`/`rev-list`) | workdir e pasta do resultado | nenhuma |
+| Captura do diff (`git add -A`/`diff`/`rev-list`) | só o workdir, **só leitura** | nenhuma |
 | Verificações (`check.sh`) | workdir e pasta do resultado; `eval/lib`, `eval/repos`, a pasta da tarefa e o ambiente limpo de dependências (só leitura) | nenhuma |
 
 - **O agente nunca vê `eval/`** (testes ocultos, soluções, gabaritos e outras execuções). A exceção são os harnesses de teste de `eval/harnesses/` (como o `fake-oracle`), que não usam LLM e leem as soluções por definição; para eles, `eval/` entra só leitura.
 - **Depois do agente, o host não executa nada do workdir.** Os testes ocultos importam o código que o agente escreveu, e o `git` do host executaria um `core.fsmonitor` ou filtro plantado no `.git/config` do workdir. Por isso a captura do diff e as verificações também rodam em containers, criados depois que o container do agente já foi removido.
+- **A captura do diff monta o workdir só leitura e não monta a pasta do resultado**, roda o git com a config do agente neutralizada (`core.fsmonitor=false`, `core.hooksPath=/dev/null`, `--no-ext-diff --no-textconv`, config de sistema/global ignorada; objetos e índice num tmpfs do container) e devolve o diff pela stdout. Assim, código do agente que rode nessa etapa não enxerga nem escreve em nenhum caminho do host.
+- **O host nunca segue symlinks do agente** (`eval/lib/boxio.py`, correção do item 7 de `docs/verificacoes/E7.md`): `agent-logs` é copiada só com arquivos regulares; `$out` é varrido (todo symlink apagado) antes de qualquer leitura/escrita; `agent-metrics.json` é lido com `O_NOFOLLOW` e teto de tamanho; `result.json` e `meta.json` são escritos por arquivo temporário + `os.replace` (não seguem um symlink plantado no lugar).
 - O timeout continua valendo: o `timeout` do `run.sh` encerra o wrapper, que remove o container.
 - O fuso do host (`TZ`) é repassado ao container, porque os testes do chrono dependem dele.
 - `meta.json` registra o wrapper em `sandbox`.
@@ -341,7 +343,7 @@ Ponta a ponta com o harness `fake-oracle`:
 
 ## Limitações conhecidas
 
-- **Isolamento.** Sem `EVAL_WRAPPER`, o agente roda no host. O workdir fica fora do repositório e o agente não recebe nenhum caminho para `eval/`, mas um agente que vasculhe o disco pode achar `hidden/` e `solution.patch`. Com `EVAL_WRAPPER=sandbox/run-in-box.sh` (E7), o container do agente monta só o workdir, o log-dir, o prompt e `agents/`. Os resultados não são à prova de um agente que ataque o próprio placar: o código dele roda nas verificações, com a pasta do resultado montada.
+- **Isolamento.** Sem `EVAL_WRAPPER`, o agente roda no host. O workdir fica fora do repositório e o agente não recebe nenhum caminho para `eval/`, mas um agente que vasculhe o disco pode achar `hidden/` e `solution.patch`. Com `EVAL_WRAPPER=sandbox/run-in-box.sh` (E7), o container do agente monta só o workdir, o log-dir, o prompt e `agents/`. O processamento de saída no host não segue symlinks plantados pelo agente (ver `eval/lib/boxio.py` e a seção "No container"). Os resultados ainda não são à prova de um agente que ataque o próprio placar: nas verificações o código dele roda com a pasta do resultado montada e pode alterar o `checks.json` daquela execução — mas não consegue mais ler nem sobrescrever arquivos do host por fora dela.
 - **Contaminação.** Os dois projetos são públicos e os modelos podem tê-los visto. T2, T5 e T7 usam bugs plantados que não existem no upstream. T3 e T6 pedem recursos inexistentes. T4 tem o risco maior: o arquivo de teste removido existe no GitHub.
 - **T5:** um relatório correto que não cite `parseDuration` nem `addDuration` pelo nome reprova na parte automática. A causa raiz em si é sempre conferida por pessoa.
 - **Skills:** a detecção depende do formato de transcript de cada agente, ainda não conferido com execuções reais, e os marcadores do K3 não foram conferidos com a v6.4.1 (seção "Skills").

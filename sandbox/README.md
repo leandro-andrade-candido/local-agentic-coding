@@ -9,7 +9,7 @@ comum (`agents/lib/guard.py`) são a segunda camada. Esta pasta é a primeira.
 | Verificação | Resultado |
 |---|---|
 | `sandbox/build.sh` | imagem `agent-box:latest` com 2,89 GB (camada dos agentes: 1,63 GB); os 5 tarballs conferem com o `versions.env`, e o `--version` de cada um sai com 0 |
-| `sandbox/escape-tests.sh` | 137 de 137: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 8 no host |
+| `sandbox/escape-tests.sh` | 145 de 145: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 16 no host (8 deles de regressão do item 7: host não segue symlinks do agente) |
 | Eval com `fake-oracle` pelo wrapper | S1 (pytest, 1360 + 3 testes) passa; S2 (jest, 753 + 3 testes) passa; S3 com `sleep:60` e `EVAL_TIMEOUT_S=5` sai com 124, `timed_out: true`, sem container, encaminhador ou pasta temporária sobrando |
 | Sandbox do Codex no container | `codex sandbox -- true` falha: `bwrap: No permissions to create a new namespace` (esperado; ver abaixo) |
 | Trava do perfil autonomous (`agents/lib/common.sh`) | liberada no container (`AGENT_BOX=1` e `/.dockerenv`), recusada no host |
@@ -153,7 +153,7 @@ lado do host.
   git -c core.fsmonitor=false -c core.hooksPath=/dev/null diff --ignore-submodules=all
   ```
 
-- **No eval** não há `--protect-git`, para não mudar o comportamento medido. Em vez disso, o host não roda git no workdir depois do agente: a captura do diff roda num container.
+- **No eval** não há `--protect-git`, para não mudar o comportamento medido. Em vez disso, o host não roda git no workdir depois do agente: a captura do diff roda num container, com o workdir só leitura, sem a pasta do resultado montada e com a config do agente neutralizada; o diff sai pela stdout. E todo o processamento de saída no host (`eval/lib/boxio.py`) não segue symlinks plantados pelo agente — ver `docs/verificacoes/E7.md`, item 7.
 
 ### Codex e os sandboxes próprios dos agentes
 
@@ -198,7 +198,7 @@ lado do host.
   Revise o diff antes, ou rode no container (`agent-shell.sh shell`).
 - **Dados sensíveis dentro do projeto montado.** `.env` ou credenciais no remoto do `.git/config` (`https://token@...`) ficam visíveis ao agente. Sem rede, ele não as envia para fora, mas pode copiá-las para logs ou para o código.
 - **Abuso do llama-server.** O agente pode chamar qualquer rota, gerar texto à vontade e ocupar o slot único.
-- **Integridade do placar do eval** diante de um agente que ataque as verificações: o código dele roda nos testes ocultos, com a pasta do resultado montada. A barreira protege o host, não a nota.
+- **Integridade do placar do eval** diante de um agente que ataque as verificações: o código dele roda nos testes ocultos, com a pasta do resultado daquela execução montada, e pode forjar o `checks.json` dela. A barreira protege o host, não a nota. O que já está contido: o processamento de saída no host não segue mais symlinks do agente (`eval/lib/boxio.py`), então ele não lê nem sobrescreve arquivos do host por fora da pasta do resultado (correção do item 7 de `docs/verificacoes/E7.md`).
 - **Falhas do kernel, do runc ou do Docker** (escape de container). O container é rootful e sem `userns-remap`, mas o processo roda com o mesmo UID sem privilégios do usuário, sem capabilities e com seccomp. Uma falha dessas daria acesso ao usuário do host, não a root, salvo uma segunda falha de escalada.
 - **O wrapper morto com SIGKILL** antes da limpeza (por exemplo, o `-k 30` do timeout, se o SIGTERM não bastar). O container pode sobrar. Confira com `docker ps --filter label=local-agentic.agent-box` e remova com `docker rm -f`.
 
