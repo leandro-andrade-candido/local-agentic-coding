@@ -30,6 +30,7 @@ sandbox/agent-shell.sh shell        ~/caminho/do/projeto   # bash no mesmo conta
 
 - **O que o container enxerga:** só a pasta do projeto, montada com escrita; sem internet, sem suas credenciais e sem push. A rede alcança apenas o servidor do modelo.
 - **Skills do Superpowers:** já vêm montadas. Chame uma pelo nome, por exemplo pedindo para usar a skill `brainstorming`. Para skills suas, use `--skills-dir <pasta>` antes do nome do agente.
+- **Rede externa (internet, DNS, APIs):** desligada por padrão. Para liberar numa sessão, coloque `--net` antes do nome do agente, por exemplo `sandbox/agent-shell.sh --net codex-local ~/projeto`. O modelo local continua acessível. Com rede, o agente pode baixar pacotes e acessar APIs, mas também pode enviar para fora o que estiver montado: use só em projetos sem dados sensíveis e acompanhe a sessão. Na suíte de validação e no modo autônomo, mantenha sem rede.
 - **Primeiro uso:** se a imagem não existir, rode `sandbox/build.sh` (~2,9 GB).
 - **Push:** faça você mesmo, fora do container, depois de revisar o diff.
 

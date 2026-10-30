@@ -41,7 +41,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
 
-rw=() ro=() extra_env=() protect=() skills=() cwd="" llm=1 tty=0 use_skills=1
+rw=() ro=() extra_env=() protect=() skills=() cwd="" llm=1 tty=0 use_skills=1 net="${BOX_NETWORK:-none}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --rw) rw+=("${2:?--rw sem caminho}"); shift 2 ;;
@@ -53,6 +53,7 @@ while [ $# -gt 0 ]; do
         --protect-git) protect+=("${2:?--protect-git sem caminho}"); shift 2 ;;
         --skills-dir) skills+=("${2:?--skills-dir sem caminho}"); shift 2 ;;
         --no-skills) use_skills=0; shift ;;
+        --net) net=bridge; shift ;;
         --) shift; break ;;
         -h|--help) box_usage "$0"; exit 0 ;;
         *) box_die "opção desconhecida: $1 (o comando vem depois de --)" ;;
@@ -249,12 +250,14 @@ elif [ "$llm" = 1 ]; then
     envs+=(-e "LLM_BASE_URL=http://127.0.0.1:$port$path" -e "BOX_LLM_PORT=$port")
 fi
 
+[ "$net" = none ] || echo "agent-box: AVISO: rede externa liberada (--network $net). O agente pode acessar a internet e enviar o que estiver montado." >&2
+
 # --- container --------------------------------------------------------------------
 uid="$(id -u)" gid="$(id -g)" mem="${BOX_MEMORY:-8g}"
 run=(docker run --rm --init --pull never --runtime runc
      --name "$cname" --label "$BOX_LABEL=1" --hostname agent-box
      --user "$uid:$gid"
-     --network none
+     --network "$net"
      --read-only
      --tmpfs "/tmp:rw,exec,nosuid,nodev,size=${BOX_TMP_SIZE:-4g},mode=1777"
      --tmpfs "/var/tmp:rw,exec,nosuid,nodev,size=512m,mode=1777"

@@ -5,6 +5,7 @@
 #   agente: qwen-code | pi | opencode | claude-local | codex-local
 #   shell:  bash no container, com o mesmo isolamento (para rodar testes, git, etc.)
 #   --skills-dir: skills pessoais, só leitura em /opt/skills/extra-N (repetível)
+#   --net: libera rede externa (internet/DNS). Padrão: sem rede, só o modelo local.
 #
 # - Monta <projeto> com leitura e escrita no mesmo caminho absoluto; nada mais da
 #   HOME do host. agents/ entra só leitura (lançadores e configuração).
@@ -27,7 +28,8 @@ source "$(dirname "$(readlink -f "$0")")/lib.sh"
 
 usage() { box_usage "$0" >&2; exit 2; }
 box_args=()
-while [ "${1:-}" = --skills-dir ]; do
+while [ "${1:-}" = --skills-dir ] || [ "${1:-}" = --net ]; do
+    if [ "$1" = --net ]; then box_args+=(--net); shift; continue; fi
     box_args+=(--skills-dir "${2:?--skills-dir sem caminho}")
     shift 2
 done
