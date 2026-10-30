@@ -109,8 +109,15 @@ if [ -n "${EVAL_WRAPPER:-}" ]; then
     # (fsmonitor/filtros/hooks), mesmo se executar aqui, não enxerga nem escreve em
     # nenhum caminho do host; o diff sai pela stdout (tar) e o host grava com boxio.
     box_post=("$EVAL_WRAPPER" --no-llm --no-skills --ro "$wd" --)
-    box_check=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" --rw "$out" \
-               --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --ro "$deps_env" --)
+    # Verificações: $out NÃO é montado (o código do agente roda nos testes ocultos e
+    # forjaria checks.json/veredito se pudesse escrevê-lo). O grader (eval/lib, a pasta
+    # da tarefa com hidden/ e solução) entra só leitura; o transcrito já higienizado
+    # ($out/agent-logs) entra só leitura. O resultado sai por um tar na stdout e o host
+    # grava checks.json com boxio. box_check_mounts são passados ao wrapper; o comando
+    # (check.sh) é montado pela chamada contida mais abaixo.
+    box_check=("$EVAL_WRAPPER" --no-llm --no-skills --rw "$wd" \
+               --ro "$EVAL_DIR/lib" --ro "$EVAL_DIR/repos" --ro "$task_dir" --ro "$deps_env" \
+               --ro "$out/agent-logs" --)
 fi
 
 agent_rc=""; timed_out=false; agent_wall_s=""
@@ -174,10 +181,30 @@ if $setup_ok; then
     # 5. Verificações ocultas.
     log "verificações ocultas"
     t0=$(date +%s.%N)
-    "${box_check[@]}" "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
-        --deps-env "$deps_env" --agent-logs "$out/agent-logs" --skills-dirs "$skills_seen" \
-        >"$out/check.stdout" 2>"$out/check.stderr" 9>&-
-    check_rc=$?
+    if [ -n "${EVAL_WRAPPER:-}" ]; then
+        # No container, sem $out montado: o check.sh grava num tmpfs do container e o
+        # resultado sai num tar pela stdout. O host grava checks.json/check.log com boxio,
+        # então o veredito vem do grader, não de um checks.json que o agente pudesse plantar.
+        check_tar="$work/checks.tar"
+        "${box_check[@]}" bash -c '
+            set -u
+            od="$(mktemp -d)"
+            "$1" "$2" --baseline "$3" --out "$od/checks.json" --log "$od/check.log" \
+                --deps-env "$4" --agent-logs "$5" --skills-dirs "$6" \
+                >"$od/check.stdout" 2>"$od/check.stderr"
+            echo $? >"$od/check.rc"
+            [ -e "$od/check.log" ] || : >"$od/check.log"
+            tar -C "$od" -cf - checks.json check.log check.stdout check.stderr check.rc 2>/dev/null' \
+            _ "$task_dir/check.sh" "$wd" "$baseline" "$deps_env" "$out/agent-logs" "$skills_seen" \
+            9>&- >"$check_tar" || log "aviso: container das verificações saiu com erro"
+        check_rc="$($EVAL_PY "$here/lib/boxio.py" extract-checks "$check_tar" "$out")"
+        rm -f "$check_tar"
+    else
+        "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
+            --deps-env "$deps_env" --agent-logs "$out/agent-logs" --skills-dirs "$skills_seen" \
+            >"$out/check.stdout" 2>"$out/check.stderr" 9>&-
+        check_rc=$?
+    fi
     check_s=$(python3 -c "import sys;print(round($(date +%s.%N)-$t0,1))")
 fi
 finished_at="$(date -Iseconds)"

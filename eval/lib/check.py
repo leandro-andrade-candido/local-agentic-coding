@@ -51,8 +51,27 @@ def log(msg: str) -> None:
     print(f"[check] {msg}", file=sys.stderr, flush=True)
 
 
+# O git do grader roda sobre o workdir do agente, que tem um .git/config sob controle
+# dele. Neutraliza o que executaria código do agente (fsmonitor, hooks) ou leria config
+# de fora, para que o agente não altere as operações do grader (E7, item 7).
+GIT_HARDENING = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+                 "-c", "core.autocrlf=false", "-c", "protocol.ext.allow=never"]
+
+
+def _git_env() -> dict:
+    env = dict(os.environ)
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null",
+               GIT_CONFIG_SYSTEM="/dev/null", GIT_TERMINAL_PROMPT="0")
+    return env
+
+
+def git_run(wd: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *GIT_HARDENING, "-C", wd, *args],
+                          capture_output=True, text=True, env=_git_env())
+
+
 def git(wd: str, *args: str, check: bool = True) -> str:
-    res = subprocess.run(["git", "-C", wd, *args], capture_output=True, text=True)
+    res = git_run(wd, *args)
     if check and res.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {res.stderr.strip()}")
     return res.stdout
@@ -371,7 +390,7 @@ def check_mutation(ctx, spec) -> dict:
     killed, rows = 0, []
     for m in mutants:
         name = os.path.basename(m)
-        ap = subprocess.run(["git", "-C", wd, "apply", m], capture_output=True, text=True)
+        ap = git_run(wd, "apply", m)
         if ap.returncode != 0:
             rows.append({"mutant": name, "killed": None, "error": ap.stderr.strip()[:200]})
             continue

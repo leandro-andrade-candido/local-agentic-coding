@@ -9,7 +9,7 @@ comum (`agents/lib/guard.py`) são a segunda camada. Esta pasta é a primeira.
 | Verificação | Resultado |
 |---|---|
 | `sandbox/build.sh` | imagem `agent-box:latest` com 2,89 GB (camada dos agentes: 1,63 GB); os 5 tarballs conferem com o `versions.env`, e o `--version` de cada um sai com 0 |
-| `sandbox/escape-tests.sh` | 145 de 145: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 16 no host (8 deles de regressão do item 7: host não segue symlinks do agente) |
+| `sandbox/escape-tests.sh` | 150 de 150: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 21 no host (13 de regressão do item 7: host não segue symlinks do agente; box_post e box_check não deixam o agente forjar o placar) |
 | Eval com `fake-oracle` pelo wrapper | S1 (pytest, 1360 + 3 testes) passa; S2 (jest, 753 + 3 testes) passa; S3 com `sleep:60` e `EVAL_TIMEOUT_S=5` sai com 124, `timed_out: true`, sem container, encaminhador ou pasta temporária sobrando |
 | Sandbox do Codex no container | `codex sandbox -- true` falha: `bwrap: No permissions to create a new namespace` (esperado; ver abaixo) |
 | Trava do perfil autonomous (`agents/lib/common.sh`) | liberada no container (`AGENT_BOX=1` e `/.dockerenv`), recusada no host |
@@ -198,7 +198,7 @@ lado do host.
   Revise o diff antes, ou rode no container (`agent-shell.sh shell`).
 - **Dados sensíveis dentro do projeto montado.** `.env` ou credenciais no remoto do `.git/config` (`https://token@...`) ficam visíveis ao agente. Sem rede, ele não as envia para fora, mas pode copiá-las para logs ou para o código.
 - **Abuso do llama-server.** O agente pode chamar qualquer rota, gerar texto à vontade e ocupar o slot único.
-- **Integridade do placar do eval** diante de um agente que ataque as verificações: o código dele roda nos testes ocultos, com a pasta do resultado daquela execução montada, e pode forjar o `checks.json` dela. A barreira protege o host, não a nota. O que já está contido: o processamento de saída no host não segue mais symlinks do agente (`eval/lib/boxio.py`), então ele não lê nem sobrescreve arquivos do host por fora da pasta do resultado (correção do item 7 de `docs/verificacoes/E7.md`).
+- **Integridade do placar do eval:** as verificações rodam **sem a pasta do resultado montada**. O `check.sh` grava num tmpfs do container e devolve o resultado por um tar na stdout; o host grava o `checks.json` a partir do veredito do grader, não de um arquivo que o código do agente pudesse plantar. O grader (`eval/lib`), a tarefa (com `hidden/` e a solução) e o transcrito entram só leitura; o código do agente só roda nos subprocessos de teste, separados do grader. O processamento de saída no host não segue symlinks do agente (`eval/lib/boxio.py`). Resíduo conhecido: nos testes que o próprio agente escreve (T4/S3), o código dele roda no mesmo processo do pytest/jest e poderia forjar o relatório daquele processo; fechar isso exige isolar mais o runner. Correções do item 7 de `docs/verificacoes/E7.md`.
 - **Falhas do kernel, do runc ou do Docker** (escape de container). O container é rootful e sem `userns-remap`, mas o processo roda com o mesmo UID sem privilégios do usuário, sem capabilities e com seccomp. Uma falha dessas daria acesso ao usuário do host, não a root, salvo uma segunda falha de escalada.
 - **O wrapper morto com SIGKILL** antes da limpeza (por exemplo, o `-k 30` do timeout, se o SIGTERM não bastar). O container pode sobrar. Confira com `docker ps --filter label=local-agentic.agent-box` e remova com `docker rm -f`.
 
@@ -262,4 +262,4 @@ Abertas:
 - **apt por snapshot** (`snapshot.ubuntu.com`) para a imagem ser reproduzível bit a bit.
 - **Lockfile npm** por agente, para fixar também as dependências transitivas.
 - **Imagem menor:** o OpenCode instala as variantes comum e `baseline` (205 MB cada; a `baseline` é para CPUs sem AVX2), e o Qwen Code traz o Bun (103 MB) como dependência opcional. Dá para remover no build, ao custo de diferir da instalação no host.
-- **Isolar a escrita das verificações:** montar só `checks.json`/`check.log`, e não a pasta do resultado inteira.
+- **Isolar mais o runner de testes** (T4/S3): hoje o código que o agente escreve roda no mesmo processo do pytest/jest e poderia forjar o relatório daquele processo. Rodar cada arquivo de teste num sub-sandbox sem `/tmp` compartilhado, ou validar o relatório contra IDs de teste esperados, fecharia o resíduo.

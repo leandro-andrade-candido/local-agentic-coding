@@ -463,6 +463,38 @@ expect_fail "fsmonitor/filtro do agente NÃO escreveu no host" test -e "$canary_
 ns="$(python3 -I "$LIB/boxio.py" extract-diff "$post_tar" "$reg" | tail -n +2)"
 expect_ok "o diff ainda foi capturado apesar do .git/config hostil" sh -c 'grep -q "mudanca do agente" "'"$reg"'/agent.patch"'
 
+# R3: integridade do placar. box_check roda código do agente (os testes ocultos importam
+# o código dele), mas $out NÃO é montado: o agente não consegue forjar o checks.json do
+# host; o veredito vem do grader (processo separado, montado só leitura) via stdout.
+echo "-- item 7: box_check não pode forjar o veredito nem alterar o grader"
+bc="$reg/boxcheck"; mkdir -p "$bc/wd" "$bc/out"
+canary_bc="$bc/CANARIO-BOXCHECK"
+out_host="$bc/out"
+"$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills --rw "$bc/wd" --ro "$REPO_ROOT/eval/lib" -- bash -c '
+    set -u
+    oh="$1"; grader="$2"; canary="$3"
+    # (a) código do agente tenta forjar o checks.json do host, plantar symlink e sair:
+    mkdir -p "$oh" 2>/dev/null && echo FORJADO_PASS >"$oh/checks.json" 2>/dev/null || true
+    ln -s /etc/passwd "$oh/result.json" 2>/dev/null || true
+    echo PWNED >"$canary" 2>/dev/null || true
+    # (b) tenta alterar o grader (montado só leitura) antes de ele rodar:
+    echo "AGENT_WUZ_HERE=1" >>"$grader/check.py" 2>/dev/null || true
+    # o grader (processo separado) emite o veredito REAL num tmpfs, pela stdout:
+    od="$(mktemp -d)"
+    printf "%s\n" "{\"task_id\":\"X\",\"status\":\"fail\",\"pass\":false,\"checks\":[]}" >"$od/checks.json"
+    : >"$od/check.log"; : >"$od/check.stdout"; : >"$od/check.stderr"; echo 1 >"$od/check.rc"
+    tar -C "$od" -cf - checks.json check.log check.stdout check.stderr check.rc' \
+    _ "$out_host" "$REPO_ROOT/eval/lib" "$canary_bc" 9>&- >"$bc/checks.tar" 2>/dev/null || true
+python3 -I "$LIB/boxio.py" extract-checks "$bc/checks.tar" "$out_host" >/dev/null 2>&1 || true
+expect_fail "box_check não escreveu o canário no host" test -e "$canary_bc"
+expect_ok "grader (check.py) intacto (montado só leitura)" sh -c '! grep -q AGENT_WUZ_HERE "'"$REPO_ROOT"'/eval/lib/check.py"'
+if grep -q FORJADO_PASS "$out_host/checks.json" 2>/dev/null; then
+    bad "checks.json forjado pelo agente NÃO foi persistido"
+else ok "checks.json forjado pelo agente NÃO foi persistido"; fi
+expect_ok "veredito persistido é o do grader (fail)" \
+    sh -c 'python3 -I -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get(\"status\")==\"fail\" else 1)" "'"$out_host"'/checks.json"'
+expect_ok "result.json do host não virou symlink" sh -c '[ ! -L "'"$out_host"'/result.json" ]'
+
 echo "-- timeout do eval derruba o container"
 t0=$SECONDS
 timeout -k 5 3 "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills -- sleep 120 >/dev/null 2>&1

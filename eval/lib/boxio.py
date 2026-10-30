@@ -175,8 +175,39 @@ def extract_diff(tar_path: str, out_dir: str) -> tuple[str, str]:
     return numstat, commits
 
 
+def extract_checks(tar_path: str, out_dir: str) -> str:
+    """Lê o tar das verificações (checks.json, check.log, check.stdout, check.stderr,
+    check.rc), emitido no container onde $out NÃO é montado, e grava cada arquivo em
+    out_dir com o escritor seguro — assim o host, e não o código do agente, escreve o
+    veredito. Devolve o código de saída do check.sh (texto)."""
+    want = {"checks.json", "check.log", "check.stdout", "check.stderr", "check.rc"}
+    caps = {"checks.json": MAX_PATCH, "check.log": MAX_PATCH, "check.stdout": MAX_JSON,
+            "check.stderr": MAX_JSON, "check.rc": 16}
+    got, rc = {}, "2"
+    try:
+        with tarfile.open(tar_path, "r:") as tf:
+            for m in tf.getmembers():
+                if m.name not in want or not m.isreg():
+                    continue
+                f = tf.extractfile(m)
+                got[m.name] = (f.read(caps[m.name] + 1)[:caps[m.name]] if f else b"")
+    except (OSError, tarfile.TarError):
+        pass
+    for name in ("checks.json", "check.log", "check.stdout", "check.stderr"):
+        if name in got:
+            write_bytes_atomic(os.path.join(out_dir, name), got[name])
+    if "check.rc" in got:
+        v = got["check.rc"].decode("utf-8", "replace").strip()
+        if v.lstrip("-").isdigit():
+            rc = v
+    return rc
+
+
 def _main(argv: list[str]) -> int:
     cmd = argv[1] if len(argv) > 1 else ""
+    if cmd == "extract-checks":
+        sys.stdout.write(extract_checks(argv[2], argv[3]))
+        return 0
     if cmd == "extract-diff":
         numstat, commits = extract_diff(argv[2], argv[3])
         sys.stdout.write(commits + "\n")   # linha 1 = commits; o resto = numstat
