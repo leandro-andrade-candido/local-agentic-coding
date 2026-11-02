@@ -30,6 +30,7 @@ sandbox/agent-shell.sh shell        ~/caminho/do/projeto   # bash no mesmo conta
 
 - **O que o container enxerga:** só a pasta do projeto, montada com escrita; sem internet, sem suas credenciais e sem push. A rede alcança apenas o servidor do modelo.
 - **Skills do Superpowers:** já vêm montadas. Chame uma pelo nome, por exemplo pedindo para usar a skill `brainstorming`. Para skills suas, use `--skills-dir <pasta>` antes do nome do agente.
+- **Projeto com UI (skill `frontend-design` da Anthropic):** rode uma vez `scripts/fetch-skills.sh frontend` e depois `sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend claude-local ~/projeto`. Peça pelo nome ("use a skill frontend-design para…") ou cite-a no `AGENTS.md`. Sem `--net`, fontes e pacotes externos não baixam; o agente precisa usar o que estiver no projeto.
 - **Rede externa (internet, DNS, APIs):** desligada por padrão. Para liberar numa sessão, coloque `--net` antes do nome do agente, por exemplo `sandbox/agent-shell.sh --net codex-local ~/projeto`. O modelo local continua acessível. Com rede, o agente pode baixar pacotes e acessar APIs, mas também pode enviar para fora o que estiver montado: use só em projetos sem dados sensíveis e acompanhe a sessão. Na suíte de validação e no modo autônomo, mantenha sem rede.
 - **Primeiro uso:** se a imagem não existir, rode `sandbox/build.sh` (~2,9 GB).
 - **Push:** faça você mesmo, fora do container, depois de revisar o diff.
@@ -114,4 +115,4 @@ Os dados brutos estão em `logs/e5-raciocinio/` (fora do git). A decisão está 
 - **llama.cpp:** troque `LLAMA_CPP_BUILD` e os hashes em `versions.env`, rode `scripts/install-llama-cpp.sh` e depois `scripts/llm restart`. Para voltar atrás, restaure o valor anterior; o build antigo continua no disco.
 - **Modelos:** adicione a linha em `models.tsv` (com revisão do HF e SHA-256) e rode `scripts/fetch-model.sh <alias>`.
 - **Agentes:** atualize as versões em `agents/versions.env` e rode `sandbox/build.sh`.
-- **Skills:** atualize `SUPERPOWERS_*` em `versions.env` e rode `scripts/fetch-skills.sh`.
+- **Skills:** atualize `SUPERPOWERS_*` ou `ANTHROPIC_SKILLS_COMMIT` em `versions.env` e rode `scripts/fetch-skills.sh base frontend`.

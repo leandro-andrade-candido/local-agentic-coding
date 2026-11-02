@@ -215,6 +215,9 @@ copia ou lista as skills para cada agente e gera o bootstrap.
   e `SOURCE`. Tudo só leitura. As referências cruzadas das skills do perfil
   (`subagent-driven-development/scripts`, `requesting-code-review/code-reviewer.md`,
   `using-superpowers/references`) ficam dentro do próprio perfil.
+- **Perfis extras:** `scripts/fetch-skills.sh frontend` monta `profiles/frontend/`
+  (`anthropic:frontend-design`, de `anthropics/skills` no commit fixado, só a pasta da
+  skill, com seu `LICENSE.txt`). Entra no agente com `--skills-dir`.
 - **Sob demanda nos cinco:** no prompt entram só nome e descrição de cada skill; o
   corpo é carregado quando o modelo decide ou quando a skill é chamada pelo nome
   (sintaxe por agente na tabela de comparação).
