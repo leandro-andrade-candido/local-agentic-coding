@@ -30,9 +30,9 @@ sandbox/agent-shell.sh shell        ~/caminho/do/projeto   # bash no mesmo conta
 
 - **O que o container enxerga:** só a pasta do projeto, montada com escrita; sem internet, sem suas credenciais e sem push. A rede alcança apenas o servidor do modelo.
 - **Skills do Superpowers:** já vêm montadas. Chame uma pelo nome, por exemplo pedindo para usar a skill `brainstorming`. Para skills suas, use `--skills-dir <pasta>` antes do nome do agente.
-- **Projeto com UI (skill `frontend-design` da Anthropic):** rode uma vez `scripts/fetch-skills.sh frontend` e depois `sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend claude-local ~/projeto`. Peça pelo nome ("use a skill frontend-design para…") ou cite-a no `AGENTS.md`. Sem `--net`, fontes e pacotes externos não baixam; o agente precisa usar o que estiver no projeto.
+- **Projeto com UI (skills `frontend-design` e `webapp-testing` da Anthropic):** rode uma vez `scripts/fetch-skills.sh frontend` e depois `sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend claude-local ~/projeto`. Peça pelo nome ("use a skill frontend-design para…"; "valide a entrega com a skill webapp-testing: suba o app, percorra o fluxo, tire prints em desktop e celular e verifique erros no console") ou cite-as no `AGENTS.md`. A `webapp-testing` usa o Playwright e o Chromium da imagem, funciona sem rede e julga a tela pelo DOM e pelo console; os prints ficam para você conferir. Sem `--net`, fontes e pacotes externos não baixam; o agente precisa usar o que estiver no projeto.
 - **Rede externa (internet, DNS, APIs):** desligada por padrão. Para liberar numa sessão, coloque `--net` antes do nome do agente, por exemplo `sandbox/agent-shell.sh --net codex-local ~/projeto`. O modelo local continua acessível. Com rede, o agente pode baixar pacotes e acessar APIs, mas também pode enviar para fora o que estiver montado: use só em projetos sem dados sensíveis e acompanhe a sessão. Na suíte de validação e no modo autônomo, mantenha sem rede.
-- **Primeiro uso:** se a imagem não existir, rode `sandbox/build.sh` (~2,9 GB).
+- **Primeiro uso:** se a imagem não existir, rode `sandbox/build.sh` (~4 GB).
 - **Push:** faça você mesmo, fora do container, depois de revisar o diff.
 
 ## 2.1 Começar um projeto novo com brainstorm

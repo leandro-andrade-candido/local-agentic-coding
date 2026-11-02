@@ -2,3 +2,5 @@
 #   sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend <agente> <projeto>
 # Prefixo anthropic: = anthropics/skills fixado em versions.env; sem prefixo = Superpowers.
 anthropic:frontend-design
+# Valida no navegador (Playwright + Chromium do agent-box): sobe o app, navega, print, console.
+anthropic:webapp-testing

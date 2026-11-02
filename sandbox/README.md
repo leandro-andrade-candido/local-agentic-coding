@@ -25,7 +25,7 @@ Ainda falta ver, com os agentes de verdade na E6, o que está em "Pendências".
 
 | Arquivo | Função |
 |---|---|
-| `Dockerfile` | Imagem `agent-box`: Ubuntu 24.04 fixado por digest, Node 24.22.2, Python 3.12, uv 0.12.13, git, ripgrep, fd, jq e os 5 agentes |
+| `Dockerfile` | Imagem `agent-box`: Ubuntu 24.04 fixado por digest, Node 24.22.2, Python 3.12, uv 0.12.13, git, ripgrep, fd, jq, Playwright 1.64.1 com Chromium headless e os 5 agentes |
 | `install-agents.sh` | Instala os agentes no build; confere o sha512 de cada tarball contra `agents/versions.env` |
 | `build.sh` | Constrói a imagem com o UID/GID de quem roda e o rótulo das versões |
 | `run-in-box.sh` | Roda um comando num container novo, com as montagens pedidas e nada mais |
@@ -228,6 +228,7 @@ Não aponte um para o outro.
 - **Base:** `ubuntu:24.04@sha256:24737cef…3573c`, publicada em 25/10/2026. É Ubuntu, e não Debian slim, porque o Python 3.12 do sistema fica em `/usr/bin/python3.12`, o mesmo caminho do host. Assim, os `.venv` que o eval cria no host com `uv venv --python 3.12` funcionam dentro do container sem recriar nada.
 - **Node 24.22.2 (LTS):** tarball oficial conferido pelo sha256 do `SHASUMS256.txt`. O host está na 24.21.0, anterior à versão de segurança 24.22.1.
 - **uv 0.12.13:** tarball do GitHub conferido pelo sha256 publicado.
+- **Playwright 1.64.1 (Python):** venv em `/opt/playwright`, instalado de `playwright-requirements.txt` com `--require-hashes`; só o Chromium headless shell em `/opt/ms-playwright`, com as libs e fontes do sistema (`--with-deps`), cerca de +1,1 GB na imagem. O download do Chromium é conferido pelo próprio Playwright, não por um hash nosso. `python` chama esse venv; `python3` segue sendo o do sistema. Serve à skill `webapp-testing` (perfil `frontend`). Para regenerar: `echo playwright==<versão> | uv pip compile - --generate-hashes --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --no-header -o sandbox/playwright-requirements.txt`.
 - **Agentes:** `npm pack` de cada pacote, com o sha512 do arquivo comparado ao `*_INTEGRITY` de `agents/versions.env` antes do `npm install`.
   - As dependências, inclusive os binários nativos das dependências opcionais (Codex, OpenCode, Claude Code), vêm do registro, e o npm confere cada uma contra o integrity publicado.
   - Elas não estão fixadas por lockfile.

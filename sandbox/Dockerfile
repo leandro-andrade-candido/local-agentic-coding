@@ -56,6 +56,23 @@ RUN set -eux; \
     rm /tmp/uv.tar.gz; \
     uv --version
 
+# Navegador para validar a entrega na interface (skill webapp-testing, perfil frontend):
+# Playwright para Python num venv próprio, com hashes conferidos, e só o Chromium
+# headless shell (o modo headless=True usa ele), com as libs e fontes do sistema.
+# `python` (que o Ubuntu não tem) chama esse venv; `python3` continua sendo o do sistema.
+# O Playwright não liga o sandbox do Chromium por padrão (o container já isola).
+COPY playwright-requirements.txt /tmp/playwright-requirements.txt
+RUN set -eux; \
+    uv venv -q --python /usr/bin/python3.12 /opt/playwright; \
+    uv pip install -q --python /opt/playwright/bin/python --require-hashes \
+        -r /tmp/playwright-requirements.txt; \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+        /opt/playwright/bin/playwright install --with-deps --only-shell chromium; \
+    printf '#!/bin/sh\nexec /opt/playwright/bin/python "$@"\n' > /usr/local/bin/python; \
+    chmod 0755 /usr/local/bin/python; \
+    chmod -R a+rX /opt/ms-playwright; \
+    rm -rf /tmp/playwright-requirements.txt /root/.cache /var/lib/apt/lists/*
+
 # Agentes nas versões fixadas, com o tarball conferido (install-agents.sh).
 COPY versions.env install-agents.sh /tmp/agents-build/
 RUN set -eux; \
@@ -92,7 +109,8 @@ ENV HOME=/home/agent \
     NO_UPDATE_NOTIFIER=1 \
     DO_NOT_TRACK=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    UV_PYTHON_DOWNLOADS=never
+    UV_PYTHON_DOWNLOADS=never \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 
 LABEL local-agentic.agent-box="1" \
       local-agentic.agents-versions="${AGENTS_VERSIONS_SHA}" \
