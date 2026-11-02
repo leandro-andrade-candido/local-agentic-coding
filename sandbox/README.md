@@ -128,7 +128,7 @@ lado do host.
 | Camada | Origem no host | No container |
 |---|---|---|
 | Base | `$SKILLS_PREFIX/profiles/base` (`SKILLS_PREFIX` do `versions.env` da raiz; a variável de ambiente sobrepõe), materializado por `scripts/fetch-skills.sh` | `/opt/skills/base`, só leitura |
-| Pessoais | `--skills-dir <dir>` (repetível) ou `BOX_SKILLS_DIRS=dir1:dir2` | `/opt/skills/extra-1`, `extra-2`..., só leitura |
+| Perfis extras e pessoais | `--skills-dir <dir>` (repetível) ou `BOX_SKILLS_DIRS=dir1:dir2`; ex.: `$SKILLS_PREFIX/profiles/frontend` | `/opt/skills/extra-1`, `extra-2`..., só leitura |
 | Projeto | `.agents/skills`, `.claude/skills` do repositório | vêm com o workdir/projeto (leitura e escrita, como o resto dele) |
 
 - `AGENT_SKILLS_DIRS` lista as pastas montadas em `/opt/skills`, separadas por `:` (vazia se nenhuma). Os lançadores e `run.sh` dos agentes decidem como cada agente as carrega (ver `skills/README.md`).

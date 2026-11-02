@@ -216,8 +216,10 @@ copia ou lista as skills para cada agente e gera o bootstrap.
   (`subagent-driven-development/scripts`, `requesting-code-review/code-reviewer.md`,
   `using-superpowers/references`) ficam dentro do próprio perfil.
 - **Perfis extras:** `scripts/fetch-skills.sh frontend` monta `profiles/frontend/`
-  (`anthropic:frontend-design`, de `anthropics/skills` no commit fixado, só a pasta da
-  skill, com seu `LICENSE.txt`). Entra no agente com `--skills-dir`.
+  (`anthropic:frontend-design` e `anthropic:webapp-testing`, de `anthropics/skills` no
+  commit fixado, só as pastas das skills, cada uma com seu `LICENSE.txt`). Entra no
+  agente com `--skills-dir`. A `webapp-testing` usa o Playwright e o Chromium da
+  imagem agent-box (`python`, não `python3`).
 - **Sob demanda nos cinco:** no prompt entram só nome e descrição de cada skill; o
   corpo é carregado quando o modelo decide ou quando a skill é chamada pelo nome
   (sintaxe por agente na tabela de comparação).
@@ -315,7 +317,7 @@ A E7 vem antes: o perfil autonomous roda pelo agent-box. Em ordem, para cada age
   só menciona `git push` ou `sudo`, inclusive em heredoc de documentação). No modo
   autonomous o shell escreve em qualquer lugar; quem segura é o container.
 - **Skills custam prompt:** ~50–150 tokens por skill mais o bootstrap, em todo prompt;
-  o perfil base tem 13 skills.
+  o perfil base tem 13 skills e o `frontend`, 2.
 - **Pi sem permissões:** a extensão é a única camada além do container; ela só vê
   as ferramentas `bash`, `write` e `edit`.
 - **Prefill longo** (~100k tokens a 500–1000 tok/s = 2 a 3 min sem bytes): os
@@ -335,7 +337,7 @@ A E7 vem antes: o perfil autonomous roda pelo agent-box. Em ordem, para cada age
 | `lib/agent_metrics.py` | `agent-metrics.json` a partir do `events.jsonl` |
 | `lib/skills.py` | `AGENT_SKILLS_DIRS`: diretórios, cópia, overlays de config e bootstrap |
 | `<agente>/superpowers-tools.md` | mapa de ferramentas do bootstrap (Qwen Code, Pi, OpenCode) |
-| `../scripts/fetch-skills.sh` | baixa o Superpowers fixado e monta o perfil base |
+| `../scripts/fetch-skills.sh` | baixa as skills fixadas (Superpowers, `anthropics/skills`) e monta os perfis (`base`, `frontend`) |
 | `lib/guard.py` | guarda de comandos de shell comum |
 | `lib/test-guard.sh` | casos de teste da guarda |
 | `<agente>/` | config base e perfis, `env.sh`, `run.sh`, lançador interativo, README |

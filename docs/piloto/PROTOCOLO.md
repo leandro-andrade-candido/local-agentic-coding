@@ -13,7 +13,7 @@ O piloto é variável: cada execução escolhe uma das duas formas.
 | A. Projeto existente | Repositório real, com cópia ou worktree montado no container | F1 = Entendimento do código |
 | B. Projeto novo | Narrativa do autor: dores, público, entregas de valor esperadas | F1 = Brainstorm (skill `brainstorming`): perguntas, 2 ou 3 abordagens, documento de desenho aprovado pelo autor |
 
-Nas duas formas, o fluxo segue as skills do perfil base (`skills/profiles/base.txt`): `brainstorming` → `writing-plans` → `subagent-driven-development` ou `executing-plans` → `requesting-code-review` → `finishing-a-development-branch`. Contratos e serviços de um projeto novo nascem na F3 (especificação).
+Nas duas formas, o fluxo segue as skills do perfil base (`skills/profiles/base.txt`): `brainstorming` → `writing-plans` → `subagent-driven-development` ou `executing-plans` → `requesting-code-review` → `finishing-a-development-branch`. Contratos e serviços de um projeto novo nascem na F3 (especificação). Em projeto com interface, monta-se também o perfil `frontend` (`frontend-design` para o visual e `webapp-testing` para validar no navegador).
 
 ## Entradas
 
@@ -34,7 +34,7 @@ Cada fase produz um arquivo numa branch própria da cópia. Os pontos de aprova�
 | F3. Especificação | `SPEC.md`: desenho, arquivos afetados, dados e migrações, mudanças de API, plano de testes, riscos | O autor aprova |
 | F4. Tarefas | `TAREFAS.md`: tarefas pequenas, em ordem, cada uma com critério de pronto | — |
 | F5. Implementação | Código e testes tarefa a tarefa, com um commit por tarefa e testes rodando a cada passo | — |
-| F6. Entrega | Build, suíte completa, lint, execução local e verificação ponta a ponta do fluxo novo. `ENTREGA.md` diz o que mudou, como verificar e o que ficou de fora | O autor testa e aceita ou recusa |
+| F6. Entrega | Build, suíte completa, lint, execução local e verificação ponta a ponta do fluxo novo (com interface: no navegador, pela skill `webapp-testing`, com prints de desktop e celular e sem erros no console). `ENTREGA.md` diz o que mudou, como verificar e o que ficou de fora | O autor testa e aceita ou recusa |
 | F7. Revisão | Revisão do próprio diff numa sessão nova (ou com o modelo revisor), seguida das correções | — |
 
 ## Métricas

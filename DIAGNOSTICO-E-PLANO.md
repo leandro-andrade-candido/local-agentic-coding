@@ -392,7 +392,7 @@ Repositórios usados:
    - A E5 inclui uma checagem antes de iniciar que avisa quando há outro processo usando a GPU.
 
 9. **Fluxo no estilo Superpowers e pilotos variáveis (29/10).** O autor quer partir de um prompt (narrativa de dores e entregas de valor, ou um projeto existente) e chegar a specs, plano de tarefas, contratos e serviços, como faz hoje com Claude Code + Superpowers: brainstorm, agentes paralelos e revisores.
-   - **Skills como perfis montáveis**, sem lista fixa (ver `skills/README.md`). A base é o Superpowers v6.4.1 (MIT), fixado em `versions.env`, com 13 skills em `skills/profiles/base.txt`, incluindo `finishing-a-development-branch`. A esses se somam as skills do projeto e as pessoais. O Superpowers traz adaptações oficiais para Codex e Pi.
+   - **Skills como perfis montáveis**, sem lista fixa (ver `skills/README.md`). A base é o Superpowers v6.4.1 (MIT), fixado em `versions.env`, com 13 skills em `skills/profiles/base.txt`, incluindo `finishing-a-development-branch`. A esses se somam as skills do projeto e as pessoais. O Superpowers traz adaptações oficiais para Codex e Pi. **Atualização (02/11):** perfil extra `frontend` com `frontend-design` e `webapp-testing` da Anthropic (`anthropics/skills` fixado por commit) e Playwright + Chromium na imagem agent-box; `mattpocock/skills` avaliado e não adotado (sobreposição com o Superpowers e subagentes em paralelo contra o servidor de slot único).
    - **Duas formas de entrada no piloto:** projeto existente ou projeto novo a partir da narrativa. O projeto novo pode ter prioridade.
    - **E6** mede as skills por agente: carregamento sob demanda, acionamento automático e chamada explícita.
    - **E8** mede:
