@@ -1,6 +1,6 @@
 # Guia de uso manual
 
-Como ligar, usar e testar o ambiente sozinho. Os comandos rodam a partir de `~/me/local`. Estado em 30/10/2026: veja a tabela de etapas no [README](README.md).
+Como ligar, usar e testar o ambiente sozinho. Os comandos rodam a partir de `~/me/local`. Estado em 03/11/2026: veja a tabela de etapas no [README](README.md).
 
 ## 1. Ligar e desligar o modelo
 
@@ -10,14 +10,29 @@ scripts/llm start       # sobe o serviço (~35 s); não sobe sozinho no boot
 scripts/llm health      # 13 checagens; todas devem dar "ok"
 scripts/llm status      # estado do serviço
 scripts/llm logs -f     # log ao vivo
-scripts/llm stop        # libera GPU e ~22 GB de RAM
+scripts/llm stop        # libera a GPU e a RAM (~22 GB com o Q4, ~29 GB com o Q6)
 ```
 
 - **Antes de usar:** feche jogos e o NVIDIA Broadcast. O pré-voo avisa quando há outro processo na GPU.
 - **Execuções longas:** mantenha um terminal do WSL aberto, porque o serviço pode parar quando o último terminal fecha.
 - **Para os agentes:** `eval "$(scripts/llm env)"` exporta `LLM_BASE_URL` e `LLM_API_KEY`. A chave fica em `~/.config/local-agentic/llm-api-key`; não a coloque em arquivos do projeto.
 
-**Desempenho medido** (E4, verificado): ler um prompt de 20 mil tokens do zero leva ~16 s, e um turno seguinte, ~1 s. A geração fica em 33–37 tok/s com contexto curto e cai para ~21 tok/s com 120 mil tokens.
+**Desempenho medido** (E4, verificado, versão Q4): ler um prompt de 20 mil tokens do zero leva ~16 s, e um turno seguinte, ~1 s. A geração fica em 33–37 tok/s com contexto curto e cai para ~21 tok/s com 120 mil tokens.
+
+## 1.1 Trocar a versão do modelo (Q4 ou Q6)
+
+```bash
+scripts/llm model                    # lista os modelos do models.tsv: instalado? em uso (*)?
+scripts/llm model qwen3.6-35b-q6     # escolhe o Q6 (29,3 GB); vale no próximo start/restart
+scripts/llm restart && scripts/llm health
+scripts/llm model --reset            # volta ao padrão (Q4, qwen3.6-35b)
+```
+
+- **O que muda:** só o arquivo carregado. O nome na API continua `qwen3.6-35b`, então nenhum agente precisa ser reconfigurado. O mesmo perfil (`runtime/llama-server.args`) vale para as duas versões, porque é o mesmo modelo. Use essa troca só entre variantes do Qwen3.6-35B. Outro modelo exigiria outro perfil.
+- **Onde fica a escolha:** `~/.config/local-agentic/model`, fora do git. O serviço também lê esse arquivo. `LLM_SERVER_MODEL=<alias>` tem prioridade, mas só no início à mão.
+- **Q6 em relação ao Q4:** em tese um pouco melhor, com relatos de chamadas de ferramenta mais estáveis. Estimativa sem medição: geração 10–25% mais lenta (~24–28 tok/s com 20 mil tokens) e leitura do prompt ~900–1.100 tok/s. Usa ~7 GB a mais de RAM fixada.
+- **RAM:** modelo (~28 GiB) + `--cache-ram` (12 GiB) + ~4 GiB ficam perto do limite de ~50 GB do WSL, e o pré-voo pode avisar. Se houver swap, reduza `--cache-ram` para `8192` no perfil e ajuste o valor esperado (`scripts/llm health` compara com o servidor).
+- **Para medir como na E4 (servidor parado):** `scripts/llm stop`, depois `MODEL=~/models/Qwen3.6-35B-A3B-UD-Q6_K.gguf bench/04-final.sh agent Q6-agent` e o mesmo com `tg Q6-tg`; compare com `bench/RESULTADOS-E4.md`. Para a qualidade, rode a mesma tarefa (por exemplo S1–S3) com o mesmo agente nas duas versões.
 
 ## 2. Usar um agente num projeto (interativo, isolado)
 
@@ -67,7 +82,7 @@ O push você faz fora do container.
 - **Chame as skills pelo nome.** O acionamento automático é menos confiável que no Claude.
 - **Comece novas sessões a cada fase.** Contexto curto deixa o modelo mais rápido e mais preciso; o documento de desenho e o plano em `docs/` levam o estado de uma fase para a outra.
 - **Planejamento aberto é o ponto mais fraco do modelo local.** Se o desenho sair raso, uma opção é fazer o brainstorm com um modelo mais forte e executar o plano localmente.
-- **Não testado:** esse fluxo ainda não rodou com o modelo de verdade, porque a E6 não foi executada. O primeiro uso é também o teste.
+- **Pouco testado:** um primeiro uso manual em 02/11 funcionou, mas sem métricas, e a comparação formal (E6) ainda não foi executada.
 
 ## 3. Testar o ambiente
 
@@ -106,13 +121,14 @@ Os dados brutos estão em `logs/e5-raciocinio/` (fora do git). A decisão está 
 | Hardware, llama.cpp, modelo, perfil de desempenho (E0–E4) | verificado de forma independente |
 | Servidor como serviço, chave, CORS, rotas desligadas (E5) | saúde 13/13; bateria completa de tool calling e verificação independente pendentes; 26 de 27 chamadas OK na bateria parcial |
 | Container (E7) | 150/150 testes de fuga; furo do host corrigido; reverificação adversária da correção pendente |
-| Configuração dos 5 agentes, skills | revisão estática feita; nunca rodaram com o modelo de verdade |
+| Configuração dos 5 agentes, skills | revisão estática feita; primeiro uso manual em 02/11 sem problemas relatados; sem medição formal |
 | Suíte de validação | validada sem modelo (13/13) |
 | Comparação de agentes (E6), validação completa e pilotos (E8) | não executados |
+| Versão Q6 do modelo | baixada e com hash conferido em 03/11; desempenho e qualidade não medidos |
 
 ## 6. Atualizar
 
 - **llama.cpp:** troque `LLAMA_CPP_BUILD` e os hashes em `versions.env`, rode `scripts/install-llama-cpp.sh` e depois `scripts/llm restart`. Para voltar atrás, restaure o valor anterior; o build antigo continua no disco.
-- **Modelos:** adicione a linha em `models.tsv` (com revisão do HF e SHA-256) e rode `scripts/fetch-model.sh <alias>`.
+- **Modelos:** adicione a linha em `models.tsv` (com revisão do HF e SHA-256), rode `scripts/fetch-model.sh <alias>` e escolha com `scripts/llm model <alias>` (seção 1.1).
 - **Agentes:** atualize as versões em `agents/versions.env` e rode `sandbox/build.sh`.
 - **Skills:** atualize `SUPERPOWERS_*` ou `ANTHROPIC_SKILLS_COMMIT` em `versions.env` e rode `scripts/fetch-skills.sh base frontend`.

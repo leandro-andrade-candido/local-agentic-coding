@@ -7,7 +7,13 @@
 #
 # Variáveis aceitas do ambiente (prefixo LLM_, para não cair na limpeza de LLAMA_*):
 #   LLM_API_KEY_FILE   arquivo da chave (padrão ~/.config/local-agentic/llm-api-key)
-#   LLM_SERVER_MODEL   alias do models.tsv a carregar (padrão: o -a do perfil da E4)
+#   LLM_SERVER_MODEL   alias do models.tsv a carregar; vale sobre a escolha gravada por
+#                      `scripts/llm model <alias>` (padrão: o -a do perfil da E4)
+#
+# Dois nomes diferentes:
+#   - nome na API (llm_api_alias): sempre o -a do perfil (qwen3.6-35b); é o que os agentes
+#     mandam no campo "model", e não muda quando se troca a quantização;
+#   - item do models.tsv (llm_model_alias): qual arquivo GGUF carregar (ex.: qwen3.6-35b-q6).
 
 LOCAL_AGENTIC_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck source=../versions.env
@@ -21,16 +27,29 @@ LLAMA_SERVER_ENV_FILE="$LOCAL_AGENTIC_REPO/runtime/llama-server.env"
 LLAMA_SERVER_ARGS_PY="$LOCAL_AGENTIC_REPO/runtime/llama-server-args.py"
 LLM_API_KEY_FILE="${LLM_API_KEY_FILE:-$HOME/.config/local-agentic/llm-api-key}"
 LLM_SERVICE="llama-server.service"
+# Escolha do modelo gravada por `scripts/llm model` (fora do git; lida também pelo serviço).
+LLM_MODEL_CHOICE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/local-agentic/model"
 LLM_BASE_URL_LOCAL="http://$LLAMA_SERVER_HOST:$LLAMA_SERVER_PORT"
 
-# Alias do modelo: LLM_SERVER_MODEL ou o primeiro valor de -a/--alias do perfil.
+# Nome do modelo na API: o primeiro valor de -a/--alias do perfil.
+llm_api_alias() {
+  awk '/^[[:space:]]*#/ {next} ($1 == "-a" || $1 == "--alias") {split($2, a, ","); print a[1]; exit}' \
+    "$LLAMA_SERVER_PROFILE"
+}
+
+# Item do models.tsv a carregar: LLM_SERVER_MODEL, senão a escolha gravada, senão o nome na API.
 llm_model_alias() {
   if [ -n "${LLM_SERVER_MODEL:-}" ]; then
     printf '%s\n' "$LLM_SERVER_MODEL"
     return
   fi
-  awk '/^[[:space:]]*#/ {next} ($1 == "-a" || $1 == "--alias") {split($2, a, ","); print a[1]; exit}' \
-    "$LLAMA_SERVER_PROFILE"
+  local choice=""
+  [ -f "$LLM_MODEL_CHOICE_FILE" ] && choice="$(sed -n '1{s/[[:space:]]//g;p}' "$LLM_MODEL_CHOICE_FILE")"
+  if [ -n "$choice" ]; then
+    printf '%s\n' "$choice"
+    return
+  fi
+  llm_api_alias
 }
 
 # Preenche MODEL_ALIAS, MODEL_PATH e MODEL_BYTES a partir do models.tsv.

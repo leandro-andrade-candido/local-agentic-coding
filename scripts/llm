@@ -15,6 +15,10 @@
 #                        política no servidor: chave exigida, CORS, /props, /slots, /tools
 #   preflight            scripts/preflight.sh
 #   dry-run              linha de comando final, sem iniciar (runtime/llama-server-start.sh --dry-run)
+#   model [<alias>|--reset]
+#                        sem argumento: lista os modelos do models.tsv (instalado? em uso?);
+#                        com alias: grava a escolha (vale no próximo start/restart);
+#                        --reset: volta ao padrão do perfil. O nome na API não muda.
 #   env                  linhas export para os agentes: eval "$(scripts/llm env)"
 #   test [opções]        scripts/tool_calls.py contra o servidor, JSON em logs/tool_calls-<data>.json
 #   wait-ready [--timeout S]
@@ -29,7 +33,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_FILE="$UNIT_DIR/$LLM_SERVICE"
 
 die() { echo "erro: $*" >&2; exit 2; }
-usage() { sed -n '2,24p' "$0"; }
+usage() { sed -n '2,28p' "$0"; }
 
 require_key() {
   [ -f "$LLM_API_KEY_FILE" ] || die "chave ausente: $LLM_API_KEY_FILE (crie com: scripts/llm key)"
@@ -213,7 +217,7 @@ cmd_env() {
   [ $# -eq 0 ] || die "uso: llm env"
   require_key
   local alias
-  alias="$(llm_model_alias)"
+  alias="$(llm_api_alias)"
   printf 'export LLM_BASE_URL=%q\n' "$LLM_BASE_URL_LOCAL"
   printf 'export LLM_MODEL=%q\n' "$alias"
   # A chave é lida na hora do eval; a saída deste comando não a contém.
@@ -222,13 +226,47 @@ cmd_env() {
   printf 'export LOCAL_LLM_API_KEY="$LLM_API_KEY"\n'
 }
 
+cmd_model() {
+  local tsv="$REPO/models.tsv"
+  case "${1:-}" in
+    "")
+      local current; current="$(llm_model_alias)"
+      echo "modelo escolhido: $current (nome na API: $(llm_api_alias))"
+      [ -n "${LLM_SERVER_MODEL:-}" ] && echo "  (vem de LLM_SERVER_MODEL; não vale para o serviço systemd)"
+      awk -F'\t' '!/^#/ && NF >= 7 {print $1 "\t" $4 "\t" $5 "\t" $7}' "$tsv" |
+        while IFS=$'\t' read -r a file bytes role; do
+          local mark="-" inst="falta baixar"
+          [ "$a" = "$current" ] && mark="*"
+          [ -f "$MODELS_DIR/$file" ] && inst="instalado"
+          printf '  %s %-16s %6.1f GB  %-13s %s\n' "$mark" "$a" "$(awk -v b="$bytes" 'BEGIN{print b/1e9}')" "$inst" "$role"
+        done
+      ;;
+    --reset)
+      [ $# -eq 1 ] || die "uso: llm model [<alias>|--reset]"
+      rm -f "$LLM_MODEL_CHOICE_FILE"
+      echo "escolha apagada: volta a $(llm_model_alias); vale no próximo scripts/llm restart"
+      ;;
+    -*) die "uso: llm model [<alias>|--reset]" ;;
+    *)
+      [ $# -eq 1 ] || die "uso: llm model [<alias>|--reset]"
+      local file
+      file="$(awk -F'\t' -v a="$1" '!/^#/ && $1 == a {print $4; exit}' "$tsv")"
+      [ -n "$file" ] || die "alias '$1' não está em models.tsv"
+      [ -f "$MODELS_DIR/$file" ] || echo "aviso: $MODELS_DIR/$file ainda não existe (scripts/fetch-model.sh $1)" >&2
+      (umask 077 && mkdir -p "$(dirname "$LLM_MODEL_CHOICE_FILE")") || die "não consegui criar $(dirname "$LLM_MODEL_CHOICE_FILE")"
+      printf '%s\n' "$1" > "$LLM_MODEL_CHOICE_FILE"
+      echo "modelo escolhido: $1 ($file); vale no próximo scripts/llm start/restart"
+      ;;
+  esac
+}
+
 cmd_test() {
   require_key
   local ts out rc=0
   ts="$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$REPO/logs"
   out="$REPO/logs/tool_calls-$ts.json"
-  python3 -I "$REPO/scripts/tool_calls.py" --base "$LLM_BASE_URL_LOCAL" --model "$(llm_model_alias)" \
+  python3 -I "$REPO/scripts/tool_calls.py" --base "$LLM_BASE_URL_LOCAL" --model "$(llm_api_alias)" \
     --api-key-file "$LLM_API_KEY_FILE" --json-out "$out" "$@" || rc=$?
   echo "resultado: $out (código $rc)"
   return "$rc"
@@ -254,7 +292,7 @@ cmd_health() {
   fi
   LLM_HEALTH_FIT_WARN="$fit_warn" LLM_HEALTH_EXPECTED="$expected" \
     python3 -I - "$LLM_BASE_URL_LOCAL" "$LLM_API_KEY_FILE" \
-    "$(llm_model_alias)" "$LLAMA_SERVER_PORT" <<'PY'
+    "$(llm_api_alias)" "$LLAMA_SERVER_PORT" <<'PY'
 import json, os, subprocess, sys, time, urllib.error, urllib.request
 
 base, key_file, alias, port = sys.argv[1:5]
@@ -410,6 +448,7 @@ case "$cmd" in
   health) cmd_health "$@" ;;
   preflight) exec "$REPO/scripts/preflight.sh" "$@" ;;
   dry-run) exec "$REPO/runtime/llama-server-start.sh" --dry-run ;;
+  model) cmd_model "$@" ;;
   env) cmd_env "$@" ;;
   test) cmd_test "$@" ;;
   wait-ready) cmd_wait_ready "$@" ;;

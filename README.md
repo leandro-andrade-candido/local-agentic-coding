@@ -3,7 +3,7 @@
 Ambiente de desenvolvimento com agentes de IA rodando localmente, com modelos e ferramentas open source, sem custo recorrente de API.
 
 - **Runtime:** llama.cpp (`llama-server`).
-- **Modelo principal:** Qwen3.6-35B-A3B, em modo híbrido: experts na RAM, atenção na GPU RTX 5050.
+- **Modelo principal:** Qwen3.6-35B-A3B, em modo híbrido: experts na RAM, atenção na GPU RTX 5050. Padrão em Q4 (UD-Q4_K_XL, medido na E4); variante Q6 (UD-Q6_K) disponível para teste com `scripts/llm model`.
 - **Agente:** escolhido por teste entre Qwen Code, Codex CLI, Pi e OpenCode, todos com o modelo local. O Claude Code com o modelo local fica como alternativa.
 
 **Para usar e testar manualmente, comece pelo [GUIA-DE-USO.md](GUIA-DE-USO.md).**
@@ -22,7 +22,7 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | E5 | llama-server como serviço | em andamento: serviço instalado e saudável; bateria de tool calling parcial (ver `docs/etapas/E5.md`) |
 | E7 | Container, permissões, hooks (roda antes da E6) | concluída; furo do host corrigido (150/150); reverificação adversária pendente |
 | E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
-| E8 | Validação (T1–T7 e piloto em projeto real privado) | suíte pronta e validada sem modelo; execução pendente |
+| E8 | Validação (T1–T7 e piloto em projeto real privado) | suíte pronta e validada sem modelo; primeiro uso manual em 02/11 (relato do usuário, sem métricas); execução formal pendente; Q6 baixado em 03/11 para teste manual |
 | E9 | Documentação de operação | pendente |
 
 ## Estrutura
@@ -30,8 +30,8 @@ O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estã
 | Caminho | Conteúdo |
 |---|---|
 | `versions.env` | Versões fixadas do runtime, porta e diretórios. É a fonte única para os scripts. |
-| `models.tsv` | Modelos com repositório, arquivo, tamanho e SHA-256. |
-| `scripts/` | Instalação e atualização (runtime, modelos). |
+| `models.tsv` | Modelos com repositório, arquivo, tamanho e SHA-256. O modelo carregado é escolhido com `scripts/llm model`. |
+| `scripts/` | Instalação e atualização (runtime, modelos, skills) e o comando `llm` do servidor. |
 | `runtime/` | Configuração do `llama-server` e unidade systemd (E5). |
 | `bench/` | Benchmarks e resultados resumidos (E4). |
 | `agents/` | Configuração de cada agente (E6). |
