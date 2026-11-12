@@ -1,6 +1,6 @@
 # Local agentic coding on an 8 GB GPU
 
-[![ci](https://github.com/leandro-andrade-candido/ai-local/actions/workflows/ci.yml/badge.svg)](https://github.com/leandro-andrade-candido/ai-local/actions/workflows/ci.yml)
+[![ci](https://github.com/leandro-andrade-candido/local-agentic-coding/actions/workflows/ci.yml/badge.svg)](https://github.com/leandro-andrade-candido/local-agentic-coding/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > 🇧🇷 Versão em português: [README.pt-BR.md](README.pt-BR.md). The detailed stage logs and verification reports are in Portuguese; the key findings are summarized in English below.
