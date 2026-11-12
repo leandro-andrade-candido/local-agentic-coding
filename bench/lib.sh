@@ -1,5 +1,5 @@
-# Funções e caminhos comuns aos scripts de benchmark da E4.
-# Uso: source "$(dirname "$0")/lib.sh"  (os scripts fazem isso sozinhos)
+# Functions and paths shared by the E4 benchmark scripts.
+# Usage: source "$(dirname "$0")/lib.sh"  (the scripts do this themselves)
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,7 @@ mkdir -p "$RAW"
 
 ts() { date +%Y%m%d-%H%M%S; }
 
-# Instantâneo do estado da GPU e da memória (PCIe, replays, clocks, VRAM, RAM).
+# Snapshot of the GPU and memory state (PCIe, replays, clocks, VRAM, RAM).
 snapshot() {
   echo "### $(date -Is)"
   nvidia-smi --query-gpu=name,temperature.gpu,clocks.sm,clocks.mem,power.draw,pcie.link.gen.current,pcie.link.width.current,memory.used,memory.total --format=csv
@@ -26,9 +26,9 @@ snapshot() {
   grep -E '^(MemTotal|MemFree|MemAvailable|Cached|AnonPages|Mlocked|SwapFree|Unevictable)' /proc/meminfo
 }
 
-# Amostrador de memória em segundo plano: 1 linha por segundo em CSV.
+# Background memory sampler: 1 line per second in CSV.
 # Colunas: epoch, vram_used_mib, gpu_util, temp, pcie_gen, mem_available_kib, swap_free_kib, rss_kib(pid), hwm_kib(pid)
-# Uso: start_sampler <arquivo.csv> [pid]; stop_sampler
+# Usage: start_sampler <file.csv> [pid]; stop_sampler
 start_sampler() {
   local out="$1" pid="${2:-}"
   (
@@ -52,14 +52,14 @@ stop_sampler() {
   if [ -n "${SAMPLER_PID:-}" ]; then kill "$SAMPLER_PID" 2>/dev/null || true; wait "$SAMPLER_PID" 2>/dev/null || true; SAMPLER_PID=""; fi
 }
 
-# Resumo de um CSV do amostrador: picos de VRAM/RSS e mínimo de RAM disponível.
+# Summary of a sampler CSV: VRAM/RSS peaks and minimum available RAM.
 sampler_summary() {
   awk -F, 'NR>1{ if($2>v)v=$2; if($8>r)r=$8; if($9>h)h=$9; if(m==""||$6<m)m=$6; if(s==""||$7<s)s=$7; if($4>t)t=$4 }
-    END{ printf "pico_vram_mib=%s pico_rss_mib=%.0f pico_hwm_mib=%.0f min_mem_available_mib=%.0f min_swap_free_mib=%.0f max_temp_c=%s\n", v, r/1024, h/1024, m/1024, s/1024, t }' "$1"
+    END{ printf "peak_vram_mib=%s peak_rss_mib=%.0f peak_hwm_mib=%.0f min_mem_available_mib=%.0f min_swap_free_mib=%.0f max_temp_c=%s\n", v, r/1024, h/1024, m/1024, s/1024, t }' "$1"
 }
 
-# Sobe o llama-server em segundo plano. Uso: start_server <log> [args extras...]
-# Define SERVER_PID. Variáveis de ambiente extras podem ser passadas via SERVER_ENV="A=1 B=2".
+# Starts llama-server in the background. Usage: start_server <log> [extra args...]
+# Sets SERVER_PID. Extra environment variables can be passed via SERVER_ENV="A=1 B=2".
 start_server() {
   local log="$1"; shift
   # shellcheck disable=SC2086
@@ -69,20 +69,20 @@ start_server() {
   echo "server pid=$SERVER_PID log=$log" >&2
 }
 
-# Espera o /health responder 200 (ou o processo morrer). Timeout em segundos.
+# Waits for /health to answer 200 (or the process to die). Timeout in seconds.
 wait_server() {
   local timeout="${1:-600}" t0; t0=$(date +%s)
   while :; do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "server morreu" >&2; return 1; fi
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "server died" >&2; return 1; fi
     if curl -fs "$BASE/health" >/dev/null 2>&1; then
-      echo "server pronto em $(( $(date +%s) - t0 )) s" >&2; return 0
+      echo "server ready in $(( $(date +%s) - t0 )) s" >&2; return 0
     fi
-    if (( $(date +%s) - t0 > timeout )); then echo "timeout esperando o server" >&2; return 1; fi
+    if (( $(date +%s) - t0 > timeout )); then echo "timeout waiting for the server" >&2; return 1; fi
     sleep 1
   done
 }
 
-# Encerra o servidor pelo PID salvo (nunca por padrão de nome).
+# Stops the server by the saved PID (never by name pattern).
 stop_server() {
   if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID"
@@ -93,5 +93,5 @@ stop_server() {
   SERVER_PID=""
 }
 
-# Flags fixas de todos os llama-bench da E4 (contexto do agente: FA + KV q8_0).
+# Fixed flags of all E4 llama-bench runs (agent context: FA + KV q8_0).
 BENCH_COMMON=(-m "$MODEL" -fa 1 -ctk q8_0 -ctv q8_0 -ngl 99 -o jsonl)

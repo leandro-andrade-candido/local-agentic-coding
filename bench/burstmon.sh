@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Registra os processos mais ativos quando a fila de execução passa de 14 threads
-# (detecta carga externa que contamina as medições). Uso: bench/burstmon.sh <arquivo> &
-# grava top processos quando a fila de execução passa de 14
+# Records the most active processes when the run queue exceeds 14 threads
+# (detects external load that contaminates the measurements). Usage: bench/burstmon.sh <file> &
 out="$1"
 while :; do
   r=$(awk '{split($4,a,"/"); print a[1]}' /proc/loadavg)

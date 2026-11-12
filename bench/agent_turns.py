@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Simula turnos de um agente de programação contra o llama-server (E4).
+"""Simulates the turns of a coding agent against llama-server (E4).
 
-Turno 1 (frio): system + ferramentas + um arquivo-fonte grande (~20k tokens no total).
-Turnos 2 e 3 (quentes): devolvem a resposta do modelo, anexam resultado de
-ferramenta + mensagem do usuário (~300-600 tokens) e medem quanto do prompt foi
-reprocessado (timings.prompt_n). Opcional (--detour): uma conversa paralela
-diferente e a volta à conversa principal, para testar o cache de prompt na RAM.
+Turn 1 (cold): system + tools + a large source file (~20k tokens in total).
+Turns 2 and 3 (warm): send back the model's reply, append a tool result +
+user message (~300-600 tokens) and measure how much of the prompt was
+reprocessed (timings.prompt_n). Optional (--detour): a different parallel
+conversation and the return to the main conversation, to test the prompt cache in RAM.
 
-Uso: python3 -I bench/agent_turns.py --out raw/04-agent.jsonl [--base URL] [--target 20000]
-Grava uma linha JSON por requisição; imprime um resumo.
+Usage: python3 -I bench/agent_turns.py --out raw/04-agent.jsonl [--base URL] [--target 20000]
+Writes one JSON line per request; prints a summary.
 """
 import argparse
 import json
@@ -143,7 +143,7 @@ def chat(base, messages, max_tokens, label, out, seed=1):
 
 
 def assistant_echo(msg):
-    """Mensagem do assistente como um agente a devolveria no próximo turno."""
+    """Assistant message as an agent would send it back on the next turn."""
     m = {"role": "assistant", "content": msg.get("content") or ""}
     if msg.get("reasoning_content"):
         m["reasoning_content"] = msg["reasoning_content"]
@@ -153,7 +153,7 @@ def assistant_echo(msg):
 
 
 def followup(msg, result, user_text):
-    """Mensagens anexadas após a resposta do modelo: resultado de ferramenta e/ou pedido do usuário."""
+    """Messages appended after the model's reply: tool result and/or user request."""
     extra = [assistant_echo(msg)]
     calls = msg.get("tool_calls") or []
     for c in calls:
@@ -167,12 +167,12 @@ def followup(msg, result, user_text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://127.0.0.1:9931")
-    ap.add_argument("--target", type=int, default=20000, help="tokens aproximados do prompt frio")
+    ap.add_argument("--target", type=int, default=20000, help="approximate tokens of the cold prompt")
     ap.add_argument("--file", default="/usr/lib/python3.12/argparse.py",
-                    help="um ou mais arquivos (separados por vírgula) colados no primeiro pedido")
+                    help="one or more files (comma-separated) pasted into the first request")
     ap.add_argument("--max-tokens", type=int, default=1200)
-    ap.add_argument("--detour", action="store_true", help="testa conversa paralela e volta")
-    ap.add_argument("--salt", default="", help="texto no início do system para forçar cache frio")
+    ap.add_argument("--detour", action="store_true", help="tests a parallel conversation and the return")
+    ap.add_argument("--salt", default="", help="text at the start of the system prompt to force a cold cache")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -188,21 +188,21 @@ def main():
     messages = [{"role": "system", "content": a.salt + SYSTEM}, {"role": "user", "content": user1}]
 
     with open(a.out, "a") as out:
-        m1 = chat(a.base, messages, a.max_tokens, "t1_frio", out)
+        m1 = chat(a.base, messages, a.max_tokens, "t1_cold", out)
         messages += followup(m1, TOOL_RESULT, "Focus on the first failure. Find where choices are validated against "
                                               "the default value and propose a minimal edit.")
-        m2 = chat(a.base, messages, a.max_tokens, "t2_quente", out)
+        m2 = chat(a.base, messages, a.max_tokens, "t2_warm", out)
         messages += followup(m2, "src/argparse_vendored.py:2510:        if action.choices is not None and value not in action.choices:\n"
                                  "src/argparse_vendored.py:2511:            args = {'value': value,\n" * 6,
                              "Good. Now apply the edit and rerun only the failing test.")
-        m3 = chat(a.base, messages, a.max_tokens, "t3_quente", out)
+        m3 = chat(a.base, messages, a.max_tokens, "t3_warm", out)
         if a.detour:
             side = [{"role": "system", "content": "You generate short titles."},
                     {"role": "user", "content": "Give a 5-word title for this conversation about fixing argparse "
                                                 "choices validation and a help formatter bug." * 20}]
-            chat(a.base, side, 30, "desvio_outra_conversa", out)
+            chat(a.base, side, 30, "detour_other_conversation", out)
             messages += followup(m3, "1 passed in 0.12s", "Great. Now look at the second failure.")
-            chat(a.base, messages, a.max_tokens, "t4_volta_do_desvio", out)
+            chat(a.base, messages, a.max_tokens, "t4_return_from_detour", out)
 
 
 if __name__ == "__main__":

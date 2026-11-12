@@ -1,64 +1,64 @@
-# Perfil do llama-server para Qwen3.6-35B-A3B-UD-Q4_K_XL nesta máquina (E4, 29/10/2026).
-# Medições e justificativas: bench/RESULTS-E4.md.
+# llama-server profile for Qwen3.6-35B-A3B-UD-Q4_K_XL on this machine (E4, 2026-10-29).
+# Measurements and rationale: bench/RESULTS-E4.md.
 #
-# Formato: uma flag por linha (flag e valor separados por espaço, sem aspas e sem
-# espaços dentro do valor), cada uma com um comentário logo acima. Linhas que começam
-# com # e linhas vazias são ignoradas.
-# Ficam de fora, para o wrapper da E5 acrescentar: -m (MODELS_DIR), --host e --port
-# (versions.env) e --api-key (segredo fora do git).
-# Variável de ambiente obrigatória: runtime/llama-server.env (GGML_OP_OFFLOAD_MIN_BATCH=1024).
+# Format: one flag per line (flag and value separated by a space, no quotes and no
+# spaces inside the value), each with a comment right above it. Lines starting
+# with # and blank lines are ignored.
+# Left out, for the E5 wrapper to add: -m (MODELS_DIR), --host and --port
+# (versions.env) and --api-key (secret kept out of git).
+# Required environment variable: runtime/llama-server.env (GGML_OP_OFFLOAD_MIN_BATCH=1024).
 
-# Nome do modelo exposto na API (usado pelos agentes no campo "model").
+# Model name exposed in the API (used by the agents in the "model" field).
 -a qwen3.6-35b
-# Um único slot: há um agente por vez; slots extras dividiriam contexto e cache.
+# A single slot: there is one agent at a time; extra slots would split context and cache.
 -np 1
-# Contexto de 131072 tokens; o KV ocupa 1360 MiB em q8_0 (só 10 das 40 camadas têm atenção completa).
+# 131072-token context; the KV takes 1360 MiB in q8_0 (only 10 of the 40 layers have full attention).
 -c 131072
-# Flash attention: exigida para o cache V quantizado.
+# Flash attention: required for the quantized V cache.
 -fa on
-# Cache K em q8_0 (q4_0 degrada as chamadas de ferramenta).
+# K cache in q8_0 (q4_0 degrades tool calls).
 -ctk q8_0
-# Cache V em q8_0, pelo mesmo motivo.
+# V cache in q8_0, for the same reason.
 -ctv q8_0
-# Todas as camadas na GPU (atenção, DeltaNet, expert compartilhado, saída).
+# All layers on the GPU (attention, DeltaNet, shared expert, output).
 -ngl 99
-# Experts roteados das camadas 0-37 na RAM e das 2 últimas na GPU (~1-2% por camada). Premissa: GPU dedicada;
-# sobram ~470 MiB livres (visão do CUDA) e o uso não cresce com o contexto (medido até 123k tokens).
+# Routed experts of layers 0-37 in RAM and of the last 2 on the GPU (~1-2% per layer). Premise: dedicated GPU;
+# ~470 MiB stay free (CUDA's view) and usage does not grow with context (measured up to 123k tokens).
 -ncmoe 38
-# --fit ligado só como conferência: com -ngl/-ncmoe explícitos ele não altera nada; se sobrar menos que o
-# alvo, apenas registra um aviso "failed to fit params" no log e carrega mesmo assim (vigiar no script de saúde).
+# --fit on only as a check: with explicit -ngl/-ncmoe it changes nothing; if less than the
+# target is left, it just logs a "failed to fit params" warning and loads anyway (watched by the health script).
 --fit on
-# Folga mínima de VRAM para o --fit (o padrão de 1024 MiB é para GPU compartilhada; aqui ela é dedicada).
+# Minimum VRAM headroom for --fit (the 1024 MiB default is for a shared GPU; here it is dedicated).
 --fit-target 384
-# Lote lógico de 4096 tokens.
+# Logical batch of 4096 tokens.
 -b 4096
-# Micro-lote de 4096: cada micro-lote paga ~0,9 s fixos (experts da RAM para a GPU), então 4096 rende +45% de prefill.
+# Micro-batch of 4096: each micro-batch pays ~0.9 s fixed (experts from RAM to GPU), so 4096 gives +45% prefill.
 -ub 4096
-# 8 threads na geração: 6-8 dão o melhor resultado; 12 fica ~3-5% abaixo e 16 cai ~25% (disputa os 16 vCPUs do WSL).
+# 8 threads for generation: 6-8 give the best result; 12 is ~3-5% lower and 16 drops ~25% (competes for WSL's 16 vCPUs).
 -t 8
-# 12 threads para os lotes calculados na CPU (turnos curtos abaixo de 1024 tokens).
+# 12 threads for the batches computed on the CPU (short turns under 1024 tokens).
 -tb 12
-# Carga por DirectIO em memória fixada (pinned): +10-27% de prefill contra mmap e carga em ~30 s (none levou ~2,5 min).
+# Load via DirectIO into pinned memory: +10-27% prefill vs mmap and load in ~30 s (none took ~2.5 min).
 -lm dio
-# Template Jinja do modelo, com o parser de tool calls do Qwen3 (já é o padrão; explícito por clareza).
+# The model's Jinja template, with the Qwen3 tool-call parser (already the default; explicit for clarity).
 --jinja
-# Mantém o raciocínio dos turnos anteriores: o histórico reenviado bate token a token com o cache (f_keep = 1,0).
+# Keeps the reasoning of earlier turns: the resent history matches the cache token by token (f_keep = 1.0).
 --reasoning-preserve
-# Até 48 checkpoints de contexto por slot (63 MiB cada, ~3 GiB de RAM no máximo).
+# Up to 48 context checkpoints per slot (63 MiB each, ~3 GiB of RAM at most).
 -ctxcp 48
-# Espaço mínimo de 2048 tokens entre checkpoints (padrão 8192). Mantido do plano; nos testes os checkpoints
-# ficaram no fim de cada prompt e o efeito deste valor não foi isolado (RESULTS-E4.md, questão 9).
+# Minimum spacing of 2048 tokens between checkpoints (default 8192). Kept from the plan; in the tests the checkpoints
+# ended up at the end of each prompt and the effect of this value was not isolated (RESULTS-E4.md, question 9).
 -cms 2048
-# Cache de prompts na RAM até 12 GiB: guarda a conversa principal quando entra outra (subagente, título) e a restaura.
+# Prompt cache in RAM up to 12 GiB: keeps the main conversation when another comes in (subagent, title) and restores it.
 --cache-ram 12288
-# Métricas Prometheus em /metrics (usadas pelo runner da validação).
+# Prometheus metrics at /metrics (used by the validation runner).
 --metrics
-# Depuração (desligado em produção): descomente para registrar checkpoints criados/restaurados e
-# "forcing full prompt re-processing" (~10 KB de log por pedido, sem o conteúdo dos pedidos).
+# Debugging (off in production): uncomment to log created/restored checkpoints and
+# "forcing full prompt re-processing" (~10 KB of log per request, without the request contents).
 #-lv 4
-# Amostragem padrão do plano (seção 7, cartão do modelo); não medida na E4. O agente pode sobrescrever por pedido.
+# Default sampling from the plan (section 7, model card); not measured in E4. The agent can override it per request.
 --temp 0.6
-# Idem: top-p do cartão do modelo.
+# Same: top-p from the model card.
 --top-p 0.95
-# Idem: top-k do cartão do modelo.
+# Same: top-k from the model card.
 --top-k 20

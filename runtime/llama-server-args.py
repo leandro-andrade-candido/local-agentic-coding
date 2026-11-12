@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Monta os argumentos do llama-server: perfil da E4 + política da E5.
+"""Builds the llama-server arguments: E4 profile + E5 policy.
 
-Uso (chamado por runtime/llama-server-start.sh e scripts/llm):
-  python3 -I runtime/llama-server-args.py --bin BIN --profile ARQ --policy ARQ \
+Usage (called by runtime/llama-server-start.sh and scripts/llm):
+  python3 -I runtime/llama-server-args.py --bin BIN --profile FILE --policy FILE \
       --model GGUF [--format nul|shell|json|check]
 
-Ambiente obrigatório (trocado nos valores ${...}): LLAMA_SERVER_HOST,
-LLAMA_SERVER_PORT, LLM_API_KEY_FILE. Opcional: LOCAL_AGENTIC_REPO (para recusar
-uma chave guardada dentro do repositório).
+Required environment (substituted in the ${...} values): LLAMA_SERVER_HOST,
+LLAMA_SERVER_PORT, LLM_API_KEY_FILE. Optional: LOCAL_AGENTIC_REPO (to refuse
+a key stored inside the repository).
 
-Regras:
-- Formato dos dois arquivos: uma flag por linha ("flag" ou "flag valor", sem aspas
-  e sem espaço no valor); linhas vazias e começadas por # são ignoradas.
-- Os aliases vêm da ajuda do próprio binário (--help): -n, --predict e --n-predict
-  são a mesma flag; --metrics e uma eventual --no-metrics também.
-- Sobreposição: no b11982 vale a última ocorrência (common/arg.cpp), com o aviso
-  "DEPRECATED: argument specified multiple times". Aqui a política vence e a flag
-  repetida sai do perfil, para não haver repetição nem aviso.
-- Recusa (código 2): flag desconhecida para o build, flag repetida no mesmo arquivo,
-  flag proibida, flag de segurança no perfil, host fora do loopback, CORS aberto,
-  chave ausente/legível por outros/dentro do repositório, política incompleta.
-- A chave nunca é impressa; o arquivo só é lido para conferir o formato.
+Rules:
+- Format of both files: one flag per line ("flag" or "flag value", no quotes
+  and no space in the value); blank lines and lines starting with # are ignored.
+- Aliases come from the binary's own help (--help): -n, --predict and --n-predict
+  are the same flag; so are --metrics and a possible --no-metrics.
+- Overlap: in b11982 the last occurrence wins (common/arg.cpp), with the warning
+  "DEPRECATED: argument specified multiple times". Here the policy wins and the
+  repeated flag is dropped from the profile, so there is no repetition and no warning.
+- Refusal (exit code 2): flag unknown to the build, flag repeated in the same file,
+  forbidden flag, security flag in the profile, non-loopback host, open CORS,
+  key missing/readable by others/inside the repository, incomplete policy.
+- The key is never printed; the file is only read to check its format.
 """
 import argparse
 import json
@@ -33,47 +33,47 @@ import sys
 
 PLACEHOLDERS = ("LLAMA_SERVER_HOST", "LLAMA_SERVER_PORT", "LLM_API_KEY_FILE")
 
-# Proibidas em qualquer arquivo (basta um nome; os aliases vêm da ajuda). O
-# encaminhador do container da E7 expõe todas as rotas do servidor aos agentes.
+# Forbidden in any file (one name is enough; aliases come from the help). The
+# E7 container's forwarder exposes every server route to the agents.
 FORBIDDEN = {
-    "--props": "liga POST /props (muda propriedades globais com o servidor no ar)",
-    "--slot-save-path": "liga POST /slots/<id>?action=save|restore (cache gravado e lido em disco)",
-    "--agent": "liga as ferramentas embutidas (shell, arquivos) e o proxy CORS",
-    "--tools": "liga as ferramentas embutidas em /tools (exec_shell_command, write_file...)",
-    "--tools-runtime": "ambiente de execução das ferramentas embutidas",
-    "--mcp-servers-config": "servidores MCP dentro do llama-server",
-    "--mcp-servers-json": "servidores MCP dentro do llama-server",
-    "--ui-mcp-proxy": "liga /cors-proxy (o servidor busca URLs arbitrárias)",
-    "--connect": "túnel peer-to-peer para fora da máquina",
-    "--connect-code": "túnel peer-to-peer para fora da máquina",
-    "--media-path": "a API leria arquivos locais por file://",
-    "--path": "serviria arquivos estáticos de um diretório local",
-    "--log-prompts-dir": "gravaria os prompts (código dos projetos) em disco",
-    "--api-key": "a chave ficaria na linha de comando (ps) e no git; use --api-key-file",
-    "--model": "o modelo vem do models.tsv, pelo wrapper",
-    "--model-url": "download de modelo",
-    "--docker-repo": "download de modelo",
-    "--hf-repo": "download de modelo",
-    "--hf-file": "download de modelo",
-    "--hf-token": "segredo na linha de comando",
-    "--spec-draft-hf": "download de modelo",
-    "--mmproj-url": "download de modelo",
-    "--models-dir": "modo roteador (carrega e descarrega modelos pela API)",
-    "--models-preset": "modo roteador (carrega e descarrega modelos pela API)",
-    "--reuse-port": "outro processo poderia escutar na mesma porta",
-    "--cors-credentials": "credenciais do navegador em requisições CORS",
+    "--props": "turns on POST /props (changes global properties while the server is running)",
+    "--slot-save-path": "turns on POST /slots/<id>?action=save|restore (cache written to and read from disk)",
+    "--agent": "turns on the built-in tools (shell, files) and the CORS proxy",
+    "--tools": "turns on the built-in tools at /tools (exec_shell_command, write_file...)",
+    "--tools-runtime": "execution environment of the built-in tools",
+    "--mcp-servers-config": "MCP servers inside llama-server",
+    "--mcp-servers-json": "MCP servers inside llama-server",
+    "--ui-mcp-proxy": "turns on /cors-proxy (the server fetches arbitrary URLs)",
+    "--connect": "peer-to-peer tunnel out of the machine",
+    "--connect-code": "peer-to-peer tunnel out of the machine",
+    "--media-path": "the API would read local files via file://",
+    "--path": "would serve static files from a local directory",
+    "--log-prompts-dir": "would write the prompts (project code) to disk",
+    "--api-key": "the key would end up on the command line (ps) and in git; use --api-key-file",
+    "--model": "the model comes from models.tsv, via the wrapper",
+    "--model-url": "model download",
+    "--docker-repo": "model download",
+    "--hf-repo": "model download",
+    "--hf-file": "model download",
+    "--hf-token": "secret on the command line",
+    "--spec-draft-hf": "model download",
+    "--mmproj-url": "model download",
+    "--models-dir": "router mode (loads and unloads models through the API)",
+    "--models-preset": "router mode (loads and unloads models through the API)",
+    "--reuse-port": "another process could listen on the same port",
+    "--cors-credentials": "browser credentials in CORS requests",
 }
-# Presets que baixam pesos da internet.
+# Presets that download weights from the internet.
 FORBIDDEN_RE = re.compile(r"^--(fim-|gpt-oss-|vision-gemma-|embd-gemma-)")
 
-# Só a política define (no perfil, recusa).
+# Only the policy defines these (in the profile, refusal).
 POLICY_ONLY = ("--host", "--port", "--api-key-file", "--cors-origins", "--cors-methods",
                "--cors-headers", "--cors-credentials", "--agent", "--ui-mcp-proxy", "--offline",
                "--ui", "--ssl-key-file", "--ssl-cert-file", "--api-prefix")
 
-# Obrigatórias na linha final (perfil ou política), com a grafia exigida quando é
-# booleana. As de amostragem e -n vêm de docs/stages/E5-requirements.md: sem elas o
-# Codex, que não envia nada, cairia nos padrões do llama.cpp (temperatura 0.8, min-p 0.05).
+# Required in the final line (profile or policy), with the required spelling when
+# boolean. The sampling ones and -n come from docs/stages/E5-requirements.md: without them
+# Codex, which sends nothing, would fall back to llama.cpp defaults (temperature 0.8, min-p 0.05).
 REQUIRED = {"--host": None, "--port": None, "--api-key-file": None, "--cors-origins": None,
             "--cors-credentials": "--no-cors-credentials", "--agent": "--no-agent",
             "--metrics": "--metrics", "--temp": None, "--top-p": None, "--top-k": None,
@@ -89,11 +89,11 @@ class Refusal(Exception):
 
 
 def note(msg):
-    print(f"nota: {msg}", file=sys.stderr)
+    print(f"note: {msg}", file=sys.stderr)
 
 
 def norm(flag):
-    # Mesma normalização do llama.cpp: em "--nome", "_" vira "-".
+    # Same normalization as llama.cpp: in "--name", "_" becomes "-".
     return flag.replace("_", "-") if flag.startswith("--") else flag
 
 
@@ -106,12 +106,12 @@ def show(e):
 
 
 def help_groups(binary):
-    """Mapa nome -> grupo (tupla com todos os nomes da mesma opção), lido do --help."""
+    """Map name -> group (tuple with all names of the same option), read from --help."""
     try:
         text = subprocess.run([binary, "--help"], capture_output=True, text=True,
                               timeout=20, check=False).stdout
     except (OSError, subprocess.TimeoutExpired) as e:
-        raise Refusal(f"não consegui ler a ajuda de {binary}: {e}")
+        raise Refusal(f"could not read the help of {binary}: {e}")
     groups = {}
     for line in text.splitlines():
         if not line.startswith("-"):
@@ -131,7 +131,7 @@ def help_groups(binary):
         for n in names:
             groups.setdefault(n, group)
     if "--port" not in groups or "--api-key-file" not in groups:
-        raise Refusal(f"ajuda de {binary} inesperada (sem --port/--api-key-file)")
+        raise Refusal(f"unexpected help from {binary} (no --port/--api-key-file)")
     return groups
 
 
@@ -139,14 +139,14 @@ def expand(value, where):
     def repl(m):
         name = m.group(1)
         if name not in PLACEHOLDERS:
-            raise Refusal(f"{where}: variável ${{{name}}} não permitida (aceitas: {', '.join(PLACEHOLDERS)})")
+            raise Refusal(f"{where}: variable ${{{name}}} not allowed (accepted: {', '.join(PLACEHOLDERS)})")
         val = os.environ.get(name, "")
         if not val:
-            raise Refusal(f"{where}: ${{{name}}} vazia no ambiente")
+            raise Refusal(f"{where}: ${{{name}}} is empty in the environment")
         return val
     out = re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", repl, value)
     if "$" in out or "`" in out:
-        raise Refusal(f"{where}: valor com $ ou ` não expandido: {value}")
+        raise Refusal(f"{where}: value with unexpanded $ or `: {value}")
     return out
 
 
@@ -155,7 +155,7 @@ def read_args(path, groups):
     try:
         lines = open(path, encoding="utf-8").read().splitlines()
     except OSError as e:
-        raise Refusal(f"não consegui ler {path}: {e}")
+        raise Refusal(f"could not read {path}: {e}")
     for no, raw in enumerate(lines, 1):
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -163,15 +163,15 @@ def read_args(path, groups):
         where = f"{os.path.basename(path)}:{no}"
         parts = line.split()
         if len(parts) > 2:
-            raise Refusal(f"{where}: mais de um valor na linha (valor sem espaços; o comentário vai na linha de cima)")
+            raise Refusal(f"{where}: more than one value on the line (value without spaces; the comment goes on the line above)")
         flag = norm(parts[0])
         if not flag.startswith("-"):
-            raise Refusal(f"{where}: linha não começa com uma flag: {line}")
+            raise Refusal(f"{where}: line does not start with a flag: {line}")
         group = groups.get(flag)
         if group is None:
-            raise Refusal(f"{where}: flag {flag} não existe neste build do llama-server")
+            raise Refusal(f"{where}: flag {flag} does not exist in this llama-server build")
         if group in seen:
-            raise Refusal(f"{where}: {flag} repete a linha {seen[group]} do mesmo arquivo")
+            raise Refusal(f"{where}: {flag} repeats line {seen[group]} of the same file")
         seen[group] = no
         value = expand(parts[1], where) if len(parts) == 2 else None
         entries.append({"flag": flag, "value": value, "group": group, "where": where})
@@ -182,42 +182,42 @@ def check_forbidden(entries, groups):
     for e in entries:
         flag = e["flag"]
         if FORBIDDEN_RE.match(flag):
-            raise Refusal(f"{e['where']}: {flag} proibida (preset que baixa pesos da internet)")
+            raise Refusal(f"{e['where']}: {flag} forbidden (preset that downloads weights from the internet)")
         for name, why in FORBIDDEN.items():
             group = groups.get(name)
             if group is None or e["group"] != group:
                 continue
-            # Em opções booleanas, a forma negativa (--no-...) é permitida.
+            # For boolean options, the negative form (--no-...) is allowed.
             if is_negative(flag):
                 continue
-            raise Refusal(f"{e['where']}: {flag} proibida: {why}")
+            raise Refusal(f"{e['where']}: {flag} forbidden: {why}")
 
 
 def check_key_file(path, repo):
     if not os.path.isabs(path):
-        raise Refusal(f"--api-key-file precisa de caminho absoluto: {path}")
+        raise Refusal(f"--api-key-file needs an absolute path: {path}")
     real = os.path.realpath(path)
     if repo and (real == repo or real.startswith(repo.rstrip("/") + "/")):
-        raise Refusal(f"a chave não pode ficar dentro do repositório: {path}")
+        raise Refusal(f"the key must not be inside the repository: {path}")
     try:
         st = os.stat(path)
     except FileNotFoundError:
-        raise Refusal(f"chave não encontrada: {path} (crie com: scripts/llm key)")
+        raise Refusal(f"key not found: {path} (create it with: scripts/llm key)")
     if not stat.S_ISREG(st.st_mode):
-        raise Refusal(f"a chave não é um arquivo comum: {path}")
+        raise Refusal(f"the key is not a regular file: {path}")
     if st.st_mode & 0o077:
-        raise Refusal(f"a chave é legível por outros usuários (modo {stat.S_IMODE(st.st_mode):o}): chmod 600 {path}")
+        raise Refusal(f"the key is readable by other users (mode {stat.S_IMODE(st.st_mode):o}): chmod 600 {path}")
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().splitlines()
     keys = [k for k in lines if k and not k.startswith("#")]
     if not keys:
-        raise Refusal(f"arquivo de chave sem nenhuma chave: {path}")
+        raise Refusal(f"key file with no key: {path}")
     if any(k != k.strip() for k in keys):
-        raise Refusal(f"chave com espaço ou \\r nas pontas (o servidor compara byte a byte): {path}")
+        raise Refusal(f"key with a space or \\r at the ends (the server compares byte by byte): {path}")
     if len(keys) > 1 or len(lines) != len(keys):
-        note(f"{path} tem mais de uma linha; os clientes leem o arquivo inteiro com cat")
+        note(f"{path} has more than one line; clients read the whole file with cat")
     if min(len(k) for k in keys) < 32:
-        note("chave com menos de 32 caracteres")
+        note("key shorter than 32 characters")
 
 
 def build(args):
@@ -229,9 +229,9 @@ def build(args):
     policy_only = {groups[n] for n in POLICY_ONLY if n in groups}
     for e in profile:
         if e["group"] in policy_only:
-            raise Refusal(f"{e['where']}: {e['flag']} é da política (runtime/llama-server.policy.args), não do perfil")
+            raise Refusal(f"{e['where']}: {e['flag']} belongs to the policy (runtime/llama-server.policy.args), not the profile")
 
-    # A política vence: a flag do perfil que ela também define sai da linha.
+    # The policy wins: a profile flag that it also defines is dropped from the line.
     policy_groups = {e["group"]: e for e in policy}
     kept, same = [], []
     for e in profile:
@@ -241,9 +241,9 @@ def build(args):
         elif p["value"] == e["value"] and is_negative(p["flag"]) == is_negative(e["flag"]):
             same.append(show(p))
         else:
-            note(f"perfil '{show(e)}' ({e['where']}) substituído pela política '{show(p)}' ({p['where']})")
+            note(f"profile '{show(e)}' ({e['where']}) replaced by policy '{show(p)}' ({p['where']})")
     if same:
-        note("no perfil e na política com o mesmo valor (fica só a da política): " + ", ".join(same))
+        note("in both profile and policy with the same value (only the policy's stays): " + ", ".join(same))
 
     final = [{"flag": "-m", "value": args.model, "group": groups["-m"], "where": "wrapper"}] + kept + policy
 
@@ -251,21 +251,21 @@ def build(args):
     for name, spelling in REQUIRED.items():
         e = by_group.get(groups[name])
         if e is None:
-            raise Refusal(f"a linha final precisa de {spelling or name} (no perfil ou na política)")
+            raise Refusal(f"the final line needs {spelling or name} (in the profile or the policy)")
         if spelling and is_negative(spelling) != is_negative(e["flag"]):
-            raise Refusal(f"{e['where']}: esperado {spelling}, encontrado {e['flag']}")
+            raise Refusal(f"{e['where']}: expected {spelling}, found {e['flag']}")
 
     hosts = by_group[groups["--host"]]["value"].split(",")
     for h in hosts:
         if h not in LOOPBACK and not h.endswith(".sock"):
-            raise Refusal(f"--host {h}: só loopback (127.0.0.1, ::1, localhost) ou socket UNIX")
+            raise Refusal(f"--host {h}: loopback only (127.0.0.1, ::1, localhost) or UNIX socket")
     port = by_group[groups["--port"]]["value"]
     if not port.isdigit() or not 0 < int(port) < 65536:
-        raise Refusal(f"--port inválida: {port}")
+        raise Refusal(f"invalid --port: {port}")
     origins = by_group[groups["--cors-origins"]]["value"]
     if origins == "*" or "," in origins:
-        raise Refusal(f"--cors-origins {origins}: use uma origem só (o b11982 copia o valor literal "
-                      "no Access-Control-Allow-Origin)")
+        raise Refusal(f"--cors-origins {origins}: use a single origin (b11982 copies the literal value "
+                      "into Access-Control-Allow-Origin)")
     check_key_file(by_group[groups["--api-key-file"]]["value"], args.repo)
 
     argv = []
@@ -288,7 +288,7 @@ def main():
     try:
         final, argv = build(args)
     except Refusal as e:
-        print(f"erro: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         return 2
     if args.format == "nul":
         sys.stdout.write("".join(a + "\0" for a in argv))
@@ -298,7 +298,7 @@ def main():
             lines.append(shlex.quote(e["flag"]) + ("" if e["value"] is None else " " + shlex.quote(e["value"])))
         print(" \\\n  ".join(lines))
     elif args.format == "json":
-        # Valor final por nome (todos os aliases), para scripts/llm health comparar com /props.
+        # Final value by name (all aliases), for scripts/llm health to compare with /props.
         out = {}
         for e in final:
             for name in e["group"]:

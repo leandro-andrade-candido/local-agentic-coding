@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Resume saídas JSONL do llama-bench em tabela Markdown.
-Uso: python3 -I bench/summarize.py raw/02-*.jsonl
+"""Summarizes llama-bench JSONL outputs as a Markdown table.
+Usage: python3 -I bench/summarize.py raw/02-*.jsonl
 """
 import json
 import sys
@@ -13,7 +13,7 @@ def test_name(r):
 
 
 def main(paths):
-    print("| arquivo | ncmoe | ub | b | t | load | nopo | nohost | teste | tok/s | ± |")
+    print("| file | ncmoe | ub | b | t | load | nopo | nohost | teste | tok/s | ± |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for path in paths:
         name = path.rsplit("/", 1)[-1].replace(".jsonl", "")

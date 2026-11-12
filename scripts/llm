@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# llm: o llama-server local como serviço do usuário (E5). Ver docs/stages/E5-preparation.md.
+# llm: the local llama-server as a user service (E5). See docs/stages/E5-preparation.md.
 #
-# Uso: scripts/llm <comando>
-#   key                  cria a chave (~/.config/local-agentic/llm-api-key, modo 0600) se não
-#                        existir; imprime o caminho, nunca a chave
+# Usage: scripts/llm <command>
+#   key                  creates the key (~/.config/local-agentic/llm-api-key, mode 0600) if it
+#                        does not exist; prints the path, never the key
 #   install [--enable] [--dry-run]
-#                        grava a unidade em ~/.config/systemd/user e roda daemon-reload;
-#                        --enable também liga o início com a sessão; --dry-run só mostra
-#   uninstall            para, desliga e remove a unidade (a chave fica)
+#                        writes the unit to ~/.config/systemd/user and runs daemon-reload;
+#                        --enable also starts it with the session; --dry-run only shows
+#   uninstall            stops, disables and removes the unit (the key stays)
 #   start | stop | restart | status
-#                        start e restart rodam o pré-voo antes e esperam o modelo carregar
-#   logs [-f] [-n N]     journal da unidade (padrão: últimas 200 linhas)
-#   health               /health, /v1/models e um chat de 1 token (latência), e confere a
-#                        política no servidor: chave exigida, CORS, /props, /slots, /tools
+#                        start and restart run the preflight first and wait for the model to load
+#   logs [-f] [-n N]     unit journal (default: last 200 lines)
+#   health               /health, /v1/models and a 1-token chat (latency), and checks the
+#                        policy on the server: key required, CORS, /props, /slots, /tools
 #   preflight            scripts/preflight.sh
-#   dry-run              linha de comando final, sem iniciar (runtime/llama-server-start.sh --dry-run)
+#   dry-run              final command line, without starting (runtime/llama-server-start.sh --dry-run)
 #   model [<alias>|--reset]
-#                        sem argumento: lista os modelos do models.tsv (instalado? em uso?);
-#                        com alias: grava a escolha (vale no próximo start/restart);
-#                        --reset: volta ao padrão do perfil. O nome na API não muda.
-#   env                  linhas export para os agentes: eval "$(scripts/llm env)"
-#   test [opções]        scripts/tool_calls.py contra o servidor, JSON em logs/tool_calls-<data>.json
+#                        no argument: lists the models in models.tsv (installed? in use?);
+#                        with an alias: saves the choice (takes effect on the next start/restart);
+#                        --reset: back to the profile default. The API name does not change.
+#   env                  export lines for the agents: eval "$(scripts/llm env)"
+#   test [options]       scripts/tool_calls.py against the server, JSON in logs/tool_calls-<date>.json
 #   wait-ready [--timeout S]
-#                        espera GET /health = 200 (usado pela unidade em ExecStartPost)
+#                        waits for GET /health = 200 (used by the unit in ExecStartPost)
 set -uo pipefail
 
 here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd -P)"
@@ -32,51 +32,51 @@ REPO="$LOCAL_AGENTIC_REPO"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_FILE="$UNIT_DIR/$LLM_SERVICE"
 
-die() { echo "erro: $*" >&2; exit 2; }
+die() { echo "error: $*" >&2; exit 2; }
 usage() { sed -n '2,28p' "$0"; }
 
 require_key() {
-  [ -f "$LLM_API_KEY_FILE" ] || die "chave ausente: $LLM_API_KEY_FILE (crie com: scripts/llm key)"
+  [ -f "$LLM_API_KEY_FILE" ] || die "key missing: $LLM_API_KEY_FILE (create it with: scripts/llm key)"
 }
 require_unit() {
-  [ -f "$UNIT_FILE" ] || die "unidade não instalada: $UNIT_FILE (scripts/llm install)"
+  [ -f "$UNIT_FILE" ] || die "unit not installed: $UNIT_FILE (scripts/llm install)"
 }
 
 cmd_key() {
-  [ $# -eq 0 ] || die "uso: llm key"
+  [ $# -eq 0 ] || die "usage: llm key"
   if [ -e "$LLM_API_KEY_FILE" ]; then
     local mode
     mode="$(stat -c %a "$LLM_API_KEY_FILE")"
     case "$mode" in
-      600|400) echo "chave já existe (modo $mode)" >&2 ;;
-      *) echo "aviso: chave com modo $mode; o servidor recusa: chmod 600 $LLM_API_KEY_FILE" >&2 ;;
+      600|400) echo "key already exists (mode $mode)" >&2 ;;
+      *) echo "warning: key has mode $mode; the server refuses it: chmod 600 $LLM_API_KEY_FILE" >&2 ;;
     esac
     printf '%s\n' "$LLM_API_KEY_FILE"
     return 0
   fi
   local dir tmp
   dir="$(dirname "$LLM_API_KEY_FILE")"
-  (umask 077 && mkdir -p "$dir") || die "não consegui criar $dir"
-  tmp="$(umask 077 && mktemp "$dir/.llm-api-key.XXXXXX")" || die "não consegui criar arquivo em $dir"
+  (umask 077 && mkdir -p "$dir") || die "could not create $dir"
+  tmp="$(umask 077 && mktemp "$dir/.llm-api-key.XXXXXX")" || die "could not create a file in $dir"
   if ! python3 -I -c 'import secrets; print("sk-llama-" + secrets.token_hex(32))' > "$tmp"; then
-    rm -f "$tmp"; die "não consegui gerar a chave"
+    rm -f "$tmp"; die "could not generate the key"
   fi
   chmod 600 "$tmp"
-  # Sem sobrescrever: se outra execução criou a chave no meio-tempo, fica a dela.
+  # No overwrite: if another run created the key in the meantime, theirs stays.
   mv -n "$tmp" "$LLM_API_KEY_FILE"
   rm -f "$tmp"
-  echo "chave criada (modo 600; conteúdo não exibido)" >&2
+  echo "key created (mode 600; content not shown)" >&2
   printf '%s\n' "$LLM_API_KEY_FILE"
 }
 
 render_unit() {
   case "$REPO$LLM_API_KEY_FILE" in
-    *[[:space:]%\|\\]*) die "caminho com espaço, %, | ou \\ não é suportado na unidade: $REPO / $LLM_API_KEY_FILE" ;;
+    *[[:space:]%\|\\]*) die "path with space, %, | or \\ is not supported in the unit: $REPO / $LLM_API_KEY_FILE" ;;
   esac
   local out
   out="$(sed -e "s|@@REPO@@|$REPO|g" -e "s|@@KEY_FILE@@|$LLM_API_KEY_FILE|g" \
-    "$REPO/runtime/llama-server.service.in")" || die "não consegui ler o modelo da unidade"
-  ! grep -q '@@' <<< "$out" || die "modelo da unidade com @@...@@ não trocado"
+    "$REPO/runtime/llama-server.service.in")" || die "could not read the unit template"
+  ! grep -q '@@' <<< "$out" || die "unit template has an unreplaced @@...@@"
   printf '%s\n' "$out"
 }
 
@@ -86,87 +86,87 @@ cmd_install() {
     case "$a" in
       --enable) enable=true ;;
       --dry-run) dry=true ;;
-      *) die "uso: llm install [--enable] [--dry-run]" ;;
+      *) die "usage: llm install [--enable] [--dry-run]" ;;
     esac
   done
   local rendered
   rendered="$(render_unit)" || exit 2
   if $dry; then
-    echo "# --dry-run: nada gravado nem recarregado. Conteúdo de $UNIT_FILE:"
+    echo "# --dry-run: nothing written or reloaded. Contents of $UNIT_FILE:"
     printf '%s\n' "$rendered"
-    echo "# comandos que seriam executados:"
+    echo "# commands that would run:"
     [ -f "$LLM_API_KEY_FILE" ] || echo "#   scripts/llm key"
-    echo "#   mkdir -p $UNIT_DIR && (grava $UNIT_FILE)"
+    echo "#   mkdir -p $UNIT_DIR && (writes $UNIT_FILE)"
     echo "#   systemctl --user daemon-reload"
     if $enable; then echo "#   systemctl --user enable $LLM_SERVICE"; fi
     local tmpd
     tmpd="$(mktemp -d)"
     printf '%s\n' "$rendered" > "$tmpd/$LLM_SERVICE"
-    echo "# systemd-analyze --user verify (cópia temporária):"
+    echo "# systemd-analyze --user verify (temporary copy):"
     if systemd-analyze --user verify "$tmpd/$LLM_SERVICE" 2>&1 | sed 's/^/#   /'; then
-      echo "#   (sem erros)"
+      echo "#   (no errors)"
     fi
     rm -rf "$tmpd"
     return 0
   fi
   [ -f "$LLM_API_KEY_FILE" ] || cmd_key > /dev/null
-  mkdir -p "$UNIT_DIR" || die "não consegui criar $UNIT_DIR"
+  mkdir -p "$UNIT_DIR" || die "could not create $UNIT_DIR"
   printf '%s\n' "$rendered" > "$UNIT_FILE.tmp" && mv "$UNIT_FILE.tmp" "$UNIT_FILE" \
-    || die "não consegui gravar $UNIT_FILE"
-  systemctl --user daemon-reload || die "daemon-reload falhou"
-  echo "instalado: $UNIT_FILE"
+    || die "could not write $UNIT_FILE"
+  systemctl --user daemon-reload || die "daemon-reload failed"
+  echo "installed: $UNIT_FILE"
   if $enable; then
-    systemctl --user enable "$LLM_SERVICE" || die "enable falhou"
-    echo "ligado: sobe com o gerenciador do usuário (desligar: systemctl --user disable $LLM_SERVICE)"
+    systemctl --user enable "$LLM_SERVICE" || die "enable failed"
+    echo "enabled: starts with the user manager (disable: systemctl --user disable $LLM_SERVICE)"
   fi
-  echo "próximo passo: scripts/llm start && scripts/llm health"
+  echo "next step: scripts/llm start && scripts/llm health"
 }
 
 cmd_uninstall() {
-  [ $# -eq 0 ] || die "uso: llm uninstall"
+  [ $# -eq 0 ] || die "usage: llm uninstall"
   systemctl --user stop "$LLM_SERVICE" 2> /dev/null
   systemctl --user disable "$LLM_SERVICE" 2> /dev/null
   rm -f "$UNIT_FILE"
   systemctl --user daemon-reload
   systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
-  echo "unidade removida ($UNIT_FILE). A chave continua em $LLM_API_KEY_FILE."
+  echo "unit removed ($UNIT_FILE). The key is still in $LLM_API_KEY_FILE."
 }
 
 run_preflight() {
   local rc=0
   "$REPO/scripts/preflight.sh" || rc=$?
-  [ "$rc" -ne 2 ] || die "pré-voo bloqueou o início (resolva o BLOQUEIO acima)"
+  [ "$rc" -ne 2 ] || die "preflight blocked the start (fix the BLOCKER above)"
 }
 
 cmd_start() {
-  [ $# -eq 0 ] || die "uso: llm start"
+  [ $# -eq 0 ] || die "usage: llm start"
   require_unit
   local pid
   pid="$(llm_unit_mainpid)"
   if [ "$pid" != 0 ]; then
-    echo "já está no ar (PID $pid): $LLM_BASE_URL_LOCAL"
+    echo "already up (PID $pid): $LLM_BASE_URL_LOCAL"
     return 0
   fi
   run_preflight
   systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
-  echo "iniciando; o comando espera o modelo carregar (até 10 min)..."
+  echo "starting; the command waits for the model to load (up to 10 min)..."
   local t0=$SECONDS
   if ! systemctl --user start "$LLM_SERVICE"; then
-    echo "falhou; veja: scripts/llm logs" >&2
+    echo "failed; see: scripts/llm logs" >&2
     return 1
   fi
-  echo "no ar em $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL (confira: scripts/llm health)"
+  echo "up in $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL (check: scripts/llm health)"
 }
 
 cmd_restart() {
-  [ $# -eq 0 ] || die "uso: llm restart"
+  [ $# -eq 0 ] || die "usage: llm restart"
   require_unit
   run_preflight
   systemctl --user reset-failed "$LLM_SERVICE" 2> /dev/null
-  echo "reiniciando; o comando espera o modelo carregar (até 10 min)..."
+  echo "restarting; the command waits for the model to load (up to 10 min)..."
   local t0=$SECONDS
-  systemctl --user restart "$LLM_SERVICE" || { echo "falhou; veja: scripts/llm logs" >&2; return 1; }
-  echo "no ar em $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL"
+  systemctl --user restart "$LLM_SERVICE" || { echo "failed; see: scripts/llm logs" >&2; return 1; }
+  echo "up in $((SECONDS - t0)) s: $LLM_BASE_URL_LOCAL"
 }
 
 cmd_logs() {
@@ -175,7 +175,7 @@ cmd_logs() {
     case "$1" in
       -f) follow=(-f); shift ;;
       -n) n="${2:-}"; shift 2 ;;
-      *) die "uso: llm logs [-f] [-n N]" ;;
+      *) die "usage: llm logs [-f] [-n N]" ;;
     esac
   done
   exec journalctl --user -u "$LLM_SERVICE" --no-pager -n "$n" "${follow[@]}"
@@ -186,27 +186,27 @@ cmd_wait_ready() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --timeout) timeout="${2:-}"; shift 2 ;;
-      *) die "uso: llm wait-ready [--timeout S]" ;;
+      *) die "usage: llm wait-ready [--timeout S]" ;;
     esac
   done
   local start=$SECONDS last=$SECONDS code
   while :; do
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$LLM_BASE_URL_LOCAL/health" 2> /dev/null)"
     if [ "$code" = 200 ]; then
-      echo "pronto em $((SECONDS - start)) s: $LLM_BASE_URL_LOCAL"
+      echo "ready in $((SECONDS - start)) s: $LLM_BASE_URL_LOCAL"
       return 0
     fi
-    # MAINPID: definido pelo systemd para ExecStartPost.
+    # MAINPID: set by systemd for ExecStartPost.
     if [ -n "${MAINPID:-}" ] && ! kill -0 "$MAINPID" 2> /dev/null; then
-      echo "o llama-server (PID $MAINPID) saiu antes de ficar pronto" >&2
+      echo "llama-server (PID $MAINPID) exited before becoming ready" >&2
       return 1
     fi
     if [ $((SECONDS - start)) -ge "$timeout" ]; then
-      echo "não ficou pronto em $timeout s (último HTTP ${code:-000})" >&2
+      echo "not ready after $timeout s (last HTTP ${code:-000})" >&2
       return 1
     fi
     if [ $((SECONDS - last)) -ge 15 ]; then
-      echo "aguardando /health (HTTP ${code:-000}, $((SECONDS - start)) s)"
+      echo "waiting for /health (HTTP ${code:-000}, $((SECONDS - start)) s)"
       last=$SECONDS
     fi
     sleep 1
@@ -214,15 +214,15 @@ cmd_wait_ready() {
 }
 
 cmd_env() {
-  [ $# -eq 0 ] || die "uso: llm env"
+  [ $# -eq 0 ] || die "usage: llm env"
   require_key
   local alias
   alias="$(llm_api_alias)"
   printf 'export LLM_BASE_URL=%q\n' "$LLM_BASE_URL_LOCAL"
   printf 'export LLM_MODEL=%q\n' "$alias"
-  # A chave é lida na hora do eval; a saída deste comando não a contém.
+  # The key is read at eval time; this command's output does not contain it.
   printf 'export LLM_API_KEY="$(cat %q)"\n' "$LLM_API_KEY_FILE"
-  # Nome que os 5 agentes (agents/lib/common.sh) leem hoje.
+  # Name the 5 agents (agents/lib/common.sh) read today.
   printf 'export LOCAL_LLM_API_KEY="$LLM_API_KEY"\n'
 }
 
@@ -231,31 +231,31 @@ cmd_model() {
   case "${1:-}" in
     "")
       local current; current="$(llm_model_alias)"
-      echo "modelo escolhido: $current (nome na API: $(llm_api_alias))"
-      [ -n "${LLM_SERVER_MODEL:-}" ] && echo "  (vem de LLM_SERVER_MODEL; não vale para o serviço systemd)"
+      echo "selected model: $current (API name: $(llm_api_alias))"
+      [ -n "${LLM_SERVER_MODEL:-}" ] && echo "  (comes from LLM_SERVER_MODEL; does not apply to the systemd service)"
       awk -F'\t' '!/^#/ && NF >= 7 {print $1 "\t" $4 "\t" $5 "\t" $7}' "$tsv" |
         while IFS=$'\t' read -r a file bytes role; do
-          local mark="-" inst="falta baixar"
+          local mark="-" inst="not downloaded"
           [ "$a" = "$current" ] && mark="*"
-          [ -f "$MODELS_DIR/$file" ] && inst="instalado"
+          [ -f "$MODELS_DIR/$file" ] && inst="installed"
           printf '  %s %-16s %6.1f GB  %-13s %s\n' "$mark" "$a" "$(awk -v b="$bytes" 'BEGIN{print b/1e9}')" "$inst" "$role"
         done
       ;;
     --reset)
-      [ $# -eq 1 ] || die "uso: llm model [<alias>|--reset]"
+      [ $# -eq 1 ] || die "usage: llm model [<alias>|--reset]"
       rm -f "$LLM_MODEL_CHOICE_FILE"
-      echo "escolha apagada: volta a $(llm_model_alias); vale no próximo scripts/llm restart"
+      echo "choice cleared: back to $(llm_model_alias); takes effect on the next scripts/llm restart"
       ;;
-    -*) die "uso: llm model [<alias>|--reset]" ;;
+    -*) die "usage: llm model [<alias>|--reset]" ;;
     *)
-      [ $# -eq 1 ] || die "uso: llm model [<alias>|--reset]"
+      [ $# -eq 1 ] || die "usage: llm model [<alias>|--reset]"
       local file
       file="$(awk -F'\t' -v a="$1" '!/^#/ && $1 == a {print $4; exit}' "$tsv")"
-      [ -n "$file" ] || die "alias '$1' não está em models.tsv"
-      [ -f "$MODELS_DIR/$file" ] || echo "aviso: $MODELS_DIR/$file ainda não existe (scripts/fetch-model.sh $1)" >&2
-      (umask 077 && mkdir -p "$(dirname "$LLM_MODEL_CHOICE_FILE")") || die "não consegui criar $(dirname "$LLM_MODEL_CHOICE_FILE")"
+      [ -n "$file" ] || die "alias '$1' is not in models.tsv"
+      [ -f "$MODELS_DIR/$file" ] || echo "warning: $MODELS_DIR/$file does not exist yet (scripts/fetch-model.sh $1)" >&2
+      (umask 077 && mkdir -p "$(dirname "$LLM_MODEL_CHOICE_FILE")") || die "could not create $(dirname "$LLM_MODEL_CHOICE_FILE")"
       printf '%s\n' "$1" > "$LLM_MODEL_CHOICE_FILE"
-      echo "modelo escolhido: $1 ($file); vale no próximo scripts/llm start/restart"
+      echo "selected model: $1 ($file); takes effect on the next scripts/llm start/restart"
       ;;
   esac
 }
@@ -268,12 +268,12 @@ cmd_test() {
   out="$REPO/logs/tool_calls-$ts.json"
   python3 -I "$REPO/scripts/tool_calls.py" --base "$LLM_BASE_URL_LOCAL" --model "$(llm_api_alias)" \
     --api-key-file "$LLM_API_KEY_FILE" --json-out "$out" "$@" || rc=$?
-  echo "resultado: $out (código $rc)"
+  echo "result: $out (exit code $rc)"
   return "$rc"
 }
 
 cmd_health() {
-  [ $# -eq 0 ] || die "uso: llm health"
+  [ $# -eq 0 ] || die "usage: llm health"
   require_key
   local expected="{}"
   if llm_resolve_model; then
@@ -282,8 +282,8 @@ cmd_health() {
       python3 -I "$LLAMA_SERVER_ARGS_PY" --bin "$LLAMA_SERVER_BIN" --profile "$LLAMA_SERVER_PROFILE" \
       --policy "$LLAMA_SERVER_POLICY" --model "$MODEL_PATH" --format json 2> /dev/null)" || expected="{}"
   fi
-  # Log da execução atual da unidade: o --fit só avisa ("failed to fit params") quando
-  # falta VRAM para a folga do perfil, e carrega mesmo assim (runtime/llama-server.args).
+  # Log of the unit's current run: --fit only warns ("failed to fit params") when
+  # there is not enough VRAM for the profile's headroom, and loads anyway (runtime/llama-server.args).
   local inv fit_warn=""
   inv="$(systemctl --user show -p InvocationID --value "$LLM_SERVICE" 2> /dev/null)"
   if [ -n "$inv" ] && [ "$(llm_unit_mainpid)" != 0 ]; then
@@ -319,7 +319,7 @@ def req(method, path, body=None, auth=True, headers=None, timeout=15):
             raw, status, hdrs = resp.read(), resp.status, resp.headers
     except urllib.error.HTTPError as e:
         raw, status, hdrs = e.read(), e.code, e.headers
-    except (urllib.error.URLError, OSError) as e:  # recusa, tempo esgotado
+    except (urllib.error.URLError, OSError) as e:  # refused, timed out
         raw, status, hdrs = str(getattr(e, "reason", e)).encode(), 0, {}
     ms = (time.perf_counter() - t0) * 1000
     try:
@@ -336,32 +336,32 @@ def exp(name):
 
 st, js, raw, _, ms = req("GET", "/health", auth=False)
 if st == 0:
-    print(f"servidor fora do ar em {base}: {raw.decode()} (scripts/llm status / scripts/llm logs)")
+    print(f"server down at {base}: {raw.decode()} (scripts/llm status / scripts/llm logs)")
     sys.exit(1)
 if st == 503:
-    print(f"servidor em {base} ainda carregando o modelo (HTTP 503); repita em alguns segundos")
+    print(f"server at {base} is still loading the model (HTTP 503); retry in a few seconds")
     sys.exit(1)
 
-# 1. Disponibilidade e latência.
-rec(st == 200 and (js or {}).get("status") == "ok", "GET /health (sem chave)", f"HTTP {st}", ms)
+# 1. Availability and latency.
+rec(st == 200 and (js or {}).get("status") == "ok", "GET /health (no key)", f"HTTP {st}", ms)
 st, js, _, _, ms = req("GET", "/v1/models")
 ids = [m.get("id") for m in (js or {}).get("data", [])] if st == 200 else []
-rec(st == 200 and alias in ids, "GET /v1/models (com chave)", f"HTTP {st}, modelos {ids}", ms)
+rec(st == 200 and alias in ids, "GET /v1/models (with key)", f"HTTP {st}, models {ids}", ms)
 st, js, _raw, _, ms = req("POST", "/v1/chat/completions", {
     "model": alias, "max_tokens": 1,
-    "messages": [{"role": "user", "content": "Responda só: ok"}]}, timeout=300)
+    "messages": [{"role": "user", "content": "Reply only: ok"}]}, timeout=300)
 t = (js or {}).get("timings", {})
-detail = f"HTTP {st}" if st else f"sem resposta: {_raw.decode()[:80]}"
+detail = f"HTTP {st}" if st else f"no response: {_raw.decode()[:80]}"
 if st == 200:
-    detail += (f", prompt {t.get('prompt_n', '?')} tok em {t.get('prompt_ms', 0):.0f} ms,"
-               f" 1º token em {t.get('predicted_ms', 0):.0f} ms")
+    detail += (f", prompt {t.get('prompt_n', '?')} tok in {t.get('prompt_ms', 0):.0f} ms,"
+               f" 1st token in {t.get('predicted_ms', 0):.0f} ms")
 rec(st == 200, "POST /v1/chat/completions, 1 token", detail, ms)
 st, _, raw, _, ms = req("GET", "/metrics")
-rec(st == 200 and b"llamacpp:prompt_tokens_total" in raw, "GET /metrics (com chave)", f"HTTP {st}", ms)
+rec(st == 200 and b"llamacpp:prompt_tokens_total" in raw, "GET /metrics (with key)", f"HTTP {st}", ms)
 
-# 2. Política aplicada.
+# 2. Policy applied.
 st, _, _, _, _ = req("GET", "/v1/models", auth=False)
-rec(st == 401, "chave exigida (GET /v1/models sem chave)", f"HTTP {st} (esperado 401)")
+rec(st == 401, "key required (GET /v1/models without key)", f"HTTP {st} (expected 401)")
 st, js, _, _, _ = req("GET", "/props")
 if st == 200 and js:
     params = js.get("default_generation_settings", {}).get("params", {})
@@ -372,64 +372,64 @@ if st == 200 and js:
                         ("min_p", "--min-p"), ("presence_penalty", "--presence-penalty")):
         if exp(flag) is not None:
             checks.append((field, params.get(field), float(exp(flag))))
-    # O /props mostra n_predict=-1 mesmo com -n: o valor só aparece no pedido efetivo
-    # (verificado na E5 com response_fields). Por isso o -n é conferido num pedido real.
+    # /props shows n_predict=-1 even with -n: the value only appears in the effective request
+    # (verified in E5 with response_fields). That is why -n is checked on a real request.
     if exp("-n") is not None:
-        # Sem max_tokens de propósito (para ver o padrão); as palavras de parada encerram
-        # a geração no primeiro espaço ou quebra de linha, então o pedido é sempre curto.
+        # No max_tokens on purpose (to see the default); the stop words end generation
+        # at the first space or line break, so the request is always short.
         st2, js2, _, _, _ = req("POST", "/completion", {
-            "prompt": "Responda apenas: OK", "stop": ["\n", " ", "."],
+            "prompt": "Reply only: OK", "stop": ["\n", " ", "."],
             "response_fields": ["generation_settings/n_predict"]}, timeout=60)
         got = (js2 or {}).get("generation_settings/n_predict") if st2 == 200 else f"HTTP {st2}"
         if isinstance(js2, dict) and "generation_settings" in js2:
             got = js2["generation_settings"].get("n_predict")
-        checks.append(("n_predict efetivo", got, float(exp("-n"))))
+        checks.append(("effective n_predict", got, float(exp("-n"))))
     if exp("-np") is not None:
         checks.append(("total_slots", js.get("total_slots"), int(exp("-np"))))
     if exp("-c") is not None:
         checks.append(("n_ctx", js.get("default_generation_settings", {}).get("n_ctx"), int(exp("-c"))))
-    bad = [f"{f}={got!r} (esperado {want!r})" for f, got, want in checks
+    bad = [f"{f}={got!r} (expected {want!r})" for f, got, want in checks
            if not (got == want or (isinstance(got, (int, float)) and not isinstance(got, bool)
                                    and isinstance(want, float) and abs(got - want) < 1e-6))]
-    rec(not bad, "GET /props: padrões e rotas", "; ".join(bad) or
+    rec(not bad, "GET /props: defaults and routes", "; ".join(bad) or
         ", ".join(f"{f}={got}" for f, got, _ in checks))
 else:
     rec(False, "GET /props", f"HTTP {st}")
 st, _, _, _, _ = req("POST", "/props", {})
-rec(st == 501, "POST /props desligado (sem --props)", f"HTTP {st} (esperado 501)")
-# Ação inválida de propósito: sem --slot-save-path a rota responde 501 antes de olhar a
-# ação; com ela ligada responderia 400 ("Invalid action"). Nada é gravado nos dois casos.
+rec(st == 501, "POST /props disabled (no --props)", f"HTTP {st} (expected 501)")
+# Invalid action on purpose: without --slot-save-path the route answers 501 before looking at
+# the action; with it enabled it would answer 400 ("Invalid action"). Nothing is written in either case.
 st, _, _, _, _ = req("POST", "/slots/0?action=llm-health-probe", {})
-rec(st == 501, "POST /slots desligado (sem --slot-save-path)", f"HTTP {st} (esperado 501)")
+rec(st == 501, "POST /slots disabled (no --slot-save-path)", f"HTTP {st} (expected 501)")
 st, _, _, _, _ = req("GET", "/tools")
-rec(st == 403, "GET /tools desligado (sem --tools/--agent)", f"HTTP {st} (esperado 403)")
+rec(st == 403, "GET /tools disabled (no --tools/--agent)", f"HTTP {st} (expected 403)")
 st, _, _, _, _ = req("GET", "/cors-proxy")
-rec(st == 403, "GET /cors-proxy desligado (sem --ui-mcp-proxy)", f"HTTP {st} (esperado 403)")
-evil = "http://exemplo.invalid"
+rec(st == 403, "GET /cors-proxy disabled (no --ui-mcp-proxy)", f"HTTP {st} (expected 403)")
+evil = "http://example.invalid"
 st, _, _, h, _ = req("OPTIONS", "/v1/chat/completions", auth=False,
                      headers={"Origin": evil, "Access-Control-Request-Method": "POST"})
 acao, acac = h.get("Access-Control-Allow-Origin"), h.get("Access-Control-Allow-Credentials")
-rec(acao not in (evil, "*") and acac == "false", "CORS para outra origem",
+rec(acao not in (evil, "*") and acac == "false", "CORS for another origin",
     f"Allow-Origin={acao!r}, Allow-Credentials={acac!r}")
 fit = os.environ.get("LLM_HEALTH_FIT_WARN", "")
 if fit:
-    rec(fit == "0", "log: VRAM coube com a folga do perfil (--fit)",
-        "sem 'failed to fit params'" if fit == "0" else f"{fit}x 'failed to fit params' (pouca VRAM livre na carga)")
+    rec(fit == "0", "log: VRAM fit the profile headroom (--fit)",
+        "no 'failed to fit params'" if fit == "0" else f"{fit}x 'failed to fit params' (little free VRAM at load)")
 try:
     out = subprocess.run(["ss", "-Hltn", f"sport = :{port}"], capture_output=True, text=True,
                          timeout=5).stdout.split()
     addrs = [w for w in out if w.endswith(f":{port}")]
     rec(bool(addrs) and all(a.startswith(("127.", "[::1]", "::1")) for a in addrs),
-        "escuta só no loopback", ", ".join(addrs) or "nenhum socket")
+        "listens on loopback only", ", ".join(addrs) or "no socket")
 except (OSError, subprocess.TimeoutExpired) as e:
-    rec(False, "escuta só no loopback", str(e))
+    rec(False, "listens on loopback only", str(e))
 
-print(f"saúde do llama-server em {base}")
+print(f"llama-server health at {base}")
 for ok, name, detail, ms in results:
     lat = f"{ms:7.0f} ms" if ms is not None else " " * 10
-    print(f"  {'ok   ' if ok else 'FALHA'}  {name:<46} {lat}  {detail}")
+    print(f"  {'ok   ' if ok else 'FAIL '}  {name:<46} {lat}  {detail}")
 fails = sum(1 for r in results if not r[0])
-print(f"resultado: {len(results) - fails} ok, {fails} falha(s)")
+print(f"result: {len(results) - fails} ok, {fails} failure(s)")
 sys.exit(1 if fails else 0)
 PY
 }

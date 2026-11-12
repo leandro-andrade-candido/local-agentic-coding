@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
-"""Bateria de regressão de tool calling do llama-server (OpenAI e Anthropic).
+"""Tool-calling regression battery for llama-server (OpenAI and Anthropic).
 
-Baseada na bateria do verificador independente da E1–E3. Cobre argumentos
-inteiros, arrays e strings multilinha, casos em que nenhuma ferramenta deve ser
-chamada, streaming e não streaming, ida e volta com o resultado da ferramenta e
-chamadas paralelas.
+Based on the independent verifier's battery from E1-E3. Covers integer
+arguments, arrays and multiline strings, cases where no tool should be
+called, streaming and non-streaming, round trip with the tool result and
+parallel calls.
 
-Cada resposta é classificada em:
-  OK        chamada (ou ausência de chamada) esperada, com argumentos corretos
-  MODELO    resposta bem-formada, mas o modelo escolheu outra ação ou argumentos
-  RUNTIME   falha de runtime/parser: erro HTTP, JSON inválido, markup de tool call
-            vazando no texto, tipo fora do schema, ferramenta inexistente,
-            stop_reason incoerente
-  TRUNCADO  resposta cortada por max_tokens (configuração, não parser)
+The test prompts are in Portuguese on purpose: they are test data, and the
+argument checks (e.g. "senha" in the issue title) depend on them.
 
-Sai com código 1 se houver RUNTIME ou TRUNCADO. MODELO é registrado, mas não
-reprova: mede o modelo, não o runtime.
+Each response is classified as:
+  OK         expected call (or expected absence of a call), with correct arguments
+  MODEL      well-formed response, but the model chose another action or arguments
+  RUNTIME    runtime/parser failure: HTTP error, invalid JSON, tool-call markup
+             leaking into the text, type outside the schema, nonexistent tool,
+             inconsistent stop_reason
+  TRUNCATED  response cut off by max_tokens (configuration, not parser)
 
-Uso: python3 -I scripts/tool_calls.py [--base URL] [--model alias] [--reps N]
-                                      [--api-key-file arquivo | --api-key K] [--json-out arquivo]
-     (sem chave nos argumentos, usa $LLM_API_KEY; scripts/llm test já passa o arquivo)
+Exits with code 1 if there is any RUNTIME or TRUNCATED. MODEL is recorded but does
+not fail the run: it measures the model, not the runtime.
+
+Usage: python3 -I scripts/tool_calls.py [--base URL] [--model alias] [--reps N]
+                                        [--api-key-file FILE | --api-key K] [--json-out FILE]
+     (with no key in the arguments, uses $LLM_API_KEY; scripts/llm test already passes the file)
 """
 import argparse
 import json
@@ -79,7 +82,7 @@ def chk_issue(a):
 
 
 def types_issue(a):
-    # Tipo fora do schema indica problema de conversão no parser.
+    # A type outside the schema indicates a conversion problem in the parser.
     errs = []
     if "priority" in a and not isinstance(a["priority"], int):
         errs.append(f"priority={a['priority']!r} ({type(a['priority']).__name__})")
@@ -89,7 +92,7 @@ def types_issue(a):
 
 
 def chk_write(a):
-    # A quebra de linha final é ignorada: o modelo às vezes a omite (observado na E1–E3).
+    # The trailing newline is ignored: the model sometimes omits it (observed in E1-E3).
     return a.get("path", "").endswith("hello.py") and a.get("content", "").rstrip("\n") == PY.rstrip("\n")
 
 
@@ -104,21 +107,21 @@ def types_search(a):
 
 
 CASES = [
-    # id, prompt, ferramenta esperada (None = nenhuma), checagem de args, checagem de tipos, checagem de texto
+    # id, prompt, expected tool (None = none), args check, types check, text check
     ("int+array",
      "Abra uma issue com o título 'Login falha com senha vazia', prioridade 2 e os rótulos bug e auth.",
      "create_issue", chk_issue, types_issue, None),
-    ("multilinha",
+    ("multiline",
      "Crie o arquivo hello.py com exatamente o conteúdo entre as marcas <<< e >>> "
      "(preserve linhas em branco, indentação de 4 espaços e as aspas):\n<<<\n" + PY + ">>>",
      "write_file", chk_write, lambda a: [], None),
     ("int",
      "Procure no repositório o padrão TODO e traga no máximo 5 resultados.",
      "search_code", chk_search, types_search, None),
-    ("sem-tool-calc",
+    ("no-tool-calc",
      "Quanto é 17 vezes 23? Responda só com o número.",
      None, None, None, lambda t: "391" in t),
-    ("sem-tool-conceito",
+    ("no-tool-concept",
      "Em uma frase: qual a diferença entre um mutex e um semáforo?",
      None, None, None, lambda t: len(t.strip()) > 20),
 ]
@@ -217,26 +220,26 @@ def user_msg(text):
 
 
 def parse_calls(api, calls, text, fin):
-    """Checagens de runtime comuns. Devolve (veredito, detalhe, chamadas_parseadas)."""
+    """Common runtime checks. Returns (verdict, detail, parsed_calls)."""
     if fin == ("length" if api == "openai" else "max_tokens"):
-        return "TRUNCADO", f"finish={fin}", []
+        return "TRUNCATED", f"finish={fin}", []
     if LEAK.search(text or ""):
-        return "RUNTIME", f"markup de tool call vazou no texto: {text[:160]!r}", []
+        return "RUNTIME", f"tool-call markup leaked into the text: {text[:160]!r}", []
     parsed = []
     for name, args in calls:
         if name not in TOOL_NAMES:
-            return "RUNTIME", f"ferramenta inexistente: {name!r}", []
+            return "RUNTIME", f"nonexistent tool: {name!r}", []
         try:
             a = json.loads(args) if isinstance(args, str) else args
         except Exception as e:  # noqa: BLE001
-            return "RUNTIME", f"arguments não é JSON válido ({e}): {args[:160]!r}", []
+            return "RUNTIME", f"arguments is not valid JSON ({e}): {args[:160]!r}", []
         if not isinstance(a, dict):
-            return "RUNTIME", f"arguments não é objeto: {a!r}", []
+            return "RUNTIME", f"arguments is not an object: {a!r}", []
         parsed.append((name, a))
     if calls and fin != ("tool_calls" if api == "openai" else "tool_use"):
-        return "RUNTIME", f"há tool call mas finish/stop_reason={fin}", []
+        return "RUNTIME", f"there is a tool call but finish/stop_reason={fin}", []
     if not calls and fin not in ("stop", "end_turn"):
-        return "RUNTIME", f"sem tool call e finish/stop_reason={fin}", []
+        return "RUNTIME", f"no tool call and finish/stop_reason={fin}", []
     return None, "", parsed
 
 
@@ -247,20 +250,20 @@ def classify(api, case, calls, text, fin):
         return verdict, detail
     if want is None:
         if parsed:
-            return "MODELO", f"chamou {parsed[0][0]} {json.dumps(parsed[0][1], ensure_ascii=False)[:120]} sem necessidade"
-        return ("OK" if txtchk(text) else "MODELO"), f"texto={text.strip()[:80]!r}"
+            return "MODEL", f"called {parsed[0][0]} {json.dumps(parsed[0][1], ensure_ascii=False)[:120]} unnecessarily"
+        return ("OK" if txtchk(text) else "MODEL"), f"text={text.strip()[:80]!r}"
     if not parsed:
-        return "MODELO", f"não chamou ferramenta; texto={text.strip()[:120]!r}"
+        return "MODEL", f"did not call a tool; text={text.strip()[:120]!r}"
     name, a = parsed[0]
     if name != want:
-        return "MODELO", f"chamou {name} {json.dumps(a, ensure_ascii=False)[:120]}"
+        return "MODEL", f"called {name} {json.dumps(a, ensure_ascii=False)[:120]}"
     terr = types(a)
     if terr:
-        return "RUNTIME", "tipo fora do schema: " + "; ".join(terr)
-    extra = f" (+{len(parsed) - 1} chamadas extras)" if len(parsed) > 1 else ""
+        return "RUNTIME", "type outside the schema: " + "; ".join(terr)
+    extra = f" (+{len(parsed) - 1} extra calls)" if len(parsed) > 1 else ""
     if chk(a):
         return "OK", json.dumps(a, ensure_ascii=False)[:140] + extra
-    return "MODELO", "args diferentes: " + json.dumps(a, ensure_ascii=False)[:220] + extra
+    return "MODEL", "different args: " + json.dumps(a, ensure_ascii=False)[:220] + extra
 
 
 ROUNDTRIP_PROMPT = "Quantos testes existem em tests/, contando subdiretórios? Use a ferramenta."
@@ -268,7 +271,7 @@ PARALLEL_PROMPT = "Leia os arquivos a.txt e b.txt (os dois)."
 
 
 def roundtrip(client, api):
-    """tool call -> resultado da ferramenta -> resposta final citando o resultado."""
+    """tool call -> tool result -> final answer quoting the result."""
     msgs = user_msg(ROUNDTRIP_PROMPT)
     if api == "openai":
         calls, text, fin, _, msg = client.openai(msgs)
@@ -276,11 +279,11 @@ def roundtrip(client, api):
         calls, text, fin, _, content = client.anthropic(msgs)
     verdict, detail, parsed = parse_calls(api, calls, text, fin)
     if verdict:
-        return verdict, "1º turno: " + detail
+        return verdict, "1st turn: " + detail
     if not parsed or parsed[0][0] != "count_tests":
-        return "MODELO", f"1º turno não chamou count_tests: {parsed[:1]}"
+        return "MODEL", f"1st turn did not call count_tests: {parsed[:1]}"
     if not isinstance(parsed[0][1].get("recursive"), bool):
-        return "RUNTIME", f"recursive fora do schema: {parsed[0][1].get('recursive')!r}"
+        return "RUNTIME", f"recursive outside the schema: {parsed[0][1].get('recursive')!r}"
     if api == "openai":
         msgs = msgs + [msg, {"role": "tool", "tool_call_id": msg["tool_calls"][0]["id"],
                              "content": "137 test functions found"}]
@@ -293,21 +296,21 @@ def roundtrip(client, api):
         calls, text, fin, _, _ = client.anthropic(msgs)
     verdict, detail, parsed = parse_calls(api, calls, text, fin)
     if verdict:
-        return verdict, "2º turno: " + detail
+        return verdict, "2nd turn: " + detail
     if parsed:
-        return "MODELO", f"2º turno chamou {parsed[0][0]} em vez de responder"
-    return ("OK" if "137" in text else "MODELO"), f"final={text.strip()[:90]!r}"
+        return "MODEL", f"2nd turn called {parsed[0][0]} instead of answering"
+    return ("OK" if "137" in text else "MODEL"), f"final={text.strip()[:90]!r}"
 
 
 def parallel(client, api):
-    """Duas leituras independentes num mesmo turno."""
+    """Two independent reads in the same turn."""
     fn = client.openai if api == "openai" else client.anthropic
     calls, text, fin, _, _ = fn(user_msg(PARALLEL_PROMPT))
     verdict, detail, parsed = parse_calls(api, calls, text, fin)
     if verdict:
         return verdict, detail
     paths = sorted(a.get("path", "") for n, a in parsed if n == "read_file")
-    return ("OK" if paths == ["a.txt", "b.txt"] else "MODELO"), f"paths={paths}"
+    return ("OK" if paths == ["a.txt", "b.txt"] else "MODEL"), f"paths={paths}"
 
 
 def main():
@@ -316,11 +319,11 @@ def main():
     ap.add_argument("--model", default="local")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--api-key", default=None,
-                    help="chave na linha de comando (visível no ps); prefira --api-key-file")
+                    help="key on the command line (visible in ps); prefer --api-key-file")
     ap.add_argument("--api-key-file", default=None,
-                    help="arquivo com a chave (primeira linha que não começa com #); "
-                         "sem --api-key nem --api-key-file, usa $LLM_API_KEY")
-    ap.add_argument("--json-out", default=None, help="grava o resultado detalhado em JSON")
+                    help="file with the key (first line not starting with #); "
+                         "with neither --api-key nor --api-key-file, uses $LLM_API_KEY")
+    ap.add_argument("--json-out", default=None, help="writes the detailed result as JSON")
     args = ap.parse_args()
     api_key = args.api_key
     if api_key is None and args.api_key_file:
@@ -339,11 +342,11 @@ def main():
         except urllib.error.HTTPError as e:
             verdict, detail = "RUNTIME", f"HTTP {e.code}: {e.read()[:200]!r}"
         except Exception as e:  # noqa: BLE001
-            verdict, detail = "RUNTIME", f"exceção: {e!r}"
+            verdict, detail = "RUNTIME", f"exception: {e!r}"
         dt = time.time() - t
         results.append({"api": api, "mode": mode, "case": cid, "rep": rep + 1,
                         "verdict": verdict, "seconds": round(dt, 2), "detail": detail})
-        print(f"{verdict:8} {api:9} {mode:6} {cid:17} #{rep + 1} {dt:5.1f}s  {detail}", flush=True)
+        print(f"{verdict:9} {api:9} {mode:6} {cid:17} #{rep + 1} {dt:5.1f}s  {detail}", flush=True)
 
     for stream in (False, True):
         mode = "stream" if stream else "sync"
@@ -357,27 +360,27 @@ def main():
                     record(api, mode, case[0], rep, run)
     for api in ("openai", "anthropic"):
         for rep in range(args.reps):
-            record(api, "sync", "ida-e-volta", rep, lambda api=api: roundtrip(client, api))
-            record(api, "sync", "paralelo", rep, lambda api=api: parallel(client, api))
+            record(api, "sync", "round-trip", rep, lambda api=api: roundtrip(client, api))
+            record(api, "sync", "parallel", rep, lambda api=api: parallel(client, api))
 
-    print("\nRESUMO (OK/total por caso)")
+    print("\nSUMMARY (OK/total per case)")
     groups = {}
     for r in results:
         groups.setdefault((r["api"], r["mode"], r["case"]), []).append(r["verdict"])
     for (api, mode, cid), vs in groups.items():
-        print(f"  {api:9} {mode:6} {cid:17} OK={vs.count('OK')}/{len(vs)}  MODELO={vs.count('MODELO')}"
-              f"  RUNTIME={vs.count('RUNTIME')}  TRUNCADO={vs.count('TRUNCADO')}")
+        print(f"  {api:9} {mode:6} {cid:17} OK={vs.count('OK')}/{len(vs)}  MODEL={vs.count('MODEL')}"
+              f"  RUNTIME={vs.count('RUNTIME')}  TRUNCATED={vs.count('TRUNCATED')}")
     allv = [r["verdict"] for r in results]
-    totals = {k: allv.count(k) for k in ("OK", "MODELO", "RUNTIME", "TRUNCADO")}
-    print(f"TOTAL: OK={totals['OK']} MODELO={totals['MODELO']} RUNTIME={totals['RUNTIME']}"
-          f" TRUNCADO={totals['TRUNCADO']} de {len(allv)}")
+    totals = {k: allv.count(k) for k in ("OK", "MODEL", "RUNTIME", "TRUNCATED")}
+    print(f"TOTAL: OK={totals['OK']} MODEL={totals['MODEL']} RUNTIME={totals['RUNTIME']}"
+          f" TRUNCATED={totals['TRUNCATED']} of {len(allv)}")
 
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as f:
             json.dump({"base": args.base, "model": args.model, "reps": args.reps, "sampling": SAMPLING,
                        "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "totals": totals, "results": results},
                       f, ensure_ascii=False, indent=1)
-    sys.exit(1 if totals["RUNTIME"] or totals["TRUNCADO"] else 0)
+    sys.exit(1 if totals["RUNTIME"] or totals["TRUNCATED"] else 0)
 
 
 if __name__ == "__main__":

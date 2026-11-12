@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Mede a geração (tg) pelo llama-server com requisições reais: N pedidos curtos,
-cada um gerando exatamente --n tokens (ignore_eos), com prompts diferentes.
-Lê timings.predicted_per_second de cada resposta.
+"""Measures generation (tg) through llama-server with real requests: N short requests,
+each generating exactly --n tokens (ignore_eos), with different prompts.
+Reads timings.predicted_per_second from each response.
 
-Uso: python3 -I bench/tg_requests.py --out raw/x.jsonl [--base URL] [--n 256] [--reqs 4]
+Usage: python3 -I bench/tg_requests.py --out raw/x.jsonl [--base URL] [--n 256] [--reqs 4]
 """
 import argparse
 import json
@@ -46,7 +46,7 @@ def main():
             if i == 0:
                 txt = (resp["choices"][0]["message"].get("content") or "")[:300]
                 rsn = (resp["choices"][0]["message"].get("reasoning_content") or "")[:300]
-                print("amostra do texto (checar se não é lixo):", json.dumps(rsn or txt))
+                print("text sample (check that it is not garbage):", json.dumps(rsn or txt))
 
 
 if __name__ == "__main__":

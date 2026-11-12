@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Valida o perfil final lendo runtime/llama-server.args e runtime/llama-server.env,
-# exatamente como a unidade systemd da E5 fará.
-# Uso: bench/04-final.sh <modo> [rótulo]   (modo: agent | deep | tg | load; ver 03-server.sh)
+# Validates the final profile by reading runtime/llama-server.args and runtime/llama-server.env,
+# exactly as the E5 systemd unit will.
+# Usage: bench/04-final.sh <mode> [label]   (mode: agent | deep | tg | load; see 03-server.sh)
 source "$(dirname "$0")/lib.sh"
 mode="${1:-agent}"; label="${2:-FINAL-$mode}"
 mapfile -t ARGS < <(grep -vE '^\s*(#|$)' "$REPO_DIR/runtime/llama-server.args" | tr -s ' ' '\n')

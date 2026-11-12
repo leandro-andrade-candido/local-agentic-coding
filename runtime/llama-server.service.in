@@ -1,68 +1,68 @@
-# Unidade systemd --user do llama-server (E5). Modelo: `scripts/llm install` troca os
-# marcadores do repositório e do arquivo da chave e grava em
+# llama-server systemd --user unit (E5). Template: `scripts/llm install` replaces the
+# repository and key-file placeholders and writes it to
 # ~/.config/systemd/user/llama-server.service.
-# Sem root e sem unidade do sistema. Desfazer: `scripts/llm uninstall`.
+# No root and no system unit. Undo: `scripts/llm uninstall`.
 #
-# O que vem de onde:
-#   - build, porta, pastas: versions.env, lido pelo wrapper a cada início
-#     (mudou o versions.env ou o perfil? basta `scripts/llm restart`);
-#   - argumentos: runtime/llama-server.args (E4) + runtime/llama-server.policy.args (E5);
-#   - ambiente: runtime/llama-server.env, carregado pelo wrapper (não por
-#     EnvironmentFile=, para valer igual no início à mão);
-#   - chave: só o caminho do arquivo; o conteúdo nunca aparece na unidade.
-# `scripts/llm install` de novo só é preciso se o repositório mudar de lugar ou se
-# este modelo mudar.
+# What comes from where:
+#   - build, port, directories: versions.env, read by the wrapper on every start
+#     (changed versions.env or the profile? just `scripts/llm restart`);
+#   - arguments: runtime/llama-server.args (E4) + runtime/llama-server.policy.args (E5);
+#   - environment: runtime/llama-server.env, loaded by the wrapper (not by
+#     EnvironmentFile=, so it applies the same on a manual start);
+#   - key: only the file path; the content never appears in the unit.
+# Running `scripts/llm install` again is only needed if the repository moves or if
+# this template changes.
 
 [Unit]
-Description=llama-server local (modelo dos agentes de código, só em 127.0.0.1)
+Description=Local llama-server (model for the coding agents, 127.0.0.1 only)
 Documentation=file://@@REPO@@/docs/stages/E5-preparation.md
-# Até 5 inícios em 30 min; depois fica em "failed" até `scripts/llm start`
-# (que roda reset-failed). Evita laço com a GPU ou o modelo com problema.
+# Up to 5 starts in 30 min; then it stays "failed" until `scripts/llm start`
+# (which runs reset-failed). Avoids a loop when the GPU or the model has a problem.
 StartLimitIntervalSec=30min
 StartLimitBurst=5
 
 [Service]
-# exec: o wrapper faz exec do llama-server, que vira o processo principal (MainPID).
-# Parar = sinal para esse PID; nada de pkill por padrão de nome (problema da E3).
+# exec: the wrapper execs llama-server, which becomes the main process (MainPID).
+# Stopping = signal to that PID; no pkill by name pattern (an E3 problem).
 Type=exec
 Environment=LLM_API_KEY_FILE=@@KEY_FILE@@
 ExecStart=@@REPO@@/runtime/llama-server-start.sh
-# Pronto só quando GET /health responde 200 (modelo carregado): `systemctl --user start`
-# espera aqui. Desiste em 10 min ou se o processo principal morrer.
+# Ready only when GET /health answers 200 (model loaded): `systemctl --user start`
+# waits here. Gives up after 10 min or if the main process dies.
 ExecStartPost=@@REPO@@/scripts/llm wait-ready --timeout 600
-# Carga do modelo de 22 GB: ~30 s com -lm dio e cache de disco frio na E4; mmap levou
-# ~2,5 min. 11 min cobre o pior caso e a espera acima.
+# Loading the 22 GB model: ~30 s with -lm dio and a cold disk cache in E4; mmap took
+# ~2.5 min. 11 min covers the worst case and the wait above.
 TimeoutStartSec=11min
 
-# Reinício automático só em falha (saída != 0, sinal, falha da espera acima), com
-# espera crescente: 10 s, ... até 5 min em 5 passos.
+# Automatic restart only on failure (exit != 0, signal, failure of the wait above), with
+# growing delay: 10 s, ... up to 5 min in 5 steps.
 Restart=on-failure
-# Código 2 = recusa do wrapper (argumentos, modelo, chave, pré-voo bloqueado): reiniciar
-# não resolve; fica em "failed" com o motivo no log.
+# Exit code 2 = wrapper refusal (arguments, model, key, preflight blocked): restarting
+# does not help; it stays "failed" with the reason in the log.
 RestartPreventExitStatus=2
 RestartSec=10s
 RestartSteps=5
 RestartMaxDelaySec=5min
 
-# Parada limpa: SIGTERM só no llama-server (ele termina o pedido em curso e libera a
-# memória fixada); se não sair em 90 s, SIGKILL em todo o grupo.
+# Clean stop: SIGTERM only to llama-server (it finishes the request in progress and frees the
+# pinned memory); if it does not exit within 90 s, SIGKILL to the whole group.
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=90s
 SendSIGKILL=yes
 
-# Logs no journald: `scripts/llm logs [-f]` ou journalctl --user -u llama-server.
+# Logs in journald: `scripts/llm logs [-f]` or journalctl --user -u llama-server.
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=llama-server
 
-# Endurecimento que funciona em unidade de usuário sem namespaces. ProtectSystem=,
-# PrivateTmp= e afins exigem namespaces de usuário e não foram testados com o /dev/dxg do WSL.
+# Hardening that works in a user unit without namespaces. ProtectSystem=,
+# PrivateTmp= and the like need user namespaces and were not tested with WSL's /dev/dxg.
 NoNewPrivileges=yes
 UMask=0077
 WorkingDirectory=%h
 
 [Install]
-# Só com `scripts/llm install --enable`: sobe junto com o gerenciador do usuário
-# (primeiro shell do WSL). Ocupa a VRAM inteira e ~20 GB de RAM fixada.
+# Only with `scripts/llm install --enable`: starts together with the user manager
+# (first WSL shell). Takes all the VRAM and ~20 GB of pinned RAM.
 WantedBy=default.target

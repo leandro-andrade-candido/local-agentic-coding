@@ -1,314 +1,316 @@
-# E4: benchmark do Qwen3.6-35B-A3B e perfil do llama-server
+> Translated from the Portuguese original (commit 30666ad).
 
-> **Verificação independente (29/10, 12:11–12:31):** as 7 afirmações passaram ([`docs/verifications/E4.md`](../docs/verifications/E4.md)). Algumas magnitudes aqui ficaram maiores que as remedidas, sem mudar nenhuma conclusão:
-> - `MIN_BATCH=1024`: ~2,2× em pp128.
-> - `-t 16` contra `-t 8`: −18 a 19% na geração.
-> - `--moe-cache-mib 1024`: −22% na geração.
-> - Ao medir, descarte os 1–2 primeiros pedidos depois da carga, que são ~10% mais lentos.
+# E4: Qwen3.6-35B-A3B benchmark and llama-server profile
 
-Executada em 29/10/2026, das 10h36 às 12h05. Build `b11982` do llama.cpp (CUDA 12.8). Modelo `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22,35 GB). Método e comandos em [`README.md`](README.md); saídas brutas em `bench/raw/` (fora do git).
+> **Independent verification (Oct 29, 12:11–12:31):** all 7 claims passed ([`docs/verifications/E4.md`](../docs/verifications/E4.md)). Some magnitudes here came out larger than the re-measured ones, without changing any conclusion:
+> - `MIN_BATCH=1024`: ~2.2× on pp128.
+> - `-t 16` vs `-t 8`: −18 to 19% on generation.
+> - `--moe-cache-mib 1024`: −22% on generation.
+> - When measuring, discard the first 1–2 requests after load, which are ~10% slower.
 
-## Resumo
+Run on 2026-10-29, from 10:36 to 12:05. llama.cpp build `b11982` (CUDA 12.8). Model `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (22.35 GB). Method and commands in [`README.md`](README.md); raw outputs in `bench/raw/` (outside git).
 
-**Perfil escolhido** ([`runtime/llama-server.args`](../runtime/llama-server.args) + [`runtime/llama-server.env`](../runtime/llama-server.env)):
+## Summary
+
+**Chosen profile** ([`runtime/llama-server.args`](../runtime/llama-server.args) + [`runtime/llama-server.env`](../runtime/llama-server.env)):
 
 ```
 -np 1 -c 131072 -fa on -ctk q8_0 -ctv q8_0 -ngl 99 -ncmoe 38 --fit on --fit-target 384
 -b 4096 -ub 4096 -t 8 -tb 12 -lm dio --jinja --reasoning-preserve
 -ctxcp 48 -cms 2048 --cache-ram 12288 --metrics --temp 0.6 --top-p 0.95 --top-k 20
-ambiente: GGML_OP_OFFLOAD_MIN_BATCH=1024
+environment: GGML_OP_OFFLOAD_MIN_BATCH=1024
 ```
 
-**O que um agente vai sentir** (servidor real, pedidos com ferramentas e template de chat):
+**What an agent will feel** (real server, requests with tools and chat template):
 
-| Situação | 20k tokens de contexto | 64k | ~120k |
+| Situation | 20k tokens of context | 64k | ~120k |
 |---|---|---|---|
-| Prompt frio (perda de cache): tempo de prefill | **16,2 s** (1.242 tok/s) | **58,2 s** (1.100 tok/s) | **128,6 s** (934 tok/s) |
-| Turno quente (+350 a 450 tokens anexados) | **1,0 a 1,2 s** | 1,2 a 1,3 s | 1,3 a 1,5 s |
-| Volta a uma conversa depois de outra (cache de prompts na RAM) | 0,41 s | — | 0,48 s |
-| Geração | **30 a 32 tok/s** | 25 a 26 tok/s | 21 a 23 tok/s |
-| Geração com contexto curto | 34 a 37 tok/s | | |
+| Cold prompt (cache loss): prefill time | **16.2 s** (1,242 tok/s) | **58.2 s** (1,100 tok/s) | **128.6 s** (934 tok/s) |
+| Warm turn (+350 to 450 tokens appended) | **1.0 to 1.2 s** | 1.2 to 1.3 s | 1.3 to 1.5 s |
+| Return to a conversation after another one (prompt cache in RAM) | 0.41 s | — | 0.48 s |
+| Generation | **30 to 32 tok/s** | 25 to 26 tok/s | 21 to 23 tok/s |
+| Generation with short context | 34 to 37 tok/s | | |
 
-**Veredictos**
-- **PCIe Gen4 ×8 estável:** contador de replays em 0 antes, durante e depois de ~1,5 h de carga, incluindo o período com um jogo usando a GPU. **[medido]**
-- **`--moe-cache-mib`: não usar.** Com 1024 MiB a geração caiu 36%; com 2048 MiB, 21%. O CPU calcula os experts mais rápido do que a PCIe consegue trazê-los para a GPU. **[medido]**
-- **Reuso de cache entre turnos funciona:** o turno seguinte reprocessa só o que foi anexado (444 tokens de 20.618), e a conversa principal volta do cache na RAM depois de um desvio (39 tokens reprocessados). **[medido]**
+**Verdicts**
+- **PCIe Gen4 ×8 stable:** replay counter at 0 before, during and after ~1.5 h of load, including the period with a game using the GPU. **[measured]**
+- **`--moe-cache-mib`: do not use.** With 1024 MiB generation dropped 36%; with 2048 MiB, 21%. The CPU computes the experts faster than PCIe can bring them to the GPU. **[measured]**
+- **Cache reuse between turns works:** the next turn reprocesses only what was appended (444 tokens out of 20,618), and the main conversation comes back from the RAM cache after a detour (39 tokens reprocessed). **[measured]**
 
-**Surpresas**
-1. **Para turnos curtos, calcular os experts na CPU é mais rápido que copiá-los para a GPU.** Lote de 128 tokens: 384 tok/s na CPU contra 141 tok/s copiando pela PCIe. O cruzamento fica em ~1.000 tokens, e daí vem `GGML_OP_OFFLOAD_MIN_BATCH=1024`.
-2. **O prefill paga um custo fixo de ~0,9 a 1,2 s por micro-lote,** quase independente do tamanho. Micro-lote de 4096 rende +45% em prompts longos em relação a 2048.
-3. **Memória fixada (`-lm dio`/`none`) acelera o prefill em 10 a 27%** em relação ao `mmap` padrão. Mas `-lm none` leva ~2,5 min para carregar, contra ~30 s com `dio`.
-4. **16 threads é o pior valor para geração** (−20 a 30%). 6 a 8 threads é o melhor.
-5. **Mais camadas de experts na GPU rendem pouco:** ~1 a 1,5% por camada. A geração é limitada pela troca CPU↔GPU a cada camada, não pela banda da RAM.
+**Surprises**
+1. **For short turns, computing the experts on the CPU is faster than copying them to the GPU.** Batch of 128 tokens: 384 tok/s on the CPU vs 141 tok/s copying over PCIe. The crossover is at ~1,000 tokens, hence `GGML_OP_OFFLOAD_MIN_BATCH=1024`.
+2. **Prefill pays a fixed cost of ~0.9 to 1.2 s per micro-batch,** almost independent of size. A micro-batch of 4096 gives +45% on long prompts compared to 2048.
+3. **Pinned memory (`-lm dio`/`none`) speeds up prefill by 10 to 27%** compared to the default `mmap`. But `-lm none` takes ~2.5 min to load, vs ~30 s with `dio`.
+4. **16 threads is the worst value for generation** (−20 to 30%). 6 to 8 threads is the best.
+5. **More expert layers on the GPU yield little:** ~1 to 1.5% per layer. Generation is limited by the CPU↔GPU exchange at each layer, not by RAM bandwidth.
 
-## Premissa de uso e condições das medições
+## Usage premise and measurement conditions
 
-**Premissa decidida pelo usuário:** quando a IA está em uso, a GPU é dedicada a ela (sem jogos, NVIDIA Broadcast fechado). Por isso o perfil usa a GPU inteira e deixa só ~470 MiB de folga para variações do driver/WDDM, não para outros apps. Se outro app usar a NVIDIA ao mesmo tempo, o desempenho cai pela metade (seção 11).
+**Premise decided by the user:** when the AI is in use, the GPU is dedicated to it (no games, NVIDIA Broadcast closed). That is why the profile uses the whole GPU and leaves only ~470 MiB of headroom for driver/WDDM variations, not for other apps. If another app uses the NVIDIA GPU at the same time, performance drops by half (section 11).
 
-**Interferências durante a E4 e o que foi feito**
+**Interference during E4 and what was done**
 
-| Quando | O quê | Execuções afetadas | Tratamento |
+| When | What | Affected runs | Handling |
 |---|---|---|---|
-| ~10h39–10h40 (horário informado pelo orquestrador: "10h5x–11h0x") | Checagem SHA-256 do GGUF pelo orquestrador (1 núcleo + banda de RAM) | Pela minha marcação de tempo, só as cargas do `--fit` (que medem memória, não velocidade). Pela janela informada, também `E-threads`, `D-smallturn`, `D3`, `F-depth` (10h54–11h07) | `E` e `D` refeitos às 11h42 (`E2`, `D2`), `F` refeito às 11h12 (`F2`); conclusões iguais. `D3` não foi refeito: o servidor confirmou o efeito depois |
-| 11h08–11h09 | Carga externa não identificada: fila de 37 a 55 threads e −6 GB de RAM livre por ~4 s, duas vezes (`raw/02-G-tgnoise.vmstat`) | `G-tgnoise` (2 de 10 amostras a 12 e 16 tok/s) | Refeito (`G2`, sem picos) e monitor `burstmon.sh` ligado no resto da sessão |
-| **11h26–~11h37** | **Jogo (Dota 2) na NVIDIA** (C+G, 100% da GPU, 126 W, ~2 GB de VRAM), visto no `nvidia-smi` do Windows | `03-CONTAMINADO-jogo-M2048-ub2048`, `03-CONTAMINADO-jogo-FINAL-64k-ncmoe40` | Refeitos com a GPU livre; os contaminados ficaram como dado à parte (seção 11) |
-| 11h26–~11h47 | NVIDIA Broadcast como processo de computação na NVIDIA: 144 MiB, 1 a 3% de uso com a GPU ociosa (até ~14% em picos) | `M2048-rerun`, `FINAL-64k-ncmoe40`, `E2-threads`, `D2-smallturn` | Mantidos com a ressalva: geração possivelmente 2 a 5% mais baixa e mais ruidosa. Fechado pelo usuário; as execuções das 11h47 em diante estão limpas |
-| A sessão inteira | Outros serviços locais em containers (healthchecks periódicos) | Picos de 15 a 26 threads de poucos ms no `burstmon` | Desprezível |
+| ~10:39–10:40 (time reported by the orchestrator: "10:5x–11:0x") | SHA-256 check of the GGUF by the orchestrator (1 core + RAM bandwidth) | By my timestamps, only the `--fit` loads (which measure memory, not speed). By the reported window, also `E-threads`, `D-smallturn`, `D3`, `F-depth` (10:54–11:07) | `E` and `D` redone at 11:42 (`E2`, `D2`), `F` redone at 11:12 (`F2`); same conclusions. `D3` was not redone: the server confirmed the effect afterwards |
+| 11:08–11:09 | Unidentified external load: queue of 37 to 55 threads and −6 GB of free RAM for ~4 s, twice (`raw/02-G-tgnoise.vmstat`) | `G-tgnoise` (2 of 10 samples at 12 and 16 tok/s) | Redone (`G2`, no spikes) and `burstmon.sh` monitor kept on for the rest of the session |
+| **11:26–~11:37** | **Game (Dota 2) on the NVIDIA GPU** (C+G, 100% of the GPU, 126 W, ~2 GB of VRAM), seen in the Windows `nvidia-smi` | `03-CONTAMINADO-jogo-M2048-ub2048`, `03-CONTAMINADO-jogo-FINAL-64k-ncmoe40` | Redone with the GPU free; the contaminated ones were kept as separate data (section 11) |
+| 11:26–~11:47 | NVIDIA Broadcast as a compute process on the NVIDIA GPU: 144 MiB, 1 to 3% usage with the GPU idle (up to ~14% in peaks) | `M2048-rerun`, `FINAL-64k-ncmoe40`, `E2-threads`, `D2-smallturn` | Kept with a caveat: generation possibly 2 to 5% lower and noisier. Closed by the user; the runs from 11:47 on are clean |
+| The whole session | Other local services in containers (periodic healthchecks) | Spikes of 15 to 26 threads lasting a few ms in `burstmon` | Negligible |
 
-Antes das 11h26 a VRAM partia de 0 MiB com 0% de uso em todas as execuções. Depois partia de 144 MiB (Broadcast). A partir das 11h47, de 0 MiB outra vez (`raw/03-*.csv`, primeira linha).
+Before 11:26 VRAM started from 0 MiB with 0% usage in all runs. After that it started from 144 MiB (Broadcast). From 11:47 on, from 0 MiB again (`raw/03-*.csv`, first line).
 
-## 1. PCIe e estado da máquina
+## 1. PCIe and machine state
 
-| Momento | Link | Replays | GPU | VRAM usada | RAM disponível |
+| Moment | Link | Replays | GPU | VRAM used | Available RAM |
 |---|---|---|---|---|---|
-| 10h38 (antes) | Gen4 ×8 | 0 | 31 °C, P8 | 0 MiB | 48,8 GiB |
-| 11h37 (logo após o jogo) | Gen4 ×8 | 0 | 53 °C | 144 MiB (Broadcast) | 48,5 GiB |
-| 11h41 | Gen4 ×8 | 0 | 54 °C | 144 MiB | — |
-| 12h05 (final, depois da carga de 128k) | Gen4 ×8 | 0 | 40 °C, P8 | 0 MiB | — |
+| 10:38 (before) | Gen4 ×8 | 0 | 31 °C, P8 | 0 MiB | 48.8 GiB |
+| 11:37 (right after the game) | Gen4 ×8 | 0 | 53 °C | 144 MiB (Broadcast) | 48.5 GiB |
+| 11:41 | Gen4 ×8 | 0 | 54 °C | 144 MiB | — |
+| 12:05 (final, after the 128k load) | Gen4 ×8 | 0 | 40 °C, P8 | 0 MiB | — |
 
-- Contadores de lentidão térmica (`SW/HW Thermal Slowdown`) em 0 µs na sessão inteira. Só o teto de potência de 130 W atuou (`SW Power Capping`), o que é normal sob carga.
-- **Veredicto: Gen4 ×8 estável.** Não houve erro de CUDA, texto corrompido nem queda de link.
+- Thermal slowdown counters (`SW/HW Thermal Slowdown`) at 0 µs for the whole session. Only the 130 W power cap acted (`SW Power Capping`), which is normal under load.
+- **Verdict: Gen4 ×8 stable.** There was no CUDA error, corrupted text or link drop.
 
-## 2. Onde ficam os experts
+## 2. Where the experts live
 
-**O que o `--fit` escolhe** (`01-fit.sh`, contexto 131072, KV q8_0, folga padrão de 1024 MiB; o CUDA vê 7.062 MiB livres de 8.150):
+**What `--fit` chooses** (`01-fit.sh`, context 131072, KV q8_0, default headroom of 1024 MiB; CUDA sees 7,062 MiB free out of 8,150):
 
-| Micro-lote | Escolha do `--fit` | VRAM própria | Modelo | Contexto (KV + estado recorrente) | Buffer de cálculo |
+| Micro-batch | `--fit` choice | Own VRAM | Model | Context (KV + recurrent state) | Compute buffer |
 |---|---|---|---|---|---|
-| 512 | 37 camadas de experts na RAM + 1 parcial | 5.854 MiB | 3.987 | 1.422 | 444 |
-| 1024 | 38 + 1 parcial | 5.870 | 3.815 | 1.422 | 632 |
-| 2048 | 38 + 1 parcial | 5.954 | 3.523 | 1.422 | 1.008 |
-| 4096 | **ruim:** 2 camadas inteiras (com atenção) na CPU | 5.949 | 2.562 | 1.418 | 1.968 |
+| 512 | 37 expert layers in RAM + 1 partial | 5,854 MiB | 3,987 | 1,422 | 444 |
+| 1024 | 38 + 1 partial | 5,870 | 3,815 | 1,422 | 632 |
+| 2048 | 38 + 1 partial | 5,954 | 3,523 | 1,422 | 1,008 |
+| 4096 | **bad:** 2 whole layers (with attention) on the CPU | 5,949 | 2,562 | 1,418 | 1,968 |
 
-- Com todos os experts na RAM, os pesos densos ocupam 2.038 MiB na GPU. Cada camada de experts custa 464 a 560 MiB (o UD varia a quantização por camada).
-- KV de 131072 tokens em q8_0: 1.360 MiB, ou 10,6 KiB por token (só 10 camadas de atenção completa; o plano estimava 20 KiB). Estado recorrente (DeltaNet): 63 MiB.
-- Com micro-lote de 4096, ficar só com pesos densos deixaria 1.023 MiB livres, 1 MiB abaixo da folga padrão. Por isso o `--fit` tirou camadas inteiras da GPU, o pior resultado possível. Com `-ngl 99 -ncmoe` explícitos isso não acontece.
+- With all experts in RAM, the dense weights take 2,038 MiB on the GPU. Each expert layer costs 464 to 560 MiB (UD varies the quantization per layer).
+- KV for 131072 tokens in q8_0: 1,360 MiB, or 10.6 KiB per token (only 10 full-attention layers; the plan estimated 20 KiB). Recurrent state (DeltaNet): 63 MiB.
+- With a micro-batch of 4096, keeping only dense weights would leave 1,023 MiB free, 1 MiB below the default headroom. That is why `--fit` took whole layers off the GPU, the worst possible outcome. With explicit `-ngl 99 -ncmoe` this does not happen.
 
-**Ganho por camada na GPU** (`llama-bench`, `mmap`, micro-lote 2048, 12 threads):
+**Gain per layer on the GPU** (`llama-bench`, `mmap`, micro-batch 2048, 12 threads):
 
 | `-ncmoe` | pp2048 (tok/s) | tg (tok/s) |
 |---|---|---|
-| 40 | 968 | 32,2 (1 amostra válida; a outra, 12,1, foi um pico externo) |
-| 38 | 1.013 | 35,0 |
-| 36 | 1.055 | 36,5 |
-| 34 | 1.088 | 37,2 |
+| 40 | 968 | 32.2 (1 valid sample; the other, 12.1, was an external spike) |
+| 38 | 1,013 | 35.0 |
+| 36 | 1,055 | 36.5 |
+| 34 | 1,088 | 37.2 |
 
-Com micro-lote 4096, 8 threads e `dio`: tg de 36,1 (`-ncmoe 40`) contra 36,7 (`-ncmoe 38`). **Cada camada rende ~1 a 1,5%.** A geração não é limitada pela banda da RAM (o teto teórico seria ~100 tok/s). O limite é o custo fixo de ~76 trocas CPU↔GPU por token. **[medido / interpretação]**
+With micro-batch 4096, 8 threads and `dio`: tg of 36.1 (`-ncmoe 40`) vs 36.7 (`-ncmoe 38`). **Each layer yields ~1 to 1.5%.** Generation is not limited by RAM bandwidth (the theoretical ceiling would be ~100 tok/s). The limit is the fixed cost of ~76 CPU↔GPU exchanges per token. **[measured / interpretation]**
 
-**Escolha:** `-ncmoe 38` com micro-lote 4096. Ocupa 6.571 MiB e deixa **472 MiB livres** na visão do CUDA (`raw/03-K2-ncmoe38.log`), dentro da folga de 300 a 500 MiB decidida para GPU dedicada. Alternativa testada: o `--fit` com folga de 384 MiB e camadas livres escolheu 1 camada + 1 parcial (6.450 MiB, 594 livres). O desempenho é equivalente, mas preferi o valor explícito porque não depende da heurística do `--fit` mudar entre versões.
+**Choice:** `-ncmoe 38` with micro-batch 4096. It takes 6,571 MiB and leaves **472 MiB free** in CUDA's view (`raw/03-K2-ncmoe38.log`), within the 300 to 500 MiB headroom decided for a dedicated GPU. Alternative tested: `--fit` with a headroom of 384 MiB and free layers chose 1 layer + 1 partial (6,450 MiB, 594 free). Performance is equivalent, but I preferred the explicit value because it does not depend on the `--fit` heuristic changing between versions.
 
-## 3. Micro-lote: custo fixo por micro-lote
+## 3. Micro-batch: fixed cost per micro-batch
 
 `llama-bench`, `-ncmoe 38`, `mmap`, tok/s:
 
-| Micro-lote | pp512 | pp2048 | pp4096 |
+| Micro-batch | pp512 | pp2048 | pp4096 |
 |---|---|---|---|
 | 512 | 378 | 301 ± 99 | 357 |
 | 1024 | 388 | 638 | 590 |
-| 2048 | 389 | 1.013 | 1.009 |
-| 4096 | 366 | 1.020 | **1.477** |
+| 2048 | 389 | 1,013 | 1,009 |
+| 4096 | 366 | 1,020 | **1,477** |
 
-- O tempo por micro-lote segue `t ≈ custo fixo + n / ~2.450 tok/s`. O custo fixo é **~1,2 s com `mmap`** e **~0,86 s com memória fixada** (`dio`). **[medido]**
-- O custo fixo é atribuído à transferência dos experts da RAM para a GPU. Pela taxa implícita, nem todos os 18 GB são copiados a cada micro-lote, ou a cópia se sobrepõe ao cálculo. O mecanismo não foi verificado.
-- No servidor, com o prompt frio de 20k tokens: **16,5 s com micro-lote 4096 contra 22,0 s com 2048** (−25%). A geração não muda.
-- Custo do micro-lote 4096: +1,1 GB de buffer de cálculo na GPU (2.114 contra 1.008 MiB) e +576 MiB fixados na RAM (1.152 contra 576 MiB).
+- The time per micro-batch follows `t ≈ fixed cost + n / ~2,450 tok/s`. The fixed cost is **~1.2 s with `mmap`** and **~0.86 s with pinned memory** (`dio`). **[measured]**
+- The fixed cost is attributed to the transfer of the experts from RAM to the GPU. From the implied rate, either not all 18 GB are copied on every micro-batch, or the copy overlaps with computation. The mechanism was not verified.
+- On the server, with the 20k-token cold prompt: **16.5 s with micro-batch 4096 vs 22.0 s with 2048** (−25%). Generation does not change.
+- Cost of micro-batch 4096: +1.1 GB of compute buffer on the GPU (2,114 vs 1,008 MiB) and +576 MiB pinned in RAM (1,152 vs 576 MiB).
 
-## 4. Modo de carga: mmap contra memória fixada
+## 4. Load mode: mmap vs pinned memory
 
 `llama-bench`, `-ncmoe 38`, tok/s:
 
-| Modo | Micro-lote | pp512 | pp4096 | tg64 | Tempo de carga |
+| Mode | Micro-batch | pp512 | pp4096 | tg64 | Load time |
 |---|---|---|---|---|---|
-| `mmap` (padrão) | 2048 | 406 | 1.015 | 35,0 | ~6 s (arquivo no cache de página) |
-| `mmap` | 4096 | 378 | 1.240 (1.402 / 1.079) | 33,7 | |
-| `none` (memória fixada) | 2048 | 460 | 1.114 | 35,6 | **~2,5 min** (GPU parada, RAM estável) |
-| `none` | 4096 | 461 | 1.573 | 33,8 | |
-| `dio` (DirectIO + memória fixada) | 2048 | 465 | 1.128 | 27,9 * | **~30 a 34 s** no servidor |
-| `dio` | 4096 | **480** | **1.620** | 19,4 * | |
+| `mmap` (default) | 2048 | 406 | 1,015 | 35.0 | ~6 s (file in the page cache) |
+| `mmap` | 4096 | 378 | 1,240 (1,402 / 1,079) | 33.7 | |
+| `none` (pinned memory) | 2048 | 460 | 1,114 | 35.6 | **~2.5 min** (GPU idle, RAM stable) |
+| `none` | 4096 | 461 | 1,573 | 33.8 | |
+| `dio` (DirectIO + pinned memory) | 2048 | 465 | 1,128 | 27.9 * | **~30 to 34 s** on the server |
+| `dio` | 4096 | **480** | **1,620** | 19.4 * | |
 
-\* A geração com `dio` teve amostras isoladas lentas (22,7 e 6,4 tok/s) num momento de pressão de memória externa. Nas execuções seguintes com `dio`, a geração ficou em 33 a 37 tok/s.
+\* Generation with `dio` had isolated slow samples (22.7 and 6.4 tok/s) at a moment of external memory pressure. In the following runs with `dio`, generation stayed at 33 to 37 tok/s.
 
-- Com memória fixada, os pesos dos experts vão para um buffer `CUDA_Host` (19.275 MiB com `-ncmoe 40`), que aparece como `Shmem` no `/proc/meminfo`. O próprio llama.cpp avisa: *"tensor overrides to CPU are used with mmap enabled - consider using --load-mode none for better performance"*.
-- `mlock` não foi testado: o limite `memlock` é de 64 MiB e só sobe com `sudo`. A memória fixada já impede a troca para o swap.
-- `--no-host` (reempacotamento dos pesos para a CPU) e `GGML_CUDA_REGISTER_HOST` não foram testados (questões em aberto).
+- With pinned memory, the expert weights go to a `CUDA_Host` buffer (19,275 MiB with `-ncmoe 40`), which shows up as `Shmem` in `/proc/meminfo`. llama.cpp itself warns: *"tensor overrides to CPU are used with mmap enabled - consider using --load-mode none for better performance"*.
+- `mlock` was not tested: the `memlock` limit is 64 MiB and only goes up with `sudo`. Pinned memory already prevents swapping.
+- `--no-host` (repacking the weights for the CPU) and `GGML_CUDA_REGISTER_HOST` were not tested (open questions).
 
-## 5. Turnos curtos: CPU contra cópia para a GPU
+## 5. Short turns: CPU vs copy to the GPU
 
-Um agente anexa de 100 a 2.000 tokens por turno. Por padrão, qualquer lote com 32 tokens ou mais copia os experts para a GPU (`GGML_OP_OFFLOAD_MIN_BATCH=32`). `llama-bench`, `-ncmoe 40`, micro-lote 4096, `dio`, tok/s (`D2`, 11h42, com a ressalva do Broadcast):
+An agent appends 100 to 2,000 tokens per turn. By default, any batch of 32 tokens or more copies the experts to the GPU (`GGML_OP_OFFLOAD_MIN_BATCH=32`). `llama-bench`, `-ncmoe 40`, micro-batch 4096, `dio`, tok/s (`D2`, 11:42, with the Broadcast caveat):
 
-| Lote | Copiando para a GPU (padrão) | Na CPU, 8 threads (`-nopo 1`) | Na CPU, 12 threads | `MIN_BATCH=1024`, 12 threads (`D3`) |
+| Batch | Copying to the GPU (default) | On the CPU, 8 threads (`-nopo 1`) | On the CPU, 12 threads | `MIN_BATCH=1024`, 12 threads (`D3`) |
 |---|---|---|---|---|
 | 128 | 141 | 371 | 372 | **384** |
 | 512 | 451 | 504 ± 172 | 568 | **580** |
-| 1024 | 744 | 761 | 694 | 730 (já vai para a GPU) |
-| 2048 | 1.135 | 786 | 675 ± 117 | **1.116** |
-| 4096 | — | — | — | **1.510** |
+| 1024 | 744 | 761 | 694 | 730 (already goes to the GPU) |
+| 2048 | 1,135 | 786 | 675 ± 117 | **1,116** |
+| 4096 | — | — | — | **1,510** |
 
-- Na CPU, o tempo cresce ~1,2 ms por token. Pela GPU, há o custo fixo de ~0,9 s. **O cruzamento fica em ~1.000 tokens.** **[medido]**
-- `GGML_OP_OFFLOAD_MIN_BATCH=1024` junta o melhor dos dois caminhos: **2,7× mais rápido em lotes de 128** e +29% em lotes de 512, sem perder nada nos lotes grandes.
-- Para o caminho da CPU, 12 threads (`-tb 12`) rendem um pouco mais que 8. Com 16 threads foi pior e instável (`D`: pp128 de 131 ± 52).
-- No servidor, os turnos quentes de 346 a 444 tokens levam 1,0 a 1,2 s (20k) e 1,3 a 1,5 s (120k). Esse tempo inclui criar 2 a 3 checkpoints (63 MiB cada) e o template.
+- On the CPU, time grows ~1.2 ms per token. Through the GPU, there is the fixed cost of ~0.9 s. **The crossover is at ~1,000 tokens.** **[measured]**
+- `GGML_OP_OFFLOAD_MIN_BATCH=1024` combines the best of both paths: **2.7× faster on batches of 128** and +29% on batches of 512, losing nothing on large batches.
+- For the CPU path, 12 threads (`-tb 12`) give a little more than 8. 16 threads was worse and unstable (`D`: pp128 of 131 ± 52).
+- On the server, warm turns of 346 to 444 tokens take 1.0 to 1.2 s (20k) and 1.3 to 1.5 s (120k). That time includes creating 2 to 3 checkpoints (63 MiB each) and the template.
 
-## 6. Threads na geração
+## 6. Generation threads
 
-`llama-bench` tg128, micro-lote 4096, `dio`, tok/s:
+`llama-bench` tg128, micro-batch 4096, `dio`, tok/s:
 
-| Threads | `E` (10h54, `-ncmoe 40`) | `E` (`-ncmoe 38`) | `E2` (11h42, Broadcast ativo) | `G2` (11h09, limpo, 10 repetições) |
+| Threads | `E` (10:54, `-ncmoe 40`) | `E` (`-ncmoe 38`) | `E2` (11:42, Broadcast active) | `G2` (11:09, clean, 10 repetitions) |
 |---|---|---|---|---|
-| 6 | 32,7 ± 5,3 | 37,0 | 35,7 | |
-| 8 | 36,1 | 36,7 | 32,1 ± 3,8 | **34,9 ± 2,4** |
-| 12 | 33,8 | 35,1 | 33,1 | |
-| 16 | 26,9 ± 4,0 | 29,1 ± 4,9 | 24,8 | |
+| 6 | 32.7 ± 5.3 | 37.0 | 35.7 | |
+| 8 | 36.1 | 36.7 | 32.1 ± 3.8 | **34.9 ± 2.4** |
+| 12 | 33.8 | 35.1 | 33.1 | |
+| 16 | 26.9 ± 4.0 | 29.1 ± 4.9 | 24.8 | |
 
-- 6 a 8 threads dão o melhor resultado, 12 fica ~3 a 5% abaixo e 16 perde 20 a 30%.
-- O WSL vê 16 vCPUs (8 núcleos × 2 SMT, 1 L3 de 96 MB) e o Hyper-V não fixa vCPU em núcleo. Por isso não dá para escolher o CCD com cache 3D por afinidade.
-- Escolha: **`-t 8`** para a geração e **`-tb 12`** para os lotes na CPU.
+- 6 to 8 threads give the best result, 12 is ~3 to 5% lower and 16 loses 20 to 30%.
+- WSL sees 16 vCPUs (8 cores × 2 SMT, 1 L3 of 96 MB) and Hyper-V does not pin vCPUs to cores. So it is not possible to choose the CCD with the 3D cache by affinity.
+- Choice: **`-t 8`** for generation and **`-tb 12`** for the batches on the CPU.
 
-## 7. Curva de profundidade
+## 7. Depth curve
 
-`llama-bench` `F2` (11h12–11h17, limpo), `-ncmoe 40`, micro-lote 4096, `dio`, `MIN_BATCH=1024`, tok/s:
+`llama-bench` `F2` (11:12–11:17, clean), `-ncmoe 40`, micro-batch 4096, `dio`, `MIN_BATCH=1024`, tok/s:
 
-| Profundidade | pp512 (caminho CPU, 12 threads) | pp4096 (caminho GPU) | tg128 (8 threads) |
+| Depth | pp512 (CPU path, 12 threads) | pp4096 (GPU path) | tg128 (8 threads) |
 |---|---|---|---|
-| 0 | 580 | 1.622 | 34,9 |
-| 16.384 | 600 | 1.209 (1.388 / 1.030) | 33,6 |
-| 65.536 | 518 | 843 (751 / 935) | 24,4 (27,0 / 20,5 / 25,6) |
+| 0 | 580 | 1,622 | 34.9 |
+| 16,384 | 600 | 1,209 (1,388 / 1,030) | 33.6 |
+| 65,536 | 518 | 843 (751 / 935) | 24.4 (27.0 / 20.5 / 25.6) |
 
-- O pp4096 em profundidade alterna entre repetições num padrão que se repete (rápida/lenta em 16k, lenta/rápida em 64k). A tabela mostra as duas amostras.
-- No servidor, com prompts reais, a geração ficou em 30 a 32 tok/s com 20k de contexto, 25 a 26 com 64k e 21 a 23 com ~120k.
+- pp4096 at depth alternates between repetitions in a repeating pattern (fast/slow at 16k, slow/fast at 64k). The table shows both samples.
+- On the server, with real prompts, generation was 30 to 32 tok/s with 20k of context, 25 to 26 with 64k and 21 to 23 with ~120k.
 
-## 8. Cache de experts na GPU (`--moe-cache-mib`)
+## 8. Expert cache on the GPU (`--moe-cache-mib`)
 
-Servidor, `-ncmoe 40`, micro-lote 2048 (para a cache de 2 GiB caber), 4 pedidos de 256 tokens:
+Server, `-ncmoe 40`, micro-batch 2048 (so the 2 GiB cache fits), 4 requests of 256 tokens:
 
-| Cache | Geração (tok/s) | Média | Taxa de acerto (lote ≤ 8) | Enviado à GPU durante o teste | VRAM no pico |
+| Cache | Generation (tok/s) | Mean | Hit rate (batch ≤ 8) | Sent to the GPU during the test | Peak VRAM |
 |---|---|---|---|---|---|
-| 0 | 33,4 / 36,8 / 35,9 / 36,3 | **35,6** | — | — | 4.728 MiB |
-| 1024 MiB | 23,4 / 22,6 / 23,1 / 22,7 | 22,9 (**−36%**) | 43,5% | 343 GB | 5.862 MiB |
-| 2048 MiB (refeito, Broadcast ativo) | 29,6 / 28,7 / 25,7 / 28,6 | 28,1 (**−21%**) | 60,7% | 239 GB | 6.887 MiB |
+| 0 | 33.4 / 36.8 / 35.9 / 36.3 | **35.6** | — | — | 4,728 MiB |
+| 1024 MiB | 23.4 / 22.6 / 23.1 / 22.7 | 22.9 (**−36%**) | 43.5% | 343 GB | 5,862 MiB |
+| 2048 MiB (redone, Broadcast active) | 29.6 / 28.7 / 25.7 / 28.6 | 28.1 (**−21%**) | 60.7% | 239 GB | 6,887 MiB |
 
-- **Veredicto: não usar.** Mesmo com 60% de acerto, cada falha envia o expert pela PCIe, e isso é mais lento que calcular na CPU (Zen 5 com AVX-512).
-- A promessa de "até 2,2×" vale para máquinas em que o cálculo na CPU é o gargalo, o que não é o caso aqui.
-- A execução contaminada pelo jogo (2048 MiB) foi pior ainda: 4,5 a 28 tok/s, carga de 123 s e 7.857 MiB de VRAM (seção 11).
+- **Verdict: do not use.** Even with a 60% hit rate, each miss sends the expert over PCIe, and that is slower than computing on the CPU (Zen 5 with AVX-512).
+- The "up to 2.2×" promise holds for machines where CPU computation is the bottleneck, which is not the case here.
+- The run contaminated by the game (2048 MiB) was even worse: 4.5 to 28 tok/s, 123 s load and 7,857 MiB of VRAM (section 11).
 
-## 9. Simulação de turnos de agente
+## 9. Agent-turn simulation
 
-`agent_turns.py` pelo `/v1/chat/completions`, com template de chat e 8 ferramentas (como num agente de programação). Sequência:
-1. Prompt frio: system + ferramentas + um arquivo-fonte grande colado (`argparse.py`; mais arquivos para 64k e 120k).
-2. Dois turnos quentes: a resposta do modelo (raciocínio + chamada de ferramenta) é devolvida, e anexa-se o resultado da ferramenta e uma mensagem do usuário.
-3. Uma conversa paralela diferente (como um subagente ou um pedido de título).
-4. A volta à conversa principal.
+`agent_turns.py` through `/v1/chat/completions`, with the chat template and 8 tools (as in a coding agent). Sequence:
+1. Cold prompt: system + tools + a large pasted source file (`argparse.py`; more files for 64k and 120k).
+2. Two warm turns: the model's reply (reasoning + tool call) is sent back, and the tool result and a user message are appended.
+3. A different parallel conversation (like a subagent or a title request).
+4. The return to the main conversation.
 
-| Execução (perfil) | Frio: tokens | Frio: prefill | Turno 2: reprocessados / em cache | Turno 2: tempo | Turno 3 | Desvio (1.427 tokens) | Volta: reprocessados | Volta: tempo | Geração |
+| Run (profile) | Cold: tokens | Cold: prefill | Turn 2: reprocessed / cached | Turn 2: time | Turn 3 | Detour (1,427 tokens) | Return: reprocessed | Return: time | Generation |
 |---|---|---|---|---|---|---|---|---|---|
-| `S1` (`-ncmoe 40`, micro-lote 4096) | 20.065 | 16,5 s | 444 / 20.174 | 1,24 s | 346: 1,02 s | 2,45 s | 39 | 0,43 s | 32,0 a 32,9 |
-| `M0` (`-ncmoe 40`, micro-lote **2048**) | 20.065 | 22,0 s | 444 / 20.174 | 1,19 s | 346: 1,04 s | 2,44 s | 39 | 0,41 s | 30,8 a 31,7 |
-| **`FINAL-20k-ncmoe38`** | 20.065 | **16,2 s** | 444 / 20.174 | **1,19 s** | 346: **1,03 s** | 2,47 s | 39 | **0,41 s** | 30,4 a 31,8 |
-| `FINAL-64k-ncmoe40` (Broadcast ativo) | 64.065 | **58,2 s** | 444 / 64.146 | 1,29 s | 346: 1,24 s | — | — | — | 24,8 a 26,3 |
-| `FINAL-128k-ncmoe40` | 120.065 | 127,5 s | 444 / 120.191 | 1,48 s | 349: 1,39 s | 2,75 s | 39 | 0,50 s | 20,6 a 21,4 |
-| **`FINAL-128k-ncmoe38`** | 120.065 | **128,6 s** | 444 / 120.191 | **1,45 s** | 349: **1,30 s** | 2,47 s | 42 | **0,48 s** | 21,4 a 22,6 |
+| `S1` (`-ncmoe 40`, micro-batch 4096) | 20,065 | 16.5 s | 444 / 20,174 | 1.24 s | 346: 1.02 s | 2.45 s | 39 | 0.43 s | 32.0 to 32.9 |
+| `M0` (`-ncmoe 40`, micro-batch **2048**) | 20,065 | 22.0 s | 444 / 20,174 | 1.19 s | 346: 1.04 s | 2.44 s | 39 | 0.41 s | 30.8 to 31.7 |
+| **`FINAL-20k-ncmoe38`** | 20,065 | **16.2 s** | 444 / 20,174 | **1.19 s** | 346: **1.03 s** | 2.47 s | 39 | **0.41 s** | 30.4 to 31.8 |
+| `FINAL-64k-ncmoe40` (Broadcast active) | 64,065 | **58.2 s** | 444 / 64,146 | 1.29 s | 346: 1.24 s | — | — | — | 24.8 to 26.3 |
+| `FINAL-128k-ncmoe40` | 120,065 | 127.5 s | 444 / 120,191 | 1.48 s | 349: 1.39 s | 2.75 s | 39 | 0.50 s | 20.6 to 21.4 |
+| **`FINAL-128k-ncmoe38`** | 120,065 | **128.6 s** | 444 / 120,191 | **1.45 s** | 349: **1.30 s** | 2.47 s | 42 | **0.48 s** | 21.4 to 22.6 |
 
-**O que o log mostra** (`-lv 4`, `raw/03-S1-agent.log`):
-- **Prompt frio:** checkpoints criados nas posições 1.585, 15.969 (fim − 4.096) e 20.061 (fim − 4), de 62,8 MiB cada. Ou seja, não a cada 2.048 tokens: o `-cms` é só o espaço mínimo. Nos turnos quentes, 2 ou 3 checkpoints por turno.
-- **Turno 2:** `selected slot by LCP similarity, f_sim_best = 0.978, f_keep = 1.000`. O histórico reenviado bateu token a token com o cache, inclusive o raciocínio e a chamada de ferramenta gerados pelo próprio modelo (efeito do `--reasoning-preserve`). Não foi preciso restaurar checkpoint.
-- **Desvio:** a outra conversa só compartilha ~1.011 tokens (o bloco de ferramentas), menos que o primeiro checkpoint (1.585). Por isso o log registra `forcing full prompt re-processing due to lack of cache data`, o esperado para uma conversa diferente. Antes, a conversa principal foi salva no cache de prompts: 21.212 tokens, 283 MiB de estado + 9 checkpoints = 849 MiB, em 0,6 s.
-- **Volta:** a conversa principal foi restaurada do cache na RAM; só 39 tokens foram reprocessados.
-- **Sem `-lv 4`:** o log só mostra a linha `selected slot by LCP similarity ... f_keep`. Os checkpoints e o aviso de reprocessamento completo não aparecem. Para conferir o reuso de cache sem `-lv 4`, use `timings.cache_n`/`prompt_n` das respostas ou `llamacpp:prompt_tokens_total` em `/metrics`.
+**What the log shows** (`-lv 4`, `raw/03-S1-agent.log`):
+- **Cold prompt:** checkpoints created at positions 1,585, 15,969 (end − 4,096) and 20,061 (end − 4), 62.8 MiB each. That is, not every 2,048 tokens: `-cms` is only the minimum spacing. In the warm turns, 2 or 3 checkpoints per turn.
+- **Turn 2:** `selected slot by LCP similarity, f_sim_best = 0.978, f_keep = 1.000`. The resent history matched the cache token by token, including the reasoning and the tool call generated by the model itself (an effect of `--reasoning-preserve`). There was no need to restore a checkpoint.
+- **Detour:** the other conversation shares only ~1,011 tokens (the tools block), fewer than the first checkpoint (1,585). That is why the log records `forcing full prompt re-processing due to lack of cache data`, as expected for a different conversation. Before that, the main conversation was saved to the prompt cache: 21,212 tokens, 283 MiB of state + 9 checkpoints = 849 MiB, in 0.6 s.
+- **Return:** the main conversation was restored from the RAM cache; only 39 tokens were reprocessed.
+- **Without `-lv 4`:** the log only shows the line `selected slot by LCP similarity ... f_keep`. The checkpoints and the full-reprocessing warning do not appear. To check cache reuse without `-lv 4`, use `timings.cache_n`/`prompt_n` from the responses or `llamacpp:prompt_tokens_total` in `/metrics`.
 
-**Custo real de uma perda de cache** (prompt frio, perfil final): **~16 s para 20k tokens, ~58 s para 64k e ~2 min 9 s para 120k.** Com o preâmbulo dos agentes (seção 2 do plano), isso dá ~25 s no Claude Code (~30k), ~6 s no OpenCode (~7,5k) e ~1,5 s no Pi (~1,4k). **[estimado a partir do medido]**
+**Real cost of a cache loss** (cold prompt, final profile): **~16 s for 20k tokens, ~58 s for 64k and ~2 min 9 s for 120k.** With the agents' preamble (section 2 of the plan), that gives ~25 s in Claude Code (~30k), ~6 s in OpenCode (~7.5k) and ~1.5 s in Pi (~1.4k). **[estimated from the measured]**
 
-As chamadas de ferramenta vieram com formato válido em todos os turnos frios e quentes até ~123k de contexto; não houve texto corrompido. Alguns turnos com 120k bateram o limite de 1.200 tokens de saída durante o raciocínio.
+Tool calls came back well formed in all cold and warm turns up to ~123k of context; there was no corrupted text. Some 120k turns hit the 1,200-token output limit during reasoning.
 
-## 10. Memória e temperatura sob carga
+## 10. Memory and temperature under load
 
-Perfil final (`-ncmoe 38`, micro-lote 4096, `dio`), execuções `FINAL-20k-ncmoe38` e `FINAL-128k-ncmoe38`:
+Final profile (`-ncmoe 38`, micro-batch 4096, `dio`), runs `FINAL-20k-ncmoe38` and `FINAL-128k-ncmoe38`:
 
-| Recurso | Valor |
+| Resource | Value |
 |---|---|
-| VRAM (`nvidia-smi`) | **6.794 a 6.796 MiB**, plana da carga até 123k tokens de contexto (289 amostras em ~5 min) |
-| VRAM (visão do CUDA) | modelo 3.035 + contexto 1.422 + cálculo 2.114 = 6.571 MiB; **472 MiB livres**; o WDDM reserva ~1.090 MiB que o CUDA não usa |
-| Transbordo para memória compartilhada | Não houve: VRAM abaixo do total, geração estável (21 a 22 tok/s sustentados com 120k) |
-| RAM do processo (RSS) | 19,6 GiB após a carga; pico de 22,5 GiB |
-| Memória fixada (`CUDA_Host`) | ~17,9 GiB de experts + 1,1 GiB de buffer de cálculo |
-| `MemAvailable` mínimo | 26,0 GiB (de 51 GiB visíveis no WSL), com o cache de prompts ainda pequeno |
-| Swap | ~200 MB foram usados uma vez durante os `llama-bench` com `none`/`dio` (outros processos); sem crescimento nos testes do servidor |
-| Temperatura da GPU | máxima de **82 °C** em ~6 min de carga contínua; 0 µs de lentidão térmica; só o teto de 130 W atuou |
-| Carga do servidor até responder | 32 a 34 s |
+| VRAM (`nvidia-smi`) | **6,794 to 6,796 MiB**, flat from load up to 123k tokens of context (289 samples in ~5 min) |
+| VRAM (CUDA's view) | model 3,035 + context 1,422 + compute 2,114 = 6,571 MiB; **472 MiB free**; WDDM reserves ~1,090 MiB that CUDA does not use |
+| Spill to shared memory | There was none: VRAM below the total, stable generation (21 to 22 tok/s sustained with 120k) |
+| Process RAM (RSS) | 19.6 GiB after load; peak of 22.5 GiB |
+| Pinned memory (`CUDA_Host`) | ~17.9 GiB of experts + 1.1 GiB of compute buffer |
+| Minimum `MemAvailable` | 26.0 GiB (of 51 GiB visible in WSL), with the prompt cache still small |
+| Swap | ~200 MB was used once during the `llama-bench` runs with `none`/`dio` (other processes); no growth in the server tests |
+| GPU temperature | maximum of **82 °C** in ~6 min of continuous load; 0 µs of thermal slowdown; only the 130 W cap acted |
+| Server load until it responds | 32 to 34 s |
 
-**Orçamento de RAM no pior caso** **[estimado]**: ~20 GiB do processo + até 3 GiB de checkpoints (48 × 63 MiB) + até 12 GiB de cache de prompts = ~35 GiB. Sobram ~16 GiB dos 51 GiB do WSL para o container do agente, builds e testes.
+**Worst-case RAM budget** **[estimated]**: ~20 GiB of the process + up to 3 GiB of checkpoints (48 × 63 MiB) + up to 12 GiB of prompt cache = ~35 GiB. ~16 GiB of the 51 GiB of WSL remain for the agent container, builds and tests.
 
-**Folga de VRAM com 128k:** o servidor reserva o KV de 131072 tokens e os buffers de cálculo na carga. A VRAM não cresceu com a profundidade (medido até 123k). A folga de 472 MiB vale para o contexto cheio.
+**VRAM headroom with 128k:** the server reserves the 131072-token KV and the compute buffers at load. VRAM did not grow with depth (measured up to 123k). The 472 MiB headroom holds for a full context.
 
-O `llama-bench` mostrou até 7,6 GB nas profundidades altas porque dimensiona contexto e buffers a cada teste. Esse número não representa o servidor.
+`llama-bench` showed up to 7.6 GB at high depths because it sizes context and buffers on every test. That number does not represent the server.
 
-Alternativa caso a folga se mostre curta na E5: `-ncmoe 40` (1.348 MiB livres, ~2% mais lento) ou micro-lote 2048 (+1,1 GB livres, prompt frio 33% mais lento).
+Alternative in case the headroom turns out short in E5: `-ncmoe 40` (1,348 MiB free, ~2% slower) or micro-batch 2048 (+1.1 GB free, cold prompt 33% slower).
 
-## 11. Dado à parte: a GPU dividida com um jogo
+## 11. Separate data: the GPU shared with a game
 
-O usuário abriu um jogo (Dota 2) na NVIDIA entre ~11h26 e ~11h37, de propósito, para ver o efeito. Duas execuções coincidiram com ele e ficaram guardadas como `raw/03-CONTAMINADO-jogo-*`. A comparação é com as mesmas medições refeitas com a GPU livre:
+The user opened a game (Dota 2) on the NVIDIA GPU between ~11:26 and ~11:37, on purpose, to see the effect. Two runs coincided with it and were kept as `raw/03-CONTAMINADO-jogo-*`. The comparison is with the same measurements redone with the GPU free:
 
-| Medida | GPU livre | Com o jogo | Variação |
+| Measure | GPU free | With the game | Change |
 |---|---|---|---|
-| Carga até responder (`-ncmoe 40`, micro-lote 4096) | 34 s | 89 s | 2,6× mais lenta |
-| Prompt frio de 64k | 58,2 s (1.100 tok/s) | 109,3 s (586 tok/s) | **−47%** |
-| Turnos quentes com 64k | 1,29 / 1,24 s | 1,91 / 1,77 s | +45% |
-| Geração com 64k | 24,8 a 26,3 tok/s | 11,8 a 12,1 tok/s | **−53%** |
-| VRAM total (`nvidia-smi`) | 5.941 MiB | 7.815 MiB (jogo ~2 GB + servidor) | a 336 MiB do total |
-| Temperatura máxima | 78 °C | 83 °C | |
-| Cache de experts 2048 MiB: geração | 25,7 a 29,6 tok/s | 4,5 a 28,3 tok/s | um pedido a 4,5 tok/s |
-| Cache de experts 2048 MiB: carga | 31 s | 123 s | |
+| Load until it responds (`-ncmoe 40`, micro-batch 4096) | 34 s | 89 s | 2.6× slower |
+| 64k cold prompt | 58.2 s (1,100 tok/s) | 109.3 s (586 tok/s) | **−47%** |
+| Warm turns with 64k | 1.29 / 1.24 s | 1.91 / 1.77 s | +45% |
+| Generation with 64k | 24.8 to 26.3 tok/s | 11.8 to 12.1 tok/s | **−53%** |
+| Total VRAM (`nvidia-smi`) | 5,941 MiB | 7,815 MiB (game ~2 GB + server) | 336 MiB from the total |
+| Maximum temperature | 78 °C | 83 °C | |
+| Expert cache 2048 MiB: generation | 25.7 to 29.6 tok/s | 4.5 to 28.3 tok/s | one request at 4.5 tok/s |
+| Expert cache 2048 MiB: load | 31 s | 123 s | |
 
-- **Não houve falha:** nenhum erro de CUDA, nenhuma falta de memória, nenhuma queda. As chamadas de ferramenta continuaram válidas e o reuso de cache funcionou igual (444 tokens reprocessados de 64k).
-- **O desempenho cai à metade** porque a GPU é dividida no tempo com o jogo (100% de uso dele).
-- **Pegadinha:** com o jogo aberto, o CUDA continuou informando 7.062 MiB livres ao `--fit`. No WSL/WDDM o `--fit` não enxerga a VRAM de outros processos e não protege contra eles.
-- **Com o perfil final** (`-ncmoe 38`, ~1 GB a mais de VRAM), servidor + jogo passariam do total da placa. O driver do Windows tende a jogar parte da memória para a RAM do sistema, o que deve piorar ainda mais. **[estimado, não medido]**
-- **Recomendação:** não jogar nem usar apps na NVIDIA durante a inferência (a premissa adotada). Se for inevitável, parar o servidor ou reiniciá-lo com `-ncmoe 40`.
+- **There was no failure:** no CUDA error, no out-of-memory, no drop. Tool calls remained valid and cache reuse worked the same (444 tokens reprocessed out of 64k).
+- **Performance drops by half** because the GPU is time-shared with the game (100% usage by the game).
+- **Gotcha:** with the game open, CUDA kept reporting 7,062 MiB free to `--fit`. On WSL/WDDM `--fit` does not see the VRAM of other processes and does not protect against them.
+- **With the final profile** (`-ncmoe 38`, ~1 GB more VRAM), server + game would exceed the card's total. The Windows driver tends to push part of the memory to system RAM, which should make it even worse. **[estimated, not measured]**
+- **Recommendation:** do not play or use apps on the NVIDIA GPU during inference (the adopted premise). If unavoidable, stop the server or restart it with `-ncmoe 40`.
 
-**NVIDIA Broadcast** como processo de computação: 144 MiB de VRAM e 1 a 3% de uso com a GPU ociosa (picos de ~14%). É uma fonte provável de ruído na geração nas execuções das 11h26–11h47 (`E2`, `D2`, `M2048-rerun`, `FINAL-64k-ncmoe40`). Deve ficar fechado durante o uso da IA.
+**NVIDIA Broadcast** as a compute process: 144 MiB of VRAM and 1 to 3% usage with the GPU idle (peaks of ~14%). It is a likely source of generation noise in the runs from 11:26–11:47 (`E2`, `D2`, `M2048-rerun`, `FINAL-64k-ncmoe40`). It must stay closed while the AI is in use.
 
-## 12. Perfil escolhido, flag por flag
+## 12. Chosen profile, flag by flag
 
-| Flag | Valor | Por quê |
+| Flag | Value | Why |
 |---|---|---|
-| `-np` | 1 | Um agente por vez. Mais slots dividiriam contexto e cache e invalidariam o reuso entre turnos |
-| `-c` | 131072 | Contexto pedido. O KV custa só 1.360 MiB em q8_0 (10 camadas de atenção completa) |
-| `-fa` | on | Exigido pelo cache V quantizado |
-| `-ctk` / `-ctv` | q8_0 | q4_0 degrada chamadas de ferramenta (pesquisa do plano). q8_0 cabe com folga |
-| `-ngl` | 99 | Atenção, DeltaNet, expert compartilhado e saída na GPU |
-| `-ncmoe` | 38 | Experts das camadas 0 a 37 na RAM e das 2 últimas na GPU. Usa a VRAM até ~470 MiB de folga (premissa de GPU dedicada). Ganho de ~2 a 3% (seção 2) |
-| `--fit` / `--fit-target` | on / 384 | Só confere a folga na carga. Com `-ngl`/`-ncmoe` explícitos ele não muda nada: se a folga faltar, registra `failed to fit params ... abort` e carrega mesmo assim. O script de saúde da E5 deve procurar esse aviso |
-| `-b` / `-ub` | 4096 / 4096 | O custo fixo de ~0,9 s por micro-lote faz o micro-lote de 4096 render +45% de prefill. Prompt frio de 20k: 16,2 s contra 22,0 s com 2048 |
-| `-t` | 8 | Melhor geração (6 a 8). 12 fica ~3 a 5% abaixo e 16 perde 20 a 30% |
-| `-tb` | 12 | Lotes abaixo de 1.024 tokens rodam na CPU (por `MIN_BATCH`), e 12 threads rendem um pouco mais que 8 nesse caminho |
-| `-lm` | dio | Memória fixada: +10 a 27% de prefill contra `mmap`. Carrega em ~30 s (`none` leva ~2,5 min) e não ocupa 22 GB de cache de página |
-| `--jinja` | (padrão) | Template do modelo com o parser de tool calls do Qwen3 |
-| `--reasoning-preserve` | (padrão) | O histórico reenviado bate token a token com o cache (`f_keep = 1.000`), sem restaurar checkpoint |
-| `-ctxcp` | 48 | Até 48 checkpoints de 63 MiB (~3 GB de RAM). Cada turno cria 2 ou 3 |
-| `-cms` | 2048 | Mantido do plano: permite checkpoints mais próximos que o padrão de 8192. Nos testes, os checkpoints ficaram no fim de cada prompt (e no início do último micro-lote), e o efeito do `-cms` não foi isolado (questão em aberto 9) |
-| `--cache-ram` | 12288 | Guarda conversas inteiras na RAM (849 MiB para 21k tokens com 9 checkpoints; ~2 a 2,5 GiB estimados para 120k) e as devolve em ~0,4 s depois de um desvio |
-| `--metrics` | | `/metrics` para o runner da validação |
-| `--temp` / `--top-p` / `--top-k` | 0,6 / 0,95 / 20 | Padrão do plano (cartão do modelo). Não foi medido na E4 e o agente pode sobrescrever por pedido |
-| `-lv 4` | comentado | Só para depuração: mostra checkpoints e reprocessamento completo (~10 KB por pedido, sem o conteúdo) |
-| `GGML_OP_OFFLOAD_MIN_BATCH` | 1024 | Lotes com menos de 1.024 tokens calculam os experts na CPU: turnos curtos até 2,7× mais rápidos |
+| `-np` | 1 | One agent at a time. More slots would split context and cache and invalidate reuse between turns |
+| `-c` | 131072 | Requested context. KV costs only 1,360 MiB in q8_0 (10 full-attention layers) |
+| `-fa` | on | Required by the quantized V cache |
+| `-ctk` / `-ctv` | q8_0 | q4_0 degrades tool calls (plan research). q8_0 fits with room to spare |
+| `-ngl` | 99 | Attention, DeltaNet, shared expert and output on the GPU |
+| `-ncmoe` | 38 | Experts of layers 0 to 37 in RAM and of the last 2 on the GPU. Uses VRAM down to ~470 MiB of headroom (dedicated GPU premise). Gain of ~2 to 3% (section 2) |
+| `--fit` / `--fit-target` | on / 384 | Only checks the headroom at load. With explicit `-ngl`/`-ncmoe` it changes nothing: if the headroom is missing, it logs `failed to fit params ... abort` and loads anyway. The E5 health script must look for this warning |
+| `-b` / `-ub` | 4096 / 4096 | The fixed cost of ~0.9 s per micro-batch makes a micro-batch of 4096 give +45% prefill. 20k cold prompt: 16.2 s vs 22.0 s with 2048 |
+| `-t` | 8 | Best generation (6 to 8). 12 is ~3 to 5% lower and 16 loses 20 to 30% |
+| `-tb` | 12 | Batches under 1,024 tokens run on the CPU (via `MIN_BATCH`), and 12 threads give a little more than 8 on that path |
+| `-lm` | dio | Pinned memory: +10 to 27% prefill vs `mmap`. Loads in ~30 s (`none` takes ~2.5 min) and does not occupy 22 GB of page cache |
+| `--jinja` | (default) | Model template with the Qwen3 tool-call parser |
+| `--reasoning-preserve` | (default) | The resent history matches the cache token by token (`f_keep = 1.000`), without restoring a checkpoint |
+| `-ctxcp` | 48 | Up to 48 checkpoints of 63 MiB (~3 GB of RAM). Each turn creates 2 or 3 |
+| `-cms` | 2048 | Kept from the plan: allows checkpoints closer than the default 8192. In the tests, the checkpoints ended up at the end of each prompt (and at the start of the last micro-batch), and the effect of `-cms` was not isolated (open question 9) |
+| `--cache-ram` | 12288 | Keeps whole conversations in RAM (849 MiB for 21k tokens with 9 checkpoints; ~2 to 2.5 GiB estimated for 120k) and returns them in ~0.4 s after a detour |
+| `--metrics` | | `/metrics` for the validation runner |
+| `--temp` / `--top-p` / `--top-k` | 0.6 / 0.95 / 20 | Plan default (model card). Not measured in E4 and the agent can override per request |
+| `-lv 4` | commented out | For debugging only: shows checkpoints and full reprocessing (~10 KB per request, without the contents) |
+| `GGML_OP_OFFLOAD_MIN_BATCH` | 1024 | Batches under 1,024 tokens compute the experts on the CPU: short turns up to 2.7× faster |
 
-## 13. Velocidades esperadas (perfil final, GPU dedicada)
+## 13. Expected speeds (final profile, dedicated GPU)
 
-| Operação | Velocidade |
+| Operation | Speed |
 |---|---|
-| Prefill de prompt longo (frio) | ~1.240 tok/s com 20k, ~1.100 com 64k, ~930 com 120k (média do prompt inteiro) |
-| Turno quente de 300 a 500 tokens | 1,0 a 1,5 s, de 20k a 120k de contexto |
-| Turno quente de ~100 tokens | ~0,3 a 0,5 s **[estimado]** |
-| Geração | 34 a 37 tok/s com contexto curto, 30 a 32 com 20k, 25 a 26 com 64k, 21 a 23 com 120k |
-| Carga do servidor | ~33 s até o `/health` |
+| Long-prompt prefill (cold) | ~1,240 tok/s with 20k, ~1,100 with 64k, ~930 with 120k (average over the whole prompt) |
+| Warm turn of 300 to 500 tokens | 1.0 to 1.5 s, from 20k to 120k of context |
+| Warm turn of ~100 tokens | ~0.3 to 0.5 s **[estimated]** |
+| Generation | 34 to 37 tok/s with short context, 30 to 32 with 20k, 25 to 26 with 64k, 21 to 23 with 120k |
+| Server load | ~33 s until `/health` |
 
-## 14. Questões em aberto
+## 14. Open questions
 
-1. **Mecanismo do custo fixo por micro-lote** (~0,9 s com memória fixada). A taxa implícita passa da banda do Gen4 ×8 se todos os experts fossem copiados. Entender isso pode levar a um ajuste melhor, por exemplo um `GGML_OP_OFFLOAD_MIN_BATCH` diferente por camada.
-2. **`--no-host` (reempacotamento para a CPU) e `GGML_CUDA_REGISTER_HOST`** não foram testados. O reempacotamento poderia acelerar o caminho da CPU nos turnos curtos e na geração, mas tiraria a memória fixada do prefill.
-3. **Alternância rápida/lenta do pp4096 em profundidade** no `llama-bench` (1.388 / 1.030 com 16k). O servidor não mostrou isso nos prompts frios, mas não foi investigado.
-4. **A carga externa das 11h08** (fila de ~40 threads e −6 GB por ~4 s) não foi identificada. Se for periódica, vai aparecer como engasgo na geração; o `burstmon.sh` pode ficar ligado na E6.
-5. **Amostragem:** a `min_p` padrão do llama.cpp (0,05) foi mantida. Conferir no cartão do Qwen3.6 se o recomendado é `min_p = 0` e se `presence_penalty` muda algo em sessões longas.
-6. **Cache de prompts com vários agentes ou subagentes:** 12 GiB comportam ~5 conversas de 120k ou ~14 de 20k **[estimado]**. Medir a taxa de acerto real na E6, com `-lv 4` ligado temporariamente.
-7. **WSL contra llama-server nativo no Windows** (incerteza do plano): não foi necessário. O WSL entregou o esperado (prefill ~1.200 a 1.600 tok/s, geração ~35 tok/s).
-8. **Comportamento do `--fit` com folga insuficiente e flags explícitas:** só registra o aviso, sem impedir a carga. O script de saúde da E5 deve verificar a linha `failed to fit params` e o uso de VRAM.
-9. **Efeito do `-cms 2048`:** os checkpoints apareceram no fim de cada prompt, não a cada 2.048 tokens. Falta testar um agente que edita ou compacta o histórico no meio (E6) para saber se `-cms` menor ajuda e se 48 checkpoints bastam.
+1. **Mechanism of the fixed cost per micro-batch** (~0.9 s with pinned memory). The implied rate exceeds the Gen4 ×8 bandwidth if all experts were copied. Understanding this may lead to a better tuning, for example a different `GGML_OP_OFFLOAD_MIN_BATCH` per layer.
+2. **`--no-host` (repacking for the CPU) and `GGML_CUDA_REGISTER_HOST`** were not tested. Repacking could speed up the CPU path in short turns and in generation, but would take pinned memory away from prefill.
+3. **Fast/slow alternation of pp4096 at depth** in `llama-bench` (1,388 / 1,030 at 16k). The server did not show this on cold prompts, but it was not investigated.
+4. **The external load at 11:08** (queue of ~40 threads and −6 GB for ~4 s) was not identified. If it is periodic, it will show up as a stutter in generation; `burstmon.sh` can stay on in E6.
+5. **Sampling:** llama.cpp's default `min_p` (0.05) was kept. Check on the Qwen3.6 card whether the recommended value is `min_p = 0` and whether `presence_penalty` changes anything in long sessions.
+6. **Prompt cache with several agents or subagents:** 12 GiB hold ~5 conversations of 120k or ~14 of 20k **[estimated]**. Measure the real hit rate in E6, with `-lv 4` temporarily on.
+7. **WSL vs native llama-server on Windows** (plan uncertainty): it was not necessary. WSL delivered what was expected (prefill ~1,200 to 1,600 tok/s, generation ~35 tok/s).
+8. **`--fit` behavior with insufficient headroom and explicit flags:** it only logs the warning, without preventing the load. The E5 health script must check for the `failed to fit params` line and VRAM usage.
+9. **Effect of `-cms 2048`:** the checkpoints appeared at the end of each prompt, not every 2,048 tokens. It remains to test an agent that edits or compacts the history in the middle (E6) to know whether a smaller `-cms` helps and whether 48 checkpoints are enough.

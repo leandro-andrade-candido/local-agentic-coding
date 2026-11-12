@@ -1,71 +1,71 @@
-# Política do llama-server (E5): segurança e padrões de uso, 29/10/2026.
-# Dono: E5. O desempenho fica no perfil da E4 (runtime/llama-server.args), que
-# este arquivo não repete. Requisitos: docs/stages/E5-requirements.md.
+# llama-server policy (E5): security and usage defaults, 2026-10-29.
+# Owner: E5. Performance lives in the E4 profile (runtime/llama-server.args), which
+# this file does not repeat. Requirements: docs/stages/E5-requirements.md.
 #
-# Formato: igual ao do perfil (uma flag por linha; flag e valor separados por um
-# espaço, sem aspas e sem espaço no valor; comentário logo acima). O wrapper
-# (runtime/llama-server-start.sh) troca nos valores: ${LLAMA_SERVER_HOST} e
-# ${LLAMA_SERVER_PORT} (versions.env) e ${LLM_API_KEY_FILE}
-# (padrão ~/.config/local-agentic/llm-api-key).
+# Format: same as the profile (one flag per line; flag and value separated by one
+# space, no quotes and no space in the value; comment right above). The wrapper
+# (runtime/llama-server-start.sh) substitutes in the values: ${LLAMA_SERVER_HOST} and
+# ${LLAMA_SERVER_PORT} (versions.env) and ${LLM_API_KEY_FILE}
+# (default ~/.config/local-agentic/llm-api-key).
 #
-# Linha final: -m <modelo do models.tsv> + perfil + esta política. Este arquivo só traz
-# o que o perfil não tem (hoje não há flag nos dois).
-# Sobreposição, se um dia houver: no b11982 vale a última ocorrência de cada flag
-# (common/arg.cpp), com o aviso "DEPRECATED: argument specified multiple times". Por
-# isso o wrapper tira do perfil toda flag que também está aqui, aliases incluídos
-# (-n = --predict): A POLÍTICA VENCE, e a linha final não tem repetição. Valor
-# diferente gera uma nota no log.
-# Host, porta, chave, CORS e rede (lista POLICY_ONLY em runtime/llama-server-args.py)
-# não podem aparecer no perfil: o wrapper recusa iniciar.
+# Final line: -m <model from models.tsv> + profile + this policy. This file only carries
+# what the profile does not have (today no flag is in both).
+# Overlap, if it ever happens: in b11982 the last occurrence of each flag wins
+# (common/arg.cpp), with the warning "DEPRECATED: argument specified multiple times". So
+# the wrapper removes from the profile every flag that is also here, aliases included
+# (-n = --predict): THE POLICY WINS, and the final line has no repetition. A different
+# value produces a note in the log.
+# Host, port, key, CORS and network (POLICY_ONLY list in runtime/llama-server-args.py)
+# must not appear in the profile: the wrapper refuses to start.
 #
-# DESLIGADO DE PROPÓSITO. O encaminhador do container da E7 expõe todas as rotas do
-# servidor aos agentes, então nada abaixo pode ser ligado. Todas já vêm desligadas no
-# b11982; o wrapper recusa iniciar se alguma aparecer no perfil ou aqui (lista FORBIDDEN),
-# e `scripts/llm health` confere com o servidor no ar (POST /props e POST /slots
-# respondem 501, /tools e /cors-proxy respondem 403).
-#   --props             POST /props mudaria propriedades globais em execução
-#   --slot-save-path    POST /slots/<id>?action=save|restore gravaria e leria o cache em disco
+# OFF ON PURPOSE. The E7 container's forwarder exposes every server route to the
+# agents, so nothing below may be turned on. All of them are already off in
+# b11982; the wrapper refuses to start if any appears in the profile or here (FORBIDDEN list),
+# and `scripts/llm health` checks against the running server (POST /props and POST /slots
+# answer 501, /tools and /cors-proxy answer 403).
+#   --props             POST /props would change global properties at runtime
+#   --slot-save-path    POST /slots/<id>?action=save|restore would write and read the cache on disk
 #   -ag/--agent, --tools, --tools-runtime, --mcp-servers-config, --mcp-servers-json,
-#   --ui-mcp-proxy      ferramentas embutidas (shell, arquivos), MCP e proxy em /cors-proxy
-#   --media-path, --path  leitura de arquivos locais por file:// e arquivos estáticos
-#   --connect           túnel peer-to-peer para fora da máquina
-#   --log-prompts-dir   gravaria os prompts (código dos projetos) em disco
-#   --api-key           chave na linha de comando (visível no ps) e no git
-#   -hf, -mu, -dr, --models-dir, --models-preset   downloads e modo roteador
+#   --ui-mcp-proxy      built-in tools (shell, files), MCP and the /cors-proxy proxy
+#   --media-path, --path  reading local files via file:// and static files
+#   --connect           peer-to-peer tunnel out of the machine
+#   --log-prompts-dir   would write the prompts (project code) to disk
+#   --api-key           key on the command line (visible in ps) and in git
+#   -hf, -mu, -dr, --models-dir, --models-preset   downloads and router mode
 #   --cors-credentials, --reuse-port
 
-# Só a interface de loopback (127.0.0.1, do versions.env). O WSL repassa o localhost
-# ao Windows, então o navegador de lá alcança o servidor: daí a chave e o CORS abaixo.
+# Loopback interface only (127.0.0.1, from versions.env). WSL forwards localhost
+# to Windows, so the browser there can reach the server: hence the key and the CORS below.
 --host ${LLAMA_SERVER_HOST}
-# Porta do versions.env (9931; a 8080 é de outro serviço local).
+# Port from versions.env (9931; 8080 belongs to another local service).
 --port ${LLAMA_SERVER_PORT}
-# Chave exigida em todas as rotas, menos /health e /v1/health (a interface web carrega,
-# mas pede a chave). Arquivo fora do git, modo 0600, criado por `scripts/llm key`.
-# Aceita "Authorization: Bearer <chave>" (OpenAI) e "x-api-key: <chave>" (Anthropic).
+# Key required on every route except /health and /v1/health (the web UI loads,
+# but asks for the key). File outside git, mode 0600, created by `scripts/llm key`.
+# Accepts "Authorization: Bearer <key>" (OpenAI) and "x-api-key: <key>" (Anthropic).
 --api-key-file ${LLM_API_KEY_FILE}
-# CORS só para a própria origem: uma página de outra origem aberta no navegador não lê
-# as respostas. No b11982 o valor vai literal no Access-Control-Allow-Origin (a "lista
-# separada por vírgulas" da ajuda não é tratada), então é uma origem só; o valor
-# especial "localhost" aceitaria qualquer porta de localhost. A barreira principal é a chave.
+# CORS for the own origin only: a page from another origin open in the browser cannot read
+# the responses. In b11982 the value goes literally into Access-Control-Allow-Origin (the
+# "comma-separated list" in the help is not handled), so it is a single origin; the
+# special value "localhost" would accept any localhost port. The main barrier is the key.
 --cors-origins http://${LLAMA_SERVER_HOST}:${LLAMA_SERVER_PORT}
-# Sem credenciais do navegador em CORS (o padrão do b11982 é ligado).
+# No browser credentials in CORS (the b11982 default is on).
 --no-cors-credentials
-# Ferramentas embutidas e proxy CORS desligados (já é o padrão). Explícito e depois
-# do perfil: esvazia --tools e desliga --ui-mcp-proxy mesmo que algo os tenha ligado.
+# Built-in tools and CORS proxy off (already the default). Explicit and after
+# the profile: empties --tools and turns off --ui-mcp-proxy even if something turned them on.
 --no-agent
-# Sem acesso à rede para baixar modelos: o modelo vem só do disco (models.tsv).
+# No network access to download models: the model comes only from disk (models.tsv).
 --offline
 #
-# Já estão no perfil da E4 e não se repetem aqui: --metrics (/metrics, exige a chave),
-# --temp 0.6, --top-p 0.95 e --top-k 20 (cartão do modelo). O wrapper exige que os
-# quatro estejam na linha final (perfil ou política) e recusa iniciar sem eles.
+# Already in the E4 profile and not repeated here: --metrics (/metrics, requires the key),
+# --temp 0.6, --top-p 0.95 and --top-k 20 (model card). The wrapper requires all
+# four to be in the final line (profile or policy) and refuses to start without them.
 #
-# Amostragem do cartão que falta no perfil. Vale para quem não envia os parâmetros (o
-# Codex não envia nenhum); cada pedido pode sobrescrever. min-p 0 (padrão do llama.cpp: 0.05).
+# Sampling from the model card that the profile lacks. Applies to clients that do not send the
+# parameters (Codex sends none); each request can override. min-p 0 (llama.cpp default: 0.05).
 --min-p 0
-# Idem: presence penalty 0 (já é o padrão; explícito por ser do cartão).
+# Same: presence penalty 0 (already the default; explicit because it is in the model card).
 --presence-penalty 0
-# Limite padrão de saída por pedido: o Codex não envia max_output_tokens, e argumentos
-# longos de ferramenta não podem ser cortados. Não é teto: no b11982 o max_tokens do
-# pedido vence (server-context.cpp, "the per-request limit takes priority").
+# Default output limit per request: Codex does not send max_output_tokens, and long
+# tool arguments must not be cut off. It is not a ceiling: in b11982 the request's max_tokens
+# wins (server-context.cpp, "the per-request limit takes priority").
 -n 32768

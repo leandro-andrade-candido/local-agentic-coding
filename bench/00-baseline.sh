@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Passo 1 (e passo final): estado do PCIe (replays), GPU e memória.
-# Uso: bench/00-baseline.sh <rótulo>   ex.: antes | depois
+# Step 1 (and final step): PCIe state (replays), GPU and memory.
+# Usage: bench/00-baseline.sh <label>   e.g. antes | depois   (before | after)
 source "$(dirname "$0")/lib.sh"
 label="${1:-antes}"
 out="$RAW/00-baseline-$label.txt"
