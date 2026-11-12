@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pi interativo apontado para o llama-server local, com config isolada.
-# Uso: cd <projeto> && /home/leandro/me/local/agents/pi/pi-local [opções do pi]
+# Uso: cd <projeto> && <repo>/agents/pi/pi-local [opções do pi]
 # Perfil: AGENT_PROFILE=interactive (padrão) ou autonomous.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"

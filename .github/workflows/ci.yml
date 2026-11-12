@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: shellcheck, python, guard tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Shellcheck (all shell scripts, warning level)
+        run: |
+          git ls-files -z | xargs -0 grep -lIE '^#!.*\b(ba)?sh\b' \
+            | grep -vE '\.(patch|md|py)$' > /tmp/sh-files.txt
+          echo "checking $(wc -l < /tmp/sh-files.txt) scripts"
+          xargs -a /tmp/sh-files.txt shellcheck -S warning
+
+      - name: Python byte-compile
+        run: git ls-files -z '*.py' | xargs -0 python3 -m py_compile
+
+      - name: Command guard tests (agents/lib/guard.py)
+        run: agents/lib/test-guard.sh

@@ -17,3 +17,6 @@ eval/.cache/
 node_modules/
 __pycache__/
 .venv/
+
+# Documentos pessoais (CV etc.) nunca entram no repositório.
+pessoal/

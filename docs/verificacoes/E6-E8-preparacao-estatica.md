@@ -78,7 +78,7 @@ claude-local … claude -p --output-format stream-json --verbose --model modelo-
 - Todos os JSON são válidos (`jq`) e nenhuma chave `//` sobrou.
 - O TOML do Codex é válido (`tomllib`): `model_auto_compact_token_limit=98304`, `hooks.PreToolUse[0].matcher='Bash'`.
 - O `local.rules` tem as 9 `prefix_rule`.
-- O hook aponta para `python3 -I "/home/leandro/me/local/agents/lib/guard.py"` nos três agentes que usam hook. No container, `agents/` é montado no mesmo caminho (`sandbox/run-in-box.sh:121`).
+- O hook aponta para `python3 -I "<repo>/agents/lib/guard.py"` nos três agentes que usam hook. No container, `agents/` é montado no mesmo caminho (`sandbox/run-in-box.sh:121`).
 
 ## 2. `agents/`: isolamento: PARCIAL
 
@@ -96,7 +96,7 @@ claude-local … claude -p --output-format stream-json --verbose --model modelo-
 - O `grep` nos arquivos gerados não achou caminhos da HOME real nem as chaves falsas que injetei (`sk-real…`, `sk-ant…`):
 
 ```
-$ grep -rnE '/home/leandro/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.agents)|sk-real|sk-ant' log-*
+$ grep -rnE '~/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.agents)|sk-real|sk-ant' log-*   # caminhos anonimizados para publicação; no original era o caminho absoluto da HOME
 (nenhuma)
 ```
 
@@ -105,7 +105,7 @@ $ grep -rnE '/home/leandro/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.age
 
 ```
 antes == depois:
-/home/leandro/.codex 1793217734 · /home/leandro/.gemini 1793118412 · /home/leandro/.agents 1789384635
+~/.codex 1793217734 · ~/.gemini 1793118412 · ~/.agents 1789384635
 ~/.qwen, ~/.config/opencode, ~/.local/share/opencode, ~/.pi, ~/.local/opt/agents: ausentes antes e depois
 ```
 

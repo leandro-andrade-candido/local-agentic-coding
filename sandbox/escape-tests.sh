@@ -350,7 +350,7 @@ before="$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)"
 echo "== agent-box: testes de fuga (scratch $scratch, servidor falso :$dummy_port)"
 GITHUB_TOKEN=canario ANTHROPIC_API_KEY=canario OPENAI_API_KEY=canario \
 ET_CANARY_SECRET=canario SSH_AUTH_SOCK="$scratch/ssh-agent.sock" \
-AGENT_BOX=0 AGENT_SKILLS_DIRS=/home SKILLS_PREFIX="$scratch/skills-prefix" BOX_SKILLS_DIRS= \
+AGENT_BOX=0 AGENT_SKILLS_DIRS=/home SKILLS_PREFIX="$scratch/skills-prefix" BOX_SKILLS_DIRS='' \
 LLM_BASE_URL="http://127.0.0.1:$dummy_port" BOX_MEMORY=3g BOX_PIDS=512 BOX_CPUS=2 \
 "$SANDBOX_DIR/run-in-box.sh" \
     --rw "$scratch/repo" --rw "$scratch/logs" --ro "$self" --cwd "$scratch/repo" \

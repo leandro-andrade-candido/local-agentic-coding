@@ -38,12 +38,12 @@ Preparado em 29/10/2026, enquanto a E4 e a verificação dela usavam a porta 993
 ### Linha final (`scripts/llm dry-run`, 29/10, perfil final da E4)
 
 ```
-GGML_OP_OFFLOAD_MIN_BATCH=1024 /home/leandro/.local/opt/llama.cpp/b11982/llama-server \
-  -m /home/leandro/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf -a qwen3.6-35b -np 1 -c 131072 \
+GGML_OP_OFFLOAD_MIN_BATCH=1024 ~/.local/opt/llama.cpp/b11982/llama-server \
+  -m ~/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf -a qwen3.6-35b -np 1 -c 131072 \
   -fa on -ctk q8_0 -ctv q8_0 -ngl 99 -ncmoe 38 --fit on --fit-target 384 -b 4096 -ub 4096 \
   -t 8 -tb 12 -lm dio --jinja --reasoning-preserve -ctxcp 48 -cms 2048 --cache-ram 12288 \
   --metrics --temp 0.6 --top-p 0.95 --top-k 20 \
-  --host 127.0.0.1 --port 9931 --api-key-file /home/leandro/.config/local-agentic/llm-api-key \
+  --host 127.0.0.1 --port 9931 --api-key-file ~/.config/local-agentic/llm-api-key \
   --cors-origins http://127.0.0.1:9931 --no-cors-credentials --no-agent --offline \
   --min-p 0 --presence-penalty 0 -n 32768
 ```

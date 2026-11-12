@@ -197,12 +197,15 @@ if $setup_ok; then
             tar -C "$od" -cf - checks.json check.log check.stdout check.stderr check.rc 2>/dev/null' \
             _ "$task_dir/check.sh" "$wd" "$baseline" "$deps_env" "$out/agent-logs" "$skills_seen" \
             9>&- >"$check_tar" || log "aviso: container das verificações saiu com erro"
+        # check_rc só fica para depuração: o veredito vem do checks.json lido pelo grader.
+        # shellcheck disable=SC2034
         check_rc="$($EVAL_PY "$here/lib/boxio.py" extract-checks "$check_tar" "$out")"
         rm -f "$check_tar"
     else
         "$task_dir/check.sh" "$wd" --baseline "$baseline" --out "$out/checks.json" --log "$out/check.log" \
             --deps-env "$deps_env" --agent-logs "$out/agent-logs" --skills-dirs "$skills_seen" \
             >"$out/check.stdout" 2>"$out/check.stderr" 9>&-
+        # shellcheck disable=SC2034
         check_rc=$?
     fi
     check_s=$(python3 -c "import sys;print(round($(date +%s.%N)-$t0,1))")

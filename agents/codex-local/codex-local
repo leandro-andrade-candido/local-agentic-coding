@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Codex CLI interativo com o modelo local, com config isolada (CODEX_HOME).
 # Não toca no Codex do dia a dia (~/.codex, login ChatGPT).
-# Uso: cd <projeto> && /home/leandro/me/local/agents/codex-local/codex-local [opções do codex]
+# Uso: cd <projeto> && <repo>/agents/codex-local/codex-local [opções do codex]
 # Perfil: AGENT_PROFILE=interactive (padrão: aprovação on-request + sandbox
 # workspace-write) ou autonomous.
 # Por padrão usa o binário fixado em $AGENTS_PREFIX; para usar o já instalado:

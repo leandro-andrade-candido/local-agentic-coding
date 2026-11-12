@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code interativo com o modelo local, com config isolada (CLAUDE_CONFIG_DIR).
 # Não toca no Claude Code do dia a dia (~/.claude, ~/.claude.json, login da conta).
-# Uso: cd <projeto> && /home/leandro/me/local/agents/claude-local/claude-local [opções do claude]
+# Uso: cd <projeto> && <repo>/agents/claude-local/claude-local [opções do claude]
 # Perfil: AGENT_PROFILE=interactive (padrão) ou autonomous.
 # Por padrão usa o binário fixado em $AGENTS_PREFIX; para usar o já instalado:
 #   AGENT_BIN="$(command -v claude)" claude-local

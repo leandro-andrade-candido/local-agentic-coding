@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OpenCode 1.x interativo apontado para o llama-server local, com config isolada.
-# Uso: cd <projeto> && /home/leandro/me/local/agents/opencode/opencode-local [opções do opencode]
+# Uso: cd <projeto> && <repo>/agents/opencode/opencode-local [opções do opencode]
 # Perfil: AGENT_PROFILE=interactive (padrão) ou autonomous.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
