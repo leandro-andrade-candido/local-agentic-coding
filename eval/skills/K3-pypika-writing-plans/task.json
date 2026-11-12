@@ -1,32 +1,32 @@
 {
   "id": "K3",
-  "title": "writing-plans: plano no formato da skill a partir de uma especificação curta",
+  "title": "writing-plans: a plan in the skill format from a short specification",
   "repo": "pypika",
   "category": "skills",
-  "plan_task": "E6 skills - efeito da skill no formato da saída",
+  "plan_task": "E6 skills - effect of the skill on the output format",
   "timeout_min": 15,
-  "notes": "Os marcadores do formato seguem o writing-plans do Superpowers como conhecido até a v6 (título 'Implementation Plan', Goal/Architecture/Tech Stack, '### Task N', '**Files:**', passos '- [ ]', comando de teste, commit, salvo em docs/superpowers/plans/AAAA-MM-DD-<nome>.md ou docs/plans/). NÃO conferidos com o SKILL.md da v6.4.1 fixada (ainda não baixado): depois do scripts/fetch-skills.sh, comparar e ajustar 'markers', 'optional_markers' e 'path_regex'. O caminho da convenção é só medição.",
+  "notes": "The format markers follow the Superpowers writing-plans as known up to v6 (title 'Implementation Plan', Goal/Architecture/Tech Stack, '### Task N', '**Files:**', '- [ ]' steps, test command, commit, saved in docs/superpowers/plans/YYYY-MM-DD-<name>.md or docs/plans/). NOT checked against the SKILL.md of the pinned v6.4.1 (not downloaded yet): after scripts/fetch-skills.sh, compare and adjust 'markers', 'optional_markers' and 'path_regex'. The conventional path is only a measurement.",
   "checks": [
     {"type": "skill_usage", "name": "skill_writing_plans", "skill": "writing-plans",
      "transcript_files": ["events.jsonl"]},
-    {"type": "plan_format", "name": "formato_do_plano",
+    {"type": "plan_format", "name": "plan_format",
      "markers": [
-       {"name": "titulo_plano", "regex": "(?im)^#\\s+.*\\b(plan|plano)\\b"},
-       {"name": "objetivo", "regex": "(?im)^\\s*\\**\\s*(goal|objetivo)\\b"},
-       {"name": "tarefas_numeradas", "regex": "(?im)^#{2,4}\\s+(task|tarefa)\\s*\\d+", "min": 2},
-       {"name": "arquivos_por_tarefa", "regex": "(?im)^\\s*\\**\\s*(files|arquivos)\\b", "min": 2},
-       {"name": "passos_checkbox", "regex": "(?m)^\\s*[-*]\\s+\\[ \\]", "min": 4},
-       {"name": "blocos_de_codigo", "regex": "(?m)^\\s*```", "min": 2},
-       {"name": "comando_de_teste", "regex": "(?i)pytest"}
+       {"name": "plan_title", "regex": "(?im)^#\\s+.*\\b(plan|plano)\\b"},
+       {"name": "goal", "regex": "(?im)^\\s*\\**\\s*(goal|objetivo)\\b"},
+       {"name": "numbered_tasks", "regex": "(?im)^#{2,4}\\s+(task|tarefa)\\s*\\d+", "min": 2},
+       {"name": "files_per_task", "regex": "(?im)^\\s*\\**\\s*(files|arquivos)\\b", "min": 2},
+       {"name": "checkbox_steps", "regex": "(?m)^\\s*[-*]\\s+\\[ \\]", "min": 4},
+       {"name": "code_blocks", "regex": "(?m)^\\s*```", "min": 2},
+       {"name": "test_command", "regex": "(?i)pytest"}
      ],
      "optional_markers": [
-       {"name": "arquitetura", "regex": "(?im)^\\s*\\**\\s*(architecture|arquitetura)\\b"},
+       {"name": "architecture", "regex": "(?im)^\\s*\\**\\s*(architecture|arquitetura)\\b"},
        {"name": "tech_stack", "regex": "(?i)tech stack|stack"},
-       {"name": "resultado_esperado", "regex": "(?im)^\\s*\\**\\s*(expected|esperado)"},
+       {"name": "expected_result", "regex": "(?im)^\\s*\\**\\s*(expected|esperado)"},
        {"name": "commit", "regex": "(?i)git commit"},
        {"name": "sub_skill", "regex": "(?i)required sub-skill|executing-plans|subagent-driven-development"}
      ],
      "path_regex": "^docs/(superpowers/)?plans/\\d{4}-\\d{2}-\\d{2}-[^/]+\\.md$"},
-    {"type": "unchanged", "name": "sem_codigo", "paths": ["pypika"]}
+    {"type": "unchanged", "name": "no_code_changes", "paths": ["pypika"]}
   ]
 }

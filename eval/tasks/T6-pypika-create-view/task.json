@@ -1,27 +1,27 @@
 {
   "id": "T6",
-  "title": "Planejar e implementar CREATE VIEW (com dialetos)",
+  "title": "Plan and implement CREATE VIEW (with dialects)",
   "repo": "pypika",
   "category": "plan+implement",
-  "plan_task": "T6 - planejar uma mudança complexa antes de implementar, depois implementar",
+  "plan_task": "T6 - plan a complex change before implementing it, then implement it",
   "timeout_min": 45,
-  "notes": "Recurso inexistente no upstream (sem contaminação de solução). Sucesso = testes ocultos + nota >= 7 no rubric.md.",
+  "notes": "Feature absent from the upstream (no solution contamination). Success = hidden tests + grade >= 7 on rubric.md.",
   "checks": [
-    {"type": "report", "name": "plano_existe", "file": ["PLANO.md", "plano.md"], "min_words": 150},
-    {"type": "rubric", "name": "gabarito_plano", "rubric": "rubric.md", "report": ["PLANO.md", "plano.md"],
+    {"type": "report", "name": "plan_exists", "file": ["PLAN.md", "plan.md"], "min_words": 150},
+    {"type": "rubric", "name": "plan_rubric", "rubric": "rubric.md", "report": ["PLAN.md", "plan.md"],
      "threshold": 7, "max": 10,
      "hints": [["CreateQueryBuilder", "DropQueryBuilder", "CreateIndexBuilder"],
                ["create_view"],
                ["@builder", "imutáve", "imutabil", "immutab"],
-               ["cópia rasa", "copia rasa", "shallow", "copy.copy", "__copy__", "compartilh"],
+               ["cópia rasa", "copia rasa", "shallow", "copy.copy", "__copy__", "compartilh", "shared"],
                ["dialects.py"],
                ["TypeError"],
                ["IF NOT EXISTS"],
                ["str(query)", "quote_char", "QUOTE_CHAR", "_set_kwargs_defaults"],
                ["schema"],
                ["README"]]},
-    {"type": "hidden_tests", "name": "testes_ocultos",
+    {"type": "hidden_tests", "name": "hidden_tests",
      "files": {"hidden/test_hidden_t6.py": "pypika/tests/test_hidden_t6.py"}},
-    {"type": "baseline_tests", "name": "suite_original"}
+    {"type": "baseline_tests", "name": "original_suite"}
   ]
 }

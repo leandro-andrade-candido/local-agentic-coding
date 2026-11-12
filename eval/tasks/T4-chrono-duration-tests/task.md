@@ -1,7 +1,7 @@
-O módulo `src/calculation/duration.ts` (funções `addDuration` e `reverseDuration`) é usado por vários parsers de expressões relativas ("in 2 weeks", "3 days ago" etc.), mas hoje não tem nenhum teste próprio.
+The `src/calculation/duration.ts` module (functions `addDuration` and `reverseDuration`) is used by several parsers for relative expressions ("in 2 weeks", "3 days ago" etc.), but right now it has no tests of its own.
 
-Escreva uma suíte de testes jest para ele em `test/calculation_duration.test.ts`. Quero testes que realmente peguem regressões nesse módulo: cubra cada unidade de tempo, as abreviações aceitas, combinações de unidades, valores fracionários e o `reverseDuration`. Use datas fixas, nada que dependa do dia em que o teste roda.
+Write a jest test suite for it in `test/calculation_duration.test.ts`. I want tests that actually catch regressions in this module: cover every time unit, the accepted abbreviations, combinations of units, fractional values and `reverseDuration`. Use fixed dates, nothing that depends on the day the test runs.
 
-Não altere `src/calculation/duration.ts`; se achar algo estranho no comportamento, só me avise. Os testes novos precisam passar.
+Don't change `src/calculation/duration.ts`; if you find something odd in its behavior, just let me know. The new tests must pass.
 
-As dependências já estão instaladas: rode com `npx jest test/calculation_duration.test.ts` (a suíte inteira é `npx jest`).
+The dependencies are already installed: run with `npx jest test/calculation_duration.test.ts` (the whole suite is `npx jest`).

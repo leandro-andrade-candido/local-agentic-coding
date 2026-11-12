@@ -1,3 +1,3 @@
-As funções `resolve_is_aggregate`, `format_quotes` e `format_alias_sql`, em `pypika/utils.py`, não têm testes unitários diretos. Escreva testes para elas em um arquivo novo, `pypika/tests/test_utils_format.py`, cobrindo o comportamento normal e os casos de borda que importam.
+The functions `resolve_is_aggregate`, `format_quotes` and `format_alias_sql`, in `pypika/utils.py`, have no direct unit tests. Write tests for them in a new file, `pypika/tests/test_utils_format.py`, covering the normal behavior and the edge cases that matter.
 
-Não altere `pypika/utils.py`; se achar algo estranho no comportamento, só me avise. Os testes novos precisam passar. As dependências estão em `.venv` (testes: `.venv/bin/python -m pytest`).
+Don't change `pypika/utils.py`; if you find something odd in its behavior, just let me know. The new tests must pass. The dependencies are in `.venv` (tests: `.venv/bin/python -m pytest`).

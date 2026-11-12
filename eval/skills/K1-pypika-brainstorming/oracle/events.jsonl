@@ -1,4 +1,4 @@
-{"type": "system", "subtype": "init", "note": "transcript simulado (stream-json do Claude Code/Qwen Code) para o fake-oracle e o validate.sh", "tools": ["Read", "Bash", "Write"]}
+{"type": "system", "subtype": "init", "note": "simulated transcript (Claude Code/Qwen Code stream-json) for fake-oracle and validate.sh", "tools": ["Read", "Bash", "Write"]}
 {"type": "assistant", "message": {"id": "m1", "content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/opt/skills/base/brainstorming/SKILL.md"}}], "usage": {"input_tokens": 800, "output_tokens": 20}}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "---\nname: brainstorming\n---"}]}}
 {"type": "assistant", "message": {"id": "m2", "content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "grep -n \"def pipe\" -A 20 pypika/queries.py"}}]}}

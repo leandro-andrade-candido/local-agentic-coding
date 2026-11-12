@@ -1,4 +1,4 @@
-"""Testes ocultos do T7: a regressão (LIMIT 0 some) deve ser corrigida e o paginate() mantido."""
+"""T7 hidden tests: the regression (LIMIT 0 disappears) must be fixed and paginate() kept."""
 import unittest
 
 from pypika import MSSQLQuery, OracleQuery, Query
@@ -7,7 +7,7 @@ from pypika.utils import QueryException
 
 class HiddenLimitZeroTests(unittest.TestCase):
     def test_select_with_limit_zero(self):
-        # Teste original do upstream (removido da suíte visível).
+        # Original upstream test (removed from the visible suite).
         self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(Query.from_("abc").select("foo")[:0]))
         self.assertEqual('SELECT "foo" FROM "abc" LIMIT 0', str(Query.from_("abc").select("foo").limit(0)))
 
@@ -20,7 +20,7 @@ class HiddenLimitZeroTests(unittest.TestCase):
         self.assertEqual('SELECT "foo" FROM "abc"', str(q))
 
     def test_offset_zero_is_still_omitted(self):
-        # Comportamento do upstream antes do diff: OFFSET 0 não é emitido.
+        # Upstream behavior before the diff: OFFSET 0 is not emitted.
         self.assertEqual('SELECT "foo" FROM "abc" LIMIT 3', str(Query.from_("abc").select("foo").limit(3).offset(0)))
 
     def test_mssql_limit_zero_unchanged(self):

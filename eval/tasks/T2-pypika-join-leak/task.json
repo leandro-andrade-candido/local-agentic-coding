@@ -1,13 +1,13 @@
 {
   "id": "T2",
-  "title": "Joins vazam entre queries derivadas da mesma base",
+  "title": "Joins leak between queries derived from the same base",
   "repo": "pypika",
   "category": "bugfix",
-  "plan_task": "T2 - corrigir bug plantado a partir de relato de usuário",
+  "plan_task": "T2 - fix a planted bug from a user report",
   "timeout_min": 30,
   "checks": [
-    {"type": "hidden_tests", "name": "testes_ocultos",
+    {"type": "hidden_tests", "name": "hidden_tests",
      "files": {"hidden/test_hidden_t2.py": "pypika/tests/test_hidden_t2.py"}},
-    {"type": "baseline_tests", "name": "suite_original"}
+    {"type": "baseline_tests", "name": "original_suite"}
   ]
 }

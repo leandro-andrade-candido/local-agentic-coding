@@ -1,14 +1,14 @@
 {
   "id": "T7",
-  "title": "Revisar o próprio diff (paginate) com regressão plantada",
+  "title": "Review your own diff (paginate) with a planted regression",
   "repo": "pypika",
   "category": "review",
-  "plan_task": "T7 - revisar o próprio diff, que contém uma regressão plantada",
+  "plan_task": "T7 - review your own diff, which contains a planted regression",
   "timeout_min": 30,
-  "notes": "pending.patch é aplicado sem commit após o setup. A regressão: _apply_pagination passou a testar 'if value:' e LIMIT 0 deixou de ser emitido. O teste visível que pegaria isso foi movido para hidden/.",
+  "notes": "pending.patch is applied without a commit after setup. The regression: _apply_pagination now tests 'if value:' and LIMIT 0 is no longer emitted. The visible test that would catch it was moved to hidden/.",
   "checks": [
-    {"type": "hidden_tests", "name": "testes_ocultos",
+    {"type": "hidden_tests", "name": "hidden_tests",
      "files": {"hidden/test_hidden_t7.py": "pypika/tests/test_hidden_t7.py"}},
-    {"type": "baseline_tests", "name": "suite_original"}
+    {"type": "baseline_tests", "name": "original_suite"}
   ]
 }

@@ -1,14 +1,14 @@
-Vou começar a contribuir com este repositório e não conheço nada dele. Explore o código e escreva um documento `ARQUITETURA.md`, em português, na raiz do repositório, explicando a arquitetura para um desenvolvedor que está chegando agora.
+I'm about to start contributing to this repository and I don't know anything about it yet. Explore the code and write an `ARCHITECTURE.md` document, in English, at the repository root, explaining the architecture to a developer who is just arriving.
 
-Quero entender:
+I want to understand:
 
-- qual é o ponto de entrada e o que a API pública oferece;
-- o caminho completo de um texto até o resultado, passo a passo;
-- as principais abstrações, onde ficam e como se relacionam;
-- como o suporte a idiomas está organizado e o que é preciso para estender;
-- as opções e configurações que mudam o comportamento;
-- como os testes estão organizados e como rodá-los.
+- what the entry point is and what the public API offers;
+- the full path from a piece of text to the result, step by step;
+- the main abstractions, where they live and how they relate to each other;
+- how language support is organized and what it takes to extend it;
+- the options and settings that change the behavior;
+- how the tests are organized and how to run them.
 
-Cite arquivos, classes e funções reais. Seja concreto, sem texto genérico. Não altere nenhum código, só crie o `ARQUITETURA.md`.
+Cite real files, classes and functions. Be concrete, no generic filler. Don't change any code; only create `ARCHITECTURE.md`.
 
-As dependências já estão instaladas (`npx jest` roda os testes).
+The dependencies are already installed (`npx jest` runs the tests).

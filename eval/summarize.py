@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Agrega result.json em tabelas Markdown (somente stdlib; rode com python3 -I).
+"""Aggregates result.json files into Markdown tables (stdlib only; run with python3 -I).
 
-Uso:
-    python3 -I eval/summarize.py [caminho ...] [--json]
+Usage:
+    python3 -I eval/summarize.py [path ...] [--json]
 
-Cada caminho pode ser um result.json ou um diretório (busca recursiva). Padrão: eval/runs.
+Each path can be a result.json or a directory (searched recursively). Default: eval/runs.
 
-Tabelas:
-  1. por harness x tarefa: execuções, sucessos, taxa de sucesso, mediana de tempo do agente,
-     tokens (mediana), velocidade de prefill/geração (mediana), pico de RAM/VRAM, timeouts;
-  2. por harness: critério da Meta 1 (tarefas T1-T7 resolvidas em pelo menos 2/3 das execuções);
-  3. skills (K1-K3): em quantas execuções a skill foi carregada;
-  4. execuções sem métricas do servidor, com o motivo (ex.: 401 sem chave);
-  5. execuções que aguardam nota do gabarito (T1, T5, T6).
-Execuções "pending_grading" não entram na taxa até receberem nota (eval/grade.py).
+Tables:
+  1. per harness x task: runs, successes, success rate, median agent time,
+     tokens (median), prefill/generation speed (median), RAM/VRAM peak, timeouts;
+  2. per harness: Goal 1 criterion (tasks T1-T7 solved in at least 2/3 of the runs);
+  3. skills (K1-K3): in how many runs the skill was loaded;
+  4. runs without server metrics, with the reason (e.g. 401 without a key);
+  5. runs awaiting the rubric grade (T1, T5, T6).
+"pending_grading" runs do not count toward the rate until they are graded (eval/grade.py).
 """
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def aggregate(results: list[dict]) -> dict:
             need = math.ceil(2 * row["runs"] / 3)
             ok = row["pass"] >= need
             solved += int(ok)
-            pend = f", {row['pending']} aguardando nota" if row["pending"] else ""
+            pend = f", {row['pending']} awaiting grade" if row["pending"] else ""
             detail.append(f"{t}: {row['pass']}/{row['runs']}{pend}")
         meta[h] = {"tasks_solved_2of3": solved, "detail": detail}
     pending = [r for r in results if r.get("status") == "pending_grading"]
@@ -125,17 +125,17 @@ def aggregate(results: list[dict]) -> dict:
     for r in results:
         llm = r.get("llm") or {}
         if llm.get("available") is False:
-            reason = llm.get("reason") or "sem motivo registrado"
+            reason = llm.get("reason") or "no reason recorded"
             no_metrics[reason] = no_metrics.get(reason, 0) + 1
     return {"rows": rows, "meta1": meta, "pending": pending,
             "skills": sorted(skills.values(), key=lambda x: (x["harness"], x["task"])), "no_metrics": no_metrics}
 
 
 def render(agg: dict, n_results: int) -> str:
-    out = [f"# Resumo da validação ({n_results} execuções)", ""]
-    out += ["## Por harness e tarefa", "",
-            "| Harness | Tarefa | Exec. | Sucesso | Taxa | Aguarda nota | Erro | Tempo (mediana) | Tokens in | "
-            "Tokens out | Prefill t/s | Geração t/s | Pico RAM | Pico VRAM | Timeouts |",
+    out = [f"# Validation summary ({n_results} runs)", ""]
+    out += ["## By harness and task", "",
+            "| Harness | Task | Runs | Passed | Rate | Awaiting grade | Error | Time (median) | Tokens in | "
+            "Tokens out | Prefill t/s | Generation t/s | RAM peak | VRAM peak | Timeouts |",
             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in agg["rows"]:
         rate = "-" if r["success_rate"] is None else f"{r['success_rate']:.0%}"
@@ -145,32 +145,32 @@ def render(agg: dict, n_results: int) -> str:
             f"{fmt(r['prefill_tps_median'], 1)} | {fmt(r['gen_tps_median'], 1)} | "
             f"{fmt(r['ram_peak_mib'] and r['ram_peak_mib'] / 1024, 1, ' GiB')} | "
             f"{fmt(r['vram_peak_mib'] and r['vram_peak_mib'] / 1024, 1, ' GiB')} | {r['timeouts']} |")
-    out += ["", "## Meta 1 por harness (T1–T7 resolvidas em pelo menos 2/3 das execuções; alvo: 5 de 7)", "",
-            "| Harness | Tarefas resolvidas | Detalhe (sucessos/execuções) |", "|---|---:|---|"]
+    out += ["", "## Goal 1 by harness (T1–T7 solved in at least 2/3 of the runs; target: 5 of 7)", "",
+            "| Harness | Tasks solved | Detail (passes/runs) |", "|---|---:|---|"]
     for h, m in agg["meta1"].items():
         out.append(f"| {h} | {m['tasks_solved_2of3']}/7 | {'; '.join(m['detail'])} |")
     if agg["skills"]:
         out += ["", "## Skills (K1–K3)", "",
-                "K1 e K3 pedem a skill pelo nome (carregar é obrigatório); no K2 ela não é citada e "
-                "\"carregada\" é só medição de acionamento automático.", "",
-                "| Harness | Tarefa | Skill | Exec. | Skill carregada | Sem transcript | Tarefa ok |",
+                "K1 and K3 ask for the skill by name (loading it is required); K2 does not mention it and "
+                "\"loaded\" only measures automatic triggering.", "",
+                "| Harness | Task | Skill | Runs | Skill loaded | No transcript | Task ok |",
                 "|---|---|---|---:|---:|---:|---:|"]
         for k in agg["skills"]:
-            out.append(f"| {k['harness']} | {k['task']} | {k['skill']}{'' if k['required'] else ' (medição)'} | "
+            out.append(f"| {k['harness']} | {k['task']} | {k['skill']}{'' if k['required'] else ' (measurement)'} | "
                        f"{k['runs']} | {k['loaded']}/{k['runs']} | {k['no_transcript']} | {k['task_pass']}/{k['runs']} |")
     if agg["no_metrics"]:
-        out += ["", "## AVISO: execuções sem métricas do servidor", ""]
+        out += ["", "## WARNING: runs without server metrics", ""]
         for reason, n in sorted(agg["no_metrics"].items(), key=lambda kv: -kv[1]):
-            out.append(f"- {n} execução(ões): {reason}")
+            out.append(f"- {n} run(s): {reason}")
     if agg["pending"]:
-        out += ["", "## Aguardando nota do gabarito", "",
-                "Registre com `python3 -I eval/grade.py <result.json> --score N --by NOME`.", ""]
+        out += ["", "## Awaiting rubric grade", "",
+                "Record it with `python3 -I eval/grade.py <result.json> --score N --by NAME`.", ""]
         for r in agg["pending"]:
             rub = r.get("rubric") or {}
             out.append(f"- `{r.get('_path')}` ({r.get('harness')} {r.get('task_id')}, "
-                       f"pista automática {rub.get('auto_hint')}/{rub.get('max', 10)})")
-    out += ["", "Notas: tokens e velocidades vêm de /metrics do llama-server (\"-\" = indisponível); "
-            "a taxa ignora execuções aguardando nota; tempo = parede do agente, sem setup e verificação."]
+                       f"automatic hint {rub.get('auto_hint')}/{rub.get('max', 10)})")
+    out += ["", "Notes: tokens and speeds come from llama-server /metrics (\"-\" = unavailable); "
+            "the rate ignores runs awaiting a grade; time = agent wall clock, without setup and checks."]
     return "\n".join(out) + "\n"
 
 
@@ -183,7 +183,7 @@ def main() -> int:
             with open(p) as f:
                 r = json.load(f)
         except (OSError, ValueError) as e:
-            print(f"ignorando {p}: {e}", file=sys.stderr)
+            print(f"skipping {p}: {e}", file=sys.stderr)
             continue
         r["_path"] = os.path.relpath(p)
         r.setdefault("timing", {})

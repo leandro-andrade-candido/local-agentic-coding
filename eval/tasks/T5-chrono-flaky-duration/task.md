@@ -1,12 +1,12 @@
-Dois testes começaram a falhar na main e ninguém entende por quê:
+Two tests started failing on main and nobody understands why:
 
-- `Test - Strict mode`, em `test/en/en_time_units_within.test.ts`
-- `Test - From now Expression`, em `test/en/en_time_units_later.test.ts`
+- `Test - Strict mode`, in `test/en/en_time_units_within.test.ts`
+- `Test - From now Expression`, in `test/en/en_time_units_later.test.ts`
 
-Ninguém mexeu nesses arquivos de teste. O mais estranho: o primeiro passa quando rodo sozinho (`npx jest test/en/en_time_units_within.test.ts -t "Strict mode"`).
+Nobody touched those test files. The strangest part: the first one passes when I run it alone (`npx jest test/en/en_time_units_within.test.ts -t "Strict mode"`).
 
-Investigue até encontrar a causa raiz e corrija no código da biblioteca. Não altere, pule nem desative testes, e não mude o comportamento do parser em outros casos: a suíte inteira tem que passar.
+Investigate until you find the root cause and fix it in the library code. Don't change, skip or disable tests, and don't change the parser's behavior in other cases: the whole suite has to pass.
 
-Quando terminar, escreva em `INVESTIGACAO.md`, na raiz do repositório, qual era a causa raiz, como você chegou nela e por que a correção resolve.
+When you're done, write a report in English in `INVESTIGATION.md`, at the repository root, covering what the root cause was, how you got to it and why the fix solves it.
 
-As dependências já estão instaladas (`npx jest` roda a suíte; `npx jest <arquivo>` roda um arquivo).
+The dependencies are already installed (`npx jest` runs the suite; `npx jest <file>` runs one file).

@@ -1,22 +1,22 @@
-Oi! Uso o pypika (este repositório) para montar SQL e achei um comportamento estranho.
+Hi! I use pypika (this repository) to build SQL and I ran into some odd behavior.
 
-Eu monto uma query base e, a partir dela, crio variações com joins diferentes:
+I build a base query and, from it, create variations with different joins:
 
 ```python
 from pypika import Query, Tables
 
-pedidos, clientes, entregas = Tables("pedidos", "clientes", "entregas")
+orders, customers, deliveries = Tables("orders", "customers", "deliveries")
 
-base = Query.from_(pedidos).select(pedidos.id)
-com_cliente = base.join(clientes).on(pedidos.cliente_id == clientes.id)
-com_entrega = base.join(entregas).on(pedidos.id == entregas.pedido_id)
+base = Query.from_(orders).select(orders.id)
+with_customer = base.join(customers).on(orders.customer_id == customers.id)
+with_delivery = base.join(deliveries).on(orders.id == deliveries.order_id)
 
 print(base)
-print(com_entrega)
+print(with_delivery)
 ```
 
-Eu esperava que `base` continuasse `SELECT "id" FROM "pedidos"` e que `com_entrega` tivesse só o JOIN de `entregas`. Mas a `base` sai com JOIN e a `com_entrega` sai com os dois JOINs (clientes e entregas). Com `where`, `select`, `orderby` etc. isso não acontece, a base fica intacta; parece ser só com join.
+I expected `base` to stay `SELECT "id" FROM "orders"` and `with_delivery` to have only the JOIN on `deliveries`. But `base` comes out with a JOIN, and `with_delivery` comes out with both JOINs (customers and deliveries). With `where`, `select`, `orderby` etc. this doesn't happen and the base stays intact; it seems to be only with join.
 
-Pode investigar e corrigir na biblioteca? Quero a correção no código do pypika, não um contorno no meu uso, e um teste que cubra o caso. Não quebre o resto da suíte.
+Can you investigate and fix it in the library? I want the fix in pypika's code, not a workaround in how I use it, plus a test that covers the case. Don't break the rest of the suite.
 
-O ambiente já está pronto: as dependências estão em `.venv` (rode os testes com `.venv/bin/python -m pytest`).
+The environment is ready: the dependencies are in `.venv` (run the tests with `.venv/bin/python -m pytest`).

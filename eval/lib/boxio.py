@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Leitura e escrita seguras das saídas do agente (E7, correção do item 7 da
-verificação adversarial em docs/verifications/E7.md).
+"""Safe reading and writing of the agent's outputs (E7, fix for item 7 of the
+adversarial verification in docs/verifications/E7.md).
 
-Com EVAL_WRAPPER, o agente roda num container, mas o eval/run.sh ainda processa
-NO HOST o que o agente produziu: o diff, a pasta agent-logs e o agent-metrics.json.
-Um workdir malicioso pode plantar symlinks nesses caminhos (direto em agent-logs,
-que ele monta rw, ou em $out via código que roda nos containers que montam $out).
-Se o host seguir esses symlinks ao ler ou escrever, dá leitura e sobrescrita de
-arquivo arbitrário no host.
+With EVAL_WRAPPER, the agent runs in a container, but eval/run.sh still processes
+ON THE HOST what the agent produced: the diff, the agent-logs directory and agent-metrics.json.
+A malicious workdir can plant symlinks at those paths (directly in agent-logs,
+which it mounts rw, or in $out via code running in the containers that mount $out).
+If the host follows those symlinks when reading or writing, that allows reading and
+overwriting arbitrary files on the host.
 
-Regras aqui:
-- nunca seguir symlink ao ler (O_NOFOLLOW; só arquivo regular; tamanho limitado);
-- nunca escrever através de symlink (arquivo temporário exclusivo + os.replace, que
-  troca a entrada do diretório sem seguir um symlink que esteja no lugar);
-- copiar árvores só com arquivos regulares e diretórios reais (symlinks ignorados);
-- extrair o tar do diff sem escrever nada no disco a partir dele (lê os membros
-  esperados e grava com o escritor seguro);
-- varrer $out apagando qualquer symlink antes de o host ler ou escrever.
+Rules here:
+- never follow a symlink when reading (O_NOFOLLOW; regular files only; bounded size);
+- never write through a symlink (exclusive temporary file + os.replace, which
+  swaps the directory entry without following a symlink in its place);
+- copy trees with regular files and real directories only (symlinks ignored);
+- extract the diff tar without writing anything to disk from it (reads the expected
+  members and writes them with the safe writer);
+- scan $out deleting every symlink before the host reads or writes.
 """
 from __future__ import annotations
 
@@ -26,13 +26,13 @@ import stat
 import sys
 import tarfile
 
-MAX_JSON = 1 << 20          # 1 MiB: agent-metrics.json é pequeno
-MAX_PATCH = 64 * 1024 * 1024  # 64 MiB de diff é folgado
+MAX_JSON = 1 << 20          # 1 MiB: agent-metrics.json is small
+MAX_PATCH = 64 * 1024 * 1024  # 64 MiB of diff is plenty
 
 
 def read_json_nofollow(path: str, max_bytes: int = MAX_JSON, default=None):
-    """Lê JSON sem seguir symlink. Devolve default se não for arquivo regular,
-    se passar do tamanho, se não abrir ou se não for JSON válido."""
+    """Reads JSON without following symlinks. Returns default if it is not a regular file,
+    is too large, cannot be opened or is not valid JSON."""
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError:
@@ -55,8 +55,8 @@ def read_json_nofollow(path: str, max_bytes: int = MAX_JSON, default=None):
 
 
 def write_bytes_atomic(path: str, data: bytes) -> None:
-    """Escreve bytes sem seguir symlink: cria um temporário exclusivo no mesmo
-    diretório e faz os.replace (rename não segue um symlink no destino)."""
+    """Writes bytes without following symlinks: creates an exclusive temporary file in the same
+    directory and does os.replace (rename does not follow a symlink at the destination)."""
     d = os.path.dirname(path) or "."
     tmp = os.path.join(d, f".{os.path.basename(path)}.tmp.{os.getpid()}")
     try:
@@ -76,13 +76,13 @@ def write_json_atomic(path: str, obj) -> None:
 
 
 def sanitize_tree(root: str) -> int:
-    """Apaga todo symlink (de arquivo ou de diretório) sob root. Devolve quantos.
-    Se root for ele mesmo um symlink, apaga e para."""
+    """Deletes every symlink (to a file or directory) under root. Returns how many.
+    If root itself is a symlink, deletes it and stops."""
     if os.path.islink(root):
         os.unlink(root)
         return 1
     n = 0
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True):  # não segue symlink de dir
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):  # does not follow directory symlinks
         for name in list(dirnames):
             p = os.path.join(dirpath, name)
             if os.path.islink(p):
@@ -98,9 +98,9 @@ def sanitize_tree(root: str) -> int:
 
 
 def copy_tree_regular(src: str, dst: str) -> None:
-    """Copia src -> dst só com diretórios reais e arquivos regulares. Ignora
-    symlinks (não os segue nem os recria) e qualquer outro tipo. dst é recriado
-    do zero; nunca escreve através de um symlink no destino."""
+    """Copies src -> dst with real directories and regular files only. Ignores
+    symlinks (neither follows nor recreates them) and any other type. dst is recreated
+    from scratch; never writes through a symlink at the destination."""
     if os.path.lexists(dst):
         if os.path.islink(dst) or not os.path.isdir(dst):
             os.unlink(dst)
@@ -120,7 +120,7 @@ def copy_tree_regular(src: str, dst: str) -> None:
                 st = os.lstat(sp)
             except OSError:
                 continue
-            if not stat.S_ISREG(st.st_mode):   # symlink, fifo, socket, dispositivo: fora
+            if not stat.S_ISREG(st.st_mode):   # symlink, fifo, socket, device: skipped
                 continue
             try:
                 rfd = os.open(sp, os.O_RDONLY | os.O_NOFOLLOW)
@@ -134,7 +134,7 @@ def copy_tree_regular(src: str, dst: str) -> None:
 
 
 def _rmtree_no_follow(root: str) -> None:
-    for dirpath, dirnames, filenames in os.walk(root, topdown=False):  # não segue symlink
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):  # does not follow symlinks
         for name in filenames + dirnames:
             p = os.path.join(dirpath, name)
             try:
@@ -148,10 +148,10 @@ def _rmtree_no_follow(root: str) -> None:
 
 
 def extract_diff(tar_path: str, out_dir: str) -> tuple[str, str]:
-    """Lê o tar emitido pela captura do diff no container (agent.patch,
-    numstat.txt, commits.txt), sem extrair nada no disco a partir dele: só lê os
-    membros regulares esperados e grava agent.patch com o escritor seguro.
-    Devolve (numstat, commits)."""
+    """Reads the tar emitted by the diff capture in the container (agent.patch,
+    numstat.txt, commits.txt), without extracting anything to disk from it: it only reads the
+    expected regular members and writes agent.patch with the safe writer.
+    Returns (numstat, commits)."""
     want = {"agent.patch", "numstat.txt", "commits.txt"}
     patch, numstat, commits = b"", "", "0"
     try:
@@ -176,10 +176,10 @@ def extract_diff(tar_path: str, out_dir: str) -> tuple[str, str]:
 
 
 def extract_checks(tar_path: str, out_dir: str) -> str:
-    """Lê o tar das verificações (checks.json, check.log, check.stdout, check.stderr,
-    check.rc), emitido no container onde $out NÃO é montado, e grava cada arquivo em
-    out_dir com o escritor seguro — assim o host, e não o código do agente, escreve o
-    veredito. Devolve o código de saída do check.sh (texto)."""
+    """Reads the checks tar (checks.json, check.log, check.stdout, check.stderr,
+    check.rc), emitted in the container where $out is NOT mounted, and writes each file to
+    out_dir with the safe writer, so the host, not the agent's code, writes the
+    verdict. Returns the check.sh exit code (as text)."""
     want = {"checks.json", "check.log", "check.stdout", "check.stderr", "check.rc"}
     caps = {"checks.json": MAX_PATCH, "check.log": MAX_PATCH, "check.stdout": MAX_JSON,
             "check.stderr": MAX_JSON, "check.rc": 16}
@@ -210,7 +210,7 @@ def _main(argv: list[str]) -> int:
         return 0
     if cmd == "extract-diff":
         numstat, commits = extract_diff(argv[2], argv[3])
-        sys.stdout.write(commits + "\n")   # linha 1 = commits; o resto = numstat
+        sys.stdout.write(commits + "\n")   # line 1 = commits; the rest = numstat
         sys.stdout.write(numstat)
         if numstat and not numstat.endswith("\n"):
             sys.stdout.write("\n")
@@ -221,9 +221,9 @@ def _main(argv: list[str]) -> int:
     if cmd == "sanitize":
         n = sanitize_tree(argv[2])
         if n:
-            sys.stderr.write(f"boxio: {n} symlink(s) removido(s) de {argv[2]}\n")
+            sys.stderr.write(f"boxio: {n} symlink(s) removed from {argv[2]}\n")
         return 0
-    sys.stderr.write("uso: boxio.py extract-diff|copy-logs|sanitize ...\n")
+    sys.stderr.write("usage: boxio.py extract-diff|extract-checks|copy-logs|sanitize ...\n")
     return 2
 
 

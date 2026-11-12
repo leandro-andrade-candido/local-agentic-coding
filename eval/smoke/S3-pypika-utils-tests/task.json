@@ -1,21 +1,21 @@
 {
   "id": "S3",
-  "title": "Escrever testes para helpers de formatação",
+  "title": "Write tests for formatting helpers",
   "repo": "pypika",
   "category": "tests",
-  "plan_task": "E6 smoke - escrever um teste",
+  "plan_task": "E6 smoke - write a test",
   "timeout_min": 15,
   "checks": [
     {
       "type": "unchanged",
-      "name": "utils_inalterado",
+      "name": "utils_unchanged",
       "paths": [
         "pypika/utils.py"
       ]
     },
     {
       "type": "mutation",
-      "name": "mutantes",
+      "name": "mutants",
       "module": "pypika/utils.py",
       "mutants": "mutants/*.patch",
       "min_score": 0.6,
@@ -23,8 +23,8 @@
     },
     {
       "type": "baseline_tests",
-      "name": "suite_original"
+      "name": "original_suite"
     }
   ],
-  "notes": "Só contam arquivos de teste novos (o pedido é pypika/tests/test_utils_format.py); 6 mutantes, meta >= 60%."
+  "notes": "Only new test files count (the request is pypika/tests/test_utils_format.py); 6 mutants, target >= 60%."
 }

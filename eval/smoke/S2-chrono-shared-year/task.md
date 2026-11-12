@@ -1,6 +1,6 @@
-Em `src/locales/pt/constants.ts` e `src/locales/es/constants.ts`, o `YEAR_PATTERN` e a função `parseYear` são cópias idênticas. Quero centralizar isso:
+In `src/locales/pt/constants.ts` and `src/locales/es/constants.ts`, `YEAR_PATTERN` and the `parseYear` function are identical copies. I want to centralize them:
 
-- em `src/calculation/years.ts`, exporte a constante `YEAR_WITH_ERA_PATTERN` e a função `parseYearWithEra(match: string): number`, com exatamente o comportamento atual (inclusive anos com dois dígitos e "a.C."/"d.C.");
-- faça os locales `pt` e `es` usarem essas versões e remova as cópias. Os parsers desses idiomas devem continuar funcionando igual.
+- in `src/calculation/years.ts`, export the constant `YEAR_WITH_ERA_PATTERN` and the function `parseYearWithEra(match: string): number`, with exactly the current behavior (including two-digit years and "a.C."/"d.C.");
+- make the `pt` and `es` locales use these versions and remove the copies. The parsers of these languages must keep working the same way.
 
-Não mude comportamento. As dependências já estão instaladas (`npx jest` roda a suíte; `npx jest test/pt test/es` roda só esses idiomas).
+Don't change behavior. The dependencies are already installed (`npx jest` runs the suite; `npx jest test/pt test/es` runs only these languages).

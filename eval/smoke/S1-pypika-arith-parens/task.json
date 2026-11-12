@@ -1,13 +1,13 @@
 {
   "id": "S1",
-  "title": "Subtração perde os parênteses do lado direito",
+  "title": "Subtraction drops the parentheses on the right-hand side",
   "repo": "pypika",
   "category": "bugfix",
-  "plan_task": "E6 smoke - correção de bug pequena",
+  "plan_task": "E6 smoke - small bug fix",
   "timeout_min": 15,
   "checks": [
-    {"type": "hidden_tests", "name": "testes_ocultos",
+    {"type": "hidden_tests", "name": "hidden_tests",
      "files": {"hidden/test_hidden_s1.py": "pypika/tests/test_hidden_s1.py"}},
-    {"type": "baseline_tests", "name": "suite_original"}
+    {"type": "baseline_tests", "name": "original_suite"}
   ]
 }

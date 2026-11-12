@@ -1,4 +1,4 @@
-"""Testes ocultos do K2: Field[a:b] deve ser igual a Field.between(a, b)."""
+"""K2 hidden tests: Field[a:b] must equal Field.between(a, b)."""
 import unittest
 from datetime import date
 

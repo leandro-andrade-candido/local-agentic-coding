@@ -1,4 +1,4 @@
-"""Testes ocultos do S1: parênteses do lado direito de uma subtração."""
+"""S1 hidden tests: parentheses on the right-hand side of a subtraction."""
 import unittest
 
 from pypika import Field as F, Query as Q, Table
@@ -8,7 +8,7 @@ class HiddenSubtractionParenthesesTests(unittest.TestCase):
     t = Table("abc")
 
     def test__complex_op_sub_parentheses(self):
-        # Teste original do upstream (removido da suíte visível).
+        # Original upstream test (removed from the visible suite).
         q1 = Q.from_("abc").select((F("a") + 1) - (F("b") - 5))
         q2 = Q.from_(self.t).select((self.t.a + 1) - (self.t.b - 5))
         q3 = Q.from_("abc").select((F("a") / 1) - (F("b") / 5))

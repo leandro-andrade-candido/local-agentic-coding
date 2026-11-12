@@ -1,219 +1,228 @@
-# Suíte de validação (`eval/`)
+# Validation suite (`eval/`)
 
-Mede, sem intervenção humana, se um agente (Qwen Code, Pi, OpenCode, Claude Code apontado para o modelo local...) resolve tarefas reais de programação. Cobre as tarefas T1–T7 da seção 9 do [plano](../DIAGNOSIS-AND-PLAN.md) (etapa E8). Para o teste comparativo de agentes (etapa E6), traz também 3 tarefas curtas (S1–S3) e 3 verificações de skills (K1–K3).
+Measures, without human intervention, whether an agent (Qwen Code, Pi, OpenCode, Claude Code pointed at the local model...) solves real programming tasks. It covers tasks T1–T7 from section 9 of the [plan](../DIAGNOSIS-AND-PLAN.md) (stage E8). For the comparative agent test (stage E6), it also has 3 short tasks (S1–S3) and 3 skill checks (K1–K3).
 
-A suíte não depende de nenhum harness específico. Cada execução segue os mesmos passos:
+The suite does not depend on any specific harness. Each run follows the same steps:
 
-1. cria um workdir novo a partir de um commit fixado de um repositório público;
-2. entrega o prompt ao harness e espera ele terminar, com limite de tempo;
-3. roda verificações ocultas, que o agente nunca vê;
-4. grava `result.json` com sucesso, tempos, tokens e pico de RAM/VRAM.
+1. creates a fresh workdir from a pinned commit of a public repository;
+2. hands the prompt to the harness and waits for it to finish, with a time limit;
+3. runs hidden checks, which the agent never sees;
+4. writes `result.json` with success, timings, tokens and RAM/VRAM peak.
 
-Tudo é bash + Python stdlib. As dependências dos repositórios ficam só dentro dos workdirs (`.venv` com uv, `node_modules` local). Nada é instalado globalmente.
+Everything is bash + Python stdlib. The repositories' dependencies live only inside the workdirs (`.venv` with uv, local `node_modules`). Nothing is installed globally.
 
-## Repositórios usados
+## Language
+
+- The suite, the prompts (`task.md`), the rubrics and the reference solutions are in English.
+- **T3 stays in Portuguese on purpose.** It tests Portuguese relative-date parsing in chrono's `pt` locale ("há 3 dias", "daqui a 2 semanas"), so its prompt and data are test data. Nothing in `tasks/T3-chrono-pt-relative/` was translated, including its check names (`testes_aceitacao`, `suite_original`); the grader and `summarize.py` do not depend on check names.
+- The prompts of T1, T2, T4–T7, S1–S3 and K1–K3 were translated from Portuguese on 2026-11-12, before any E6/E8 run used them, so no recorded result depends on the old wording.
+- The report files are now English and requested in English: T1 asks for `ARCHITECTURE.md` (was `ARQUITETURA.md`), T5 for `INVESTIGATION.md` (was `INVESTIGACAO.md`) and T6 for `PLAN.md` (was `PLANO.md`). The checks accept only the English names (plus lowercase). The reference answers were translated: T1 `solution/ARCHITECTURE.md`, and the new-file hunks for `INVESTIGATION.md`/`PLAN.md` in the T5/T6 `solution.patch` (the hunks touching upstream code are byte-identical).
+- The check names in `task.json` were translated to English snake_case (for example `testes_ocultos` → `hidden_tests`, `suite_original` → `original_suite`, `gabarito` → `rubric`, `formato_do_plano` → `plan_format`, and the K3 marker names). Only T3 keeps its Portuguese names.
+- Some keyword lists (T6 hints, the report option regex, the K3 markers) still accept both Portuguese and English words.
+
+## Repositories used
 
 | | Python | TypeScript |
 |---|---|---|
-| Projeto | [pypika](https://github.com/kayak/pypika): construtor de SQL | [chrono](https://github.com/wanasit/chrono) (`chrono-node`): datas em linguagem natural |
-| Commit fixado | `443e10f3c7b4c40afbed98216be63146c4fc4a1b` (27/10/2026, 0.51.1+) | `d4fe7e39015c818b271d74789fb96f74777421d0` (tag v2.10.3, 12/10/2026) |
-| Licença | Apache-2.0 | MIT |
-| Tamanho | ~6,5 mil linhas de código + ~10 mil de testes | ~18 mil linhas de código + ~25 mil de testes, 267 arquivos em `src/` |
-| Suíte | 1361 testes em **~1 s** (pytest) | 753 testes em **~8 s** (jest + ts-jest, 16 núcleos) |
-| Dependências | nenhuma em runtime; testes: pytest, parameterized | nenhuma em runtime; 133 MB de devDependencies |
+| Project | [pypika](https://github.com/kayak/pypika): SQL builder | [chrono](https://github.com/wanasit/chrono) (`chrono-node`): natural-language dates |
+| Pinned commit | `443e10f3c7b4c40afbed98216be63146c4fc4a1b` (2026-10-27, 0.51.1+) | `d4fe7e39015c818b271d74789fb96f74777421d0` (tag v2.10.3, 2026-10-12) |
+| License | Apache-2.0 | MIT |
+| Size | ~6.5k lines of code + ~10k of tests | ~18k lines of code + ~25k of tests, 267 files in `src/` |
+| Suite | 1361 tests in **~1 s** (pytest) | 753 tests in **~8 s** (jest + ts-jest, 16 cores) |
+| Dependencies | none at runtime; tests: pytest, parameterized | none at runtime; 133 MB of devDependencies |
 
-Por que esses dois:
+Why these two:
 
-- **Tamanho médio e arquitetura com camadas reais.** O pypika tem builders imutáveis (`@builder`), uma árvore de `Term` e dialetos. O chrono tem um pipeline de parsers e refiners e 16 idiomas. Os dois são bons para bugs plantados, recursos novos e explicação de arquitetura.
-- **Suítes rápidas e offline.** As suítes rodam em segundos. Isso permite rodar a suíte completa em toda verificação e testar mutantes (T4) em menos de 30 s. Depois do primeiro download (~40 MB de cache), tudo funciona sem rede.
-- **Menos contaminação.** São projetos conhecidos, mas longe dos mais famosos (cerca de 2,6 mil e 5 mil estrelas). Os commits fixados são de outubro de 2026. T3 e T6 pedem recursos que **não existem no upstream** (expressões relativas em português e `CREATE VIEW`), então não há solução para o modelo lembrar.
-- **Licenças permissivas** e poucas dependências.
+- **Medium size and an architecture with real layers.** pypika has immutable builders (`@builder`), a `Term` tree and dialects. chrono has a pipeline of parsers and refiners and 16 languages. Both suit planted bugs, new features and architecture explanations.
+- **Fast, offline suites.** The suites run in seconds. That allows running the full suite on every check and testing mutants (T4) in under 30 s. After the first download (~40 MB of cache), everything works without network.
+- **Less contamination.** They are known projects, but far from the most famous ones (about 2.6k and 5k stars). The pinned commits are from October 2026. T3 and T6 ask for features that **do not exist upstream** (Portuguese relative expressions and `CREATE VIEW`), so there is no solution for the model to remember.
+- **Permissive licenses** and few dependencies.
 
-O setup apaga dos workdirs os `AGENTS.md`/`CLAUDE.md`/`QWEN.md`/`GEMINI.md` do upstream. O chrono traz um `AGENTS.md` com um resumo da arquitetura, que tornaria o T1 trivial e daria informação diferente a harnesses que leem arquivos diferentes.
+Setup deletes the upstream `AGENTS.md`/`CLAUDE.md`/`QWEN.md`/`GEMINI.md` from the workdirs. chrono ships an `AGENTS.md` with an architecture summary, which would make T1 trivial and give different information to harnesses that read different files.
 
-## Tarefas
+## Tasks
 
-| Id | Repo | Tarefa | Verificação oculta | Tempo máx. |
+| Id | Repo | Task | Hidden check | Max time |
 |---|---|---|---|---|
-| T1 | chrono | Explicar a arquitetura em `ARQUITETURA.md`. | Documento existe (≥ 300 palavras), código intacto e **nota ≥ 7/10** no `rubric.md`, dada depois. | 30 min |
-| T2 | pypika | Relato de usuário: joins vazam entre queries derivadas da mesma base. Bug plantado: `__copy__` deixou de copiar `_joins`. | 6 testes ocultos e a suíte original inteira. | 30 min |
-| T3 | chrono | Recurso novo: "há 3 dias", "daqui a 2 semanas" etc. no locale `pt` (constants + 2 parsers + registro). | 4 testes de aceitação (25 expressões comparadas com o equivalente em inglês, modo strict, frases, casos negativos) e a suíte original. | 30 min |
-| T4 | chrono | Escrever testes para `src/calculation/duration.ts`, cujo teste foi removido. | Testes do agente passam e matam **≥ 60%** de 12 mutantes; módulo intacto; suíte original. | 30 min |
-| T5 | chrono | Dois testes falham sem ninguém ter mexido neles, e um passa quando roda sozinho. Causa plantada: cache em `parseDuration` devolve o mesmo objeto, que `addDuration` muta. | Suíte original inteira com os testes restaurados, 3 testes ocultos de repetibilidade, `INVESTIGACAO.md` citando `parseDuration` e `addDuration`, e **nota 2/2** da causa raiz no `rubric.md`, dada depois. | 30 min |
-| T6 | pypika | Planejar em `PLANO.md` e depois implementar `CREATE VIEW` (OR REPLACE, TEMPORARY, IF NOT EXISTS, colunas, schema, MySQL, materializada no PostgreSQL). | 21 testes ocultos, suíte original e **nota ≥ 7/10** do plano no `rubric.md`. | 45 min |
-| T7 | pypika | Revisar o diff não commitado do usuário (`paginate()` + "simplificação" que fez `LIMIT 0` sumir) e corrigir. | 10 testes ocultos (regressão corrigida e recurso mantido) e suíte original. | 30 min |
-| S1 | pypika | Smoke: `a - (b + c)` perde os parênteses. | 3 testes ocultos e suíte original. | 15 min |
-| S2 | chrono | Smoke: centralizar `YEAR_PATTERN`/`parseYear` duplicados de `pt` e `es` em `src/calculation/years.ts` (3 arquivos). | 3 testes ocultos (comportamento, cópias removidas, parsers) e suíte original. | 15 min |
-| S3 | pypika | Smoke: escrever testes para 3 funções de `pypika/utils.py`. | Testes passam e matam ≥ 60% de 6 mutantes; módulo intacto. | 15 min |
-| K1 | pypika | Skills, chamada explícita: "use a skill `brainstorming`" para uma ideia vaga, sem interação; perguntas e opções em `BRAINSTORM.md`, sem código. | Transcript mostra a skill carregada; ≥ 3 perguntas e ≥ 2 opções; nenhum arquivo de `pypika/` alterado. | 15 min |
-| K2 | pypika | Skills, acionamento automático: testes de BETWEEN falhando (bug plantado no slice `Field[a:b]`); o prompt não cita skills. | Correção: testes ocultos e suíte. **Medição** (não reprova): `systematic-debugging` foi carregada? | 15 min |
-| K3 | pypika | Skills, efeito no formato: "use a skill `writing-plans`" para planejar `TRUNCATE TABLE`, sem implementar. | Transcript mostra a skill carregada; plano no formato da skill (marcadores); nenhum arquivo de `pypika/` alterado. | 15 min |
+| T1 | chrono | Explain the architecture in `ARCHITECTURE.md`. | Document exists (≥ 300 words), code intact and **grade ≥ 7/10** on `rubric.md`, given afterwards. | 30 min |
+| T2 | pypika | User report: joins leak between queries derived from the same base. Planted bug: `__copy__` stopped copying `_joins`. | 6 hidden tests and the whole original suite. | 30 min |
+| T3 | chrono | New feature: "há 3 dias", "daqui a 2 semanas" etc. in the `pt` locale (constants + 2 parsers + registration). Prompt in Portuguese (see "Language"). | 4 acceptance tests (25 expressions compared with the English equivalent, strict mode, sentences, negative cases) and the original suite. | 30 min |
+| T4 | chrono | Write tests for `src/calculation/duration.ts`, whose test was removed. | The agent's tests pass and kill **≥ 60%** of 12 mutants; module intact; original suite. | 30 min |
+| T5 | chrono | Two tests fail although nobody touched them, and one passes when run alone. Planted cause: a cache in `parseDuration` returns the same object, which `addDuration` mutates. | Whole original suite with the tests restored, 3 hidden repeatability tests, `INVESTIGATION.md` citing `parseDuration` and `addDuration`, and **grade 2/2** for the root cause on `rubric.md`, given afterwards. | 30 min |
+| T6 | pypika | Plan in `PLAN.md` and then implement `CREATE VIEW` (OR REPLACE, TEMPORARY, IF NOT EXISTS, columns, schema, MySQL, materialized on PostgreSQL). | 21 hidden tests, original suite and **grade ≥ 7/10** for the plan on `rubric.md`. | 45 min |
+| T7 | pypika | Review the user's uncommitted diff (`paginate()` + a "simplification" that made `LIMIT 0` disappear) and fix it. | 10 hidden tests (regression fixed and feature kept) and the original suite. | 30 min |
+| S1 | pypika | Smoke: `a - (b + c)` loses the parentheses. | 3 hidden tests and the original suite. | 15 min |
+| S2 | chrono | Smoke: centralize the duplicated `YEAR_PATTERN`/`parseYear` of `pt` and `es` in `src/calculation/years.ts` (3 files). | 3 hidden tests (behavior, copies removed, parsers) and the original suite. | 15 min |
+| S3 | pypika | Smoke: write tests for 3 functions in `pypika/utils.py`. | Tests pass and kill ≥ 60% of 6 mutants; module intact. | 15 min |
+| K1 | pypika | Skills, explicit call: "use the `brainstorming` skill" for a vague idea, without interaction; questions and options in `BRAINSTORM.md`, no code. | Transcript shows the skill loaded; ≥ 3 questions and ≥ 2 options; no file under `pypika/` changed. | 15 min |
+| K2 | pypika | Skills, automatic triggering: BETWEEN tests failing (bug planted in the `Field[a:b]` slice); the prompt does not mention skills. | Fix: hidden tests and suite. **Measurement** (does not fail the task): was `systematic-debugging` loaded? | 15 min |
+| K3 | pypika | Skills, effect on the format: "use the `writing-plans` skill" to plan `TRUNCATE TABLE`, without implementing it. | Transcript shows the skill loaded; plan in the skill format (markers); no file under `pypika/` changed. | 15 min |
 
-Quando um teste visível do upstream pegaria o bug plantado (T2, T7, S1), ele é **removido da suíte visível** e passa a fazer parte dos testes ocultos. O agente precisa achar o problema pelo relato ou pela revisão, não por um teste vermelho. A exceção é o T5, em que os testes vermelhos são o próprio enunciado (e o K2, em que eles disparam a depuração).
+When a visible upstream test would catch the planted bug (T2, T7, S1), it is **removed from the visible suite** and becomes part of the hidden tests. The agent has to find the problem from the report or the review, not from a red test. The exception is T5, where the red tests are the task statement itself (and K2, where they trigger the debugging).
 
-No T6, `.columns()` pode acumular ou substituir: a especificação não define, e o teste oculto de imutabilidade parte de uma base sem colunas, o que vale para as duas leituras e ainda pega lista compartilhada entre cópias do `@builder`.
+In T6, `.columns()` may accumulate or replace: the specification does not say, and the hidden immutability test starts from a base without columns, which works for both readings and still catches a list shared between `@builder` copies.
 
-Os prompts (`task.md`) estão em português, no tom de um pedido real, e não mencionam os testes ocultos. Os de Python dizem como rodar os testes (`.venv/bin/python -m pytest`); os de TypeScript, `npx jest`.
+The prompts (`task.md`) are written in the tone of a real request and do not mention the hidden tests. The Python ones say how to run the tests (`.venv/bin/python -m pytest`); the TypeScript ones, `npx jest`.
 
-## Como rodar
+## How to run
 
-Pré-requisitos já presentes na máquina: `git`, `uv`, `node`/`npm`, `python3` (3.12), `timeout` e `flock` (coreutils/util-linux). O primeiro setup de cada repositório baixa o commit e as dependências para `eval/.cache/`; depois disso não usa a rede (`EVAL_OFFLINE=1` força isso).
+Prerequisites already on the machine: `git`, `uv`, `node`/`npm`, `python3` (3.12), `timeout` and `flock` (coreutils/util-linux). The first setup of each repository downloads the commit and the dependencies into `eval/.cache/`; after that it does not use the network (`EVAL_OFFLINE=1` enforces this).
 
 ```bash
-# uma tarefa com um harness (harness = agents/<nome>/run.sh ou eval/harnesses/<nome>/run.sh)
-eval/run.sh qwen-code T2 lote1
+# one task with one harness (harness = agents/<name>/run.sh or eval/harnesses/<name>/run.sh)
+eval/run.sh qwen-code T2 batch1
 
-# matriz em série: 3 repetições, dois harnesses, T1-T7 (ou: smoke, skills, all, ou lista T2,T5,S1)
+# serial matrix: 3 repetitions, two harnesses, T1-T7 (or: smoke, skills, all, or a list T2,T5,S1)
 eval/matrix.sh -r 3 e8-qwen36 qwen-code,pi full
 
-# tabela agregada (padrão: todas as execuções em eval/runs)
+# aggregate table (default: every run in eval/runs)
 python3 -I eval/summarize.py eval/runs/e8-qwen36
 
-# nota do gabarito (T1, T5, T6)
-python3 -I eval/grade.py eval/runs/e8-qwen36/r1/qwen-code/T1/result.json --score 8 --by NOME --notes "..."
+# rubric grade (T1, T5, T6)
+python3 -I eval/grade.py eval/runs/e8-qwen36/r1/qwen-code/T1/result.json --score 8 --by NAME --notes "..."
 
-# validação da própria suíte, sem LLM (falha antes / passa com a solução de referência)
-eval/validate.sh            # todas; ou: eval/validate.sh T2 S1
+# validation of the suite itself, without an LLM (fails before / passes with the reference solution)
+eval/validate.sh            # all; or: eval/validate.sh T2 S1
 
-# ponta a ponta sem LLM, com o harness falso que aplica a solução de referência
-eval/matrix.sh -r 1 teste-runner fake-oracle all
+# end to end without an LLM, with the fake harness that applies the reference solution
+eval/matrix.sh -r 1 runner-test fake-oracle all
 ```
 
-Uso manual de uma tarefa: `eval/tasks/T2-*/setup.sh /tmp/wd` cria o workdir; o prompt é o `task.md`; `eval/tasks/T2-*/check.sh /tmp/wd` roda as verificações. O `check.sh` sai com 0 (passou), 1 (falhou), 3 (aguarda nota) ou 2 (erro).
+Manual use of a task: `eval/tasks/T2-*/setup.sh /tmp/wd` creates the workdir; the prompt is `task.md`; `eval/tasks/T2-*/check.sh /tmp/wd` runs the checks. `check.sh` exits with 0 (passed), 1 (failed), 3 (awaiting grade) or 2 (error).
 
-**Nunca rode duas execuções em paralelo.** Há uma GPU e um modelo. O `run.sh` usa um lock (`eval/.cache/run.lock`): uma segunda chamada espera a primeira terminar. A matriz já roda em série, na ordem repetição -> tarefa -> harness, para que os harnesses se alternem.
+**Never run two executions in parallel.** There is one GPU and one model. `run.sh` uses a lock (`eval/.cache/run.lock`): a second call waits for the first to finish. The matrix already runs serially, in the order repetition -> task -> harness, so the harnesses alternate.
 
-### Variáveis de ambiente
+### Environment variables
 
-| Variável | Padrão | Efeito |
+| Variable | Default | Effect |
 |---|---|---|
-| `LLM_BASE_URL` | `http://127.0.0.1:9931` | Repassada ao harness; também usada para ler `/metrics`. |
-| `LLM_MODEL` | `qwen3.6-35b` | Repassada ao harness. |
-| `LLM_API_KEY` | lida do arquivo abaixo | Chave do llama-server (E5: exigida em todas as rotas, inclusive `/metrics`). Exportada para o harness (o `run-in-box.sh` repassa `LLM_*`) e usada no `/metrics`. Nunca é impressa; o `result.json` só registra a origem (`env`, `file` ou `none`). |
-| `LLM_API_KEY_FILE` | `~/.config/local-agentic/llm-api-key` | Arquivo de `scripts/llm key`, lido quando `LLM_API_KEY` está vazia. Sem chave, o `run.sh` avisa e o `result.json` traz `llm.available: false` com o motivo. |
-| `EVAL_TIMEOUT_MIN` | `timeout_min` do `task.json` | Tempo máximo do agente (o padrão das tarefas é 30; T6 45; smoke 15). |
-| `EVAL_SAMPLE_INTERVAL` | `3` | Segundos entre amostras de RAM/VRAM. |
-| `EVAL_WORK_ROOT` | `~/.cache/local-agentic/eval-work` | Onde ficam os workdirs (fora do repositório). |
-| `EVAL_CLEANUP` | `deps` | `deps` apaga `.venv`/`node_modules` no fim e mantém as fontes; `all` apaga o workdir; `none` mantém tudo. |
-| `EVAL_FORCE` | `0` | `1` sobrescreve um `result.json` existente. |
-| `EVAL_OFFLINE` | `0` | `1` falha em vez de usar a rede quando o cache está frio. |
-| `EVAL_WARMUP` | `1` | Pedido curto ao modelo antes de medir, só com harnesses reais (E4, M4). `0` desliga. |
-| `EVAL_WRAPPER` | vazio | `sandbox/run-in-box.sh` roda o agente, a captura do diff e as verificações em containers (seção abaixo). |
+| `LLM_BASE_URL` | `http://127.0.0.1:9931` | Passed to the harness; also used to read `/metrics`. |
+| `LLM_MODEL` | `qwen3.6-35b` | Passed to the harness. |
+| `LLM_API_KEY` | read from the file below | llama-server key (E5: required on every route, `/metrics` included). Exported to the harness (`run-in-box.sh` passes `LLM_*` on) and used for `/metrics`. Never printed; `result.json` only records the source (`env`, `file` or `none`). |
+| `LLM_API_KEY_FILE` | `~/.config/local-agentic/llm-api-key` | File from `scripts/llm key`, read when `LLM_API_KEY` is empty. Without a key, `run.sh` warns and `result.json` has `llm.available: false` with the reason. |
+| `EVAL_TIMEOUT_MIN` | `timeout_min` from `task.json` | Maximum agent time (the task default is 30; T6 45; smoke 15). |
+| `EVAL_SAMPLE_INTERVAL` | `3` | Seconds between RAM/VRAM samples. |
+| `EVAL_WORK_ROOT` | `~/.cache/local-agentic/eval-work` | Where the workdirs live (outside the repository). |
+| `EVAL_CLEANUP` | `deps` | `deps` deletes `.venv`/`node_modules` at the end and keeps the sources; `all` deletes the workdir; `none` keeps everything. |
+| `EVAL_FORCE` | `0` | `1` overwrites an existing `result.json`. |
+| `EVAL_OFFLINE` | `0` | `1` fails instead of using the network when the cache is cold. |
+| `EVAL_WARMUP` | `1` | Short request to the model before measuring, only with real harnesses (E4, M4). `0` disables it. |
+| `EVAL_WRAPPER` | empty | `sandbox/run-in-box.sh` runs the agent, the diff capture and the checks in containers (section below). |
 
-### No container (E7)
+### In the container (E7)
 
-Com os agentes em modo autônomo, rode sempre pelo container da E7 ([`sandbox/`](../sandbox/README.md)):
+With the agents in autonomous mode, always run through the E7 container ([`sandbox/`](../sandbox/README.md)):
 
 ```bash
-sandbox/build.sh                                   # uma vez, e de novo quando agents/versions.env mudar
-EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 lote1
+sandbox/build.sh                                   # once, and again when agents/versions.env changes
+EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 batch1
 EVAL_WRAPPER=sandbox/run-in-box.sh eval/matrix.sh -r 3 e6 qwen-code,pi smoke
 ```
 
-Com `EVAL_WRAPPER`, o `run.sh` usa três containers novos por execução. O setup continua no host, porque ainda não houve agente.
+With `EVAL_WRAPPER`, `run.sh` uses three fresh containers per run. Setup stays on the host, because no agent has run yet.
 
-| Passo | Montado (fora isso, nada do host) | Rede |
+| Step | Mounted (nothing else from the host) | Network |
 |---|---|---|
-| Agente (`agents/<h>/run.sh`) | workdir e log-dir (leitura e escrita); `prompt.md`, `agents/` e o perfil base de skills (só leitura) | só o llama-server, pelo encaminhador |
-| Captura do diff (`git add -A`/`diff`/`rev-list`) | só o workdir, **só leitura** | nenhuma |
-| Verificações (`check.sh`) | workdir (leitura e escrita); `eval/lib`, `eval/repos`, a pasta da tarefa (com `hidden/` e a solução), o ambiente limpo de dependências e o `agent-logs` já higienizado (só leitura). **A pasta do resultado NÃO é montada.** | nenhuma |
+| Agent (`agents/<h>/run.sh`) | workdir and log-dir (read-write); `prompt.md`, `agents/` and the base skill profile (read-only) | only the llama-server, through the forwarder |
+| Diff capture (`git add -A`/`diff`/`rev-list`) | only the workdir, **read-only** | none |
+| Checks (`check.sh`) | workdir (read-write); `eval/lib`, `eval/repos`, the task directory (with `hidden/` and the solution), the clean dependency environment and the already sanitized `agent-logs` (read-only). **The result directory is NOT mounted.** | none |
 
-- **O agente nunca vê `eval/`** (testes ocultos, soluções, gabaritos e outras execuções). A exceção são os harnesses de teste de `eval/harnesses/` (como o `fake-oracle`), que não usam LLM e leem as soluções por definição; para eles, `eval/` entra só leitura.
-- **Depois do agente, o host não executa nada do workdir.** Os testes ocultos importam o código que o agente escreveu, e o `git` do host executaria um `core.fsmonitor` ou filtro plantado no `.git/config` do workdir. Por isso a captura do diff e as verificações também rodam em containers, criados depois que o container do agente já foi removido.
-- **A captura do diff monta o workdir só leitura e não monta a pasta do resultado**, roda o git com a config do agente neutralizada (`core.fsmonitor=false`, `core.hooksPath=/dev/null`, `--no-ext-diff --no-textconv`, config de sistema/global ignorada; objetos e índice num tmpfs do container) e devolve o diff pela stdout. Assim, código do agente que rode nessa etapa não enxerga nem escreve em nenhum caminho do host.
-- **As verificações também rodam sem a pasta do resultado montada** (integridade do placar). Os testes ocultos importam o código do agente, que poderia forjar o `checks.json`/veredito se pudesse escrevê-lo. Então o `check.sh` grava num tmpfs do container e devolve o resultado por um tar na stdout; o **host** grava `checks.json`, `check.log` e os `check.stdout/stderr` (com `boxio`). O grader (`eval/lib`), a tarefa (com `hidden/` e a solução) e o transcrito entram só leitura, então o código do agente, que roda nos subprocessos de teste, não altera o grader. O git do grader também roda com `core.fsmonitor`/hooks desligados e config de sistema/global ignorada.
-- **O host nunca segue symlinks do agente** (`eval/lib/boxio.py`, correção do item 7 de `docs/verifications/E7.md`): `agent-logs` é copiada só com arquivos regulares; `$out` é varrido (todo symlink apagado) antes de qualquer leitura/escrita; `agent-metrics.json` é lido com `O_NOFOLLOW` e teto de tamanho; `checks.json`, `result.json` e `meta.json` são escritos por arquivo temporário + `os.replace` (não seguem um symlink plantado no lugar).
-- O timeout continua valendo: o `timeout` do `run.sh` encerra o wrapper, que remove o container.
-- O fuso do host (`TZ`) é repassado ao container, porque os testes do chrono dependem dele.
-- `meta.json` registra o wrapper em `sandbox`.
-- Para inspecionar um workdir depois da execução, prefira o `agent.patch`. Para rodar `git` ou testes nele, use `sandbox/agent-shell.sh shell <workdir>`.
+- **The agent never sees `eval/`** (hidden tests, solutions, rubrics and other runs). The exception is the test harnesses in `eval/harnesses/` (such as `fake-oracle`), which use no LLM and read the solutions by definition; for them, `eval/` is mounted read-only.
+- **After the agent, the host executes nothing from the workdir.** The hidden tests import the code the agent wrote, and the host's `git` would run a `core.fsmonitor` or filter planted in the workdir's `.git/config`. That is why the diff capture and the checks also run in containers, created after the agent container has been removed.
+- **The diff capture mounts the workdir read-only and does not mount the result directory**, runs git with the agent's config neutralized (`core.fsmonitor=false`, `core.hooksPath=/dev/null`, `--no-ext-diff --no-textconv`, system/global config ignored; objects and index in a container tmpfs) and returns the diff on stdout. So agent code that runs in this step neither sees nor writes any host path.
+- **The checks also run without the result directory mounted** (scoreboard integrity). The hidden tests import the agent's code, which could forge `checks.json`/the verdict if it could write it. So `check.sh` writes to a container tmpfs and returns the result as a tar on stdout; the **host** writes `checks.json`, `check.log` and `check.stdout/stderr` (with `boxio`). The grader (`eval/lib`), the task (with `hidden/` and the solution) and the transcript are mounted read-only, so the agent's code, which runs in the test subprocesses, cannot change the grader. The grader's git also runs with `core.fsmonitor`/hooks off and system/global config ignored.
+- **The host never follows the agent's symlinks** (`eval/lib/boxio.py`, fix for item 7 of `docs/verifications/E7.md`): `agent-logs` is copied with regular files only; `$out` is scanned (every symlink deleted) before any read/write; `agent-metrics.json` is read with `O_NOFOLLOW` and a size cap; `checks.json`, `result.json` and `meta.json` are written through a temporary file + `os.replace` (they do not follow a symlink planted in their place).
+- The timeout still applies: the `run.sh` `timeout` stops the wrapper, which removes the container.
+- The host time zone (`TZ`) is passed to the container, because chrono's tests depend on it.
+- `meta.json` records the wrapper in `sandbox`.
+- To inspect a workdir after the run, prefer `agent.patch`. To run `git` or tests in it, use `sandbox/agent-shell.sh shell <workdir>`.
 
-## Contrato com os harnesses
+## Harness contract
 
-Cada harness fornece um executável `agents/<harness>/run.sh`:
+Each harness provides an executable `agents/<harness>/run.sh`:
 
 ```
-run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
+run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
 ```
 
-- Roda o agente sem interação, aprovando automaticamente as ações dentro do workdir, e retorna quando o agente para.
-- Grava transcript e logs em `--log-dir`.
-- Sai com 0 se o processo do agente terminou normalmente.
-- Recebe `LLM_BASE_URL`, `LLM_MODEL` e `LLM_API_KEY` no ambiente.
-- Grava o transcript em `<log-dir>/events.jsonl` (formato JSON do próprio agente). As verificações de skills (K1–K3) leem esse arquivo.
+- Runs the agent without interaction, automatically approving actions inside the workdir, and returns when the agent stops.
+- Writes the transcript and logs to `--log-dir`.
+- Exits with 0 if the agent process finished normally.
+- Receives `LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY` in the environment.
+- Writes the transcript to `<log-dir>/events.jsonl` (the agent's own JSON format). The skill checks (K1–K3) read this file.
 
-O runner executa o harness com `cwd` = workdir, `stdin` = `/dev/null` e `timeout -k 30`. O timeout mata o grupo de processos inteiro: exit 124 ou 137 é registrado como `timed_out`.
+The runner executes the harness with `cwd` = workdir, `stdin` = `/dev/null` and `timeout -k 30`. The timeout kills the whole process group: exit 124 or 137 is recorded as `timed_out`.
 
-Opcional: se o harness gravar `<log-dir>/agent-metrics.json`, o conteúdo vai para `result.json` em `agent.metrics`. As chaves sugeridas são `turns`, `tool_calls`, `tool_call_errors`, `loops_detected`, `tokens_in` e `tokens_out` (do ponto de vista do cliente, incluindo cache). O `summarize.py` soma `tool_call_errors`.
+Optional: if the harness writes `<log-dir>/agent-metrics.json`, its content goes to `result.json` under `agent.metrics`. The suggested keys are `turns`, `tool_calls`, `tool_call_errors`, `loops_detected`, `tokens_in` and `tokens_out` (from the client's point of view, cache included). `summarize.py` sums `tool_call_errors`.
 
-O workdir, o prompt (`<work>/prompt.md`) e o log-dir ficam fora do repositório, em `EVAL_WORK_ROOT`. Os logs são copiados para `eval/runs/...` no fim.
+The workdir, the prompt (`<work>/prompt.md`) and the log-dir live outside the repository, in `EVAL_WORK_ROOT`. The logs are copied to `eval/runs/...` at the end.
 
-## Estrutura de uma tarefa
+## Task layout
 
 ```
 eval/tasks/T2-pypika-join-leak/
-  task.md          prompt entregue ao agente
-  task.json        id, repo, categoria, timeout e lista de verificações
-  setup.sh         setup.sh <workdir>: idempotente, recria o workdir do zero
+  task.md          prompt given to the agent
+  task.json        id, repo, category, timeout and list of checks
+  setup.sh         setup.sh <workdir>: idempotent, recreates the workdir from scratch
   check.sh         check.sh <workdir> [--out checks.json] [--log check.log] [--baseline SHA]
                    [--deps-env DIR] [--agent-logs DIR] [--skills-dirs D1:D2]
-  setup.patch      aplicado antes do commit-base: bug plantado e/ou testes visíveis removidos
-  pending.patch    (T7) aplicado depois do commit-base, sem commit: o "diff do usuário"
-  hidden/          testes ocultos; copiados para o workdir só durante a verificação
-  mutants/*.patch  (T4, S3) mutações do módulo testado
-  solution.patch   solução de referência (relativa ao estado após o setup)
-  solution/        (T1, K1, K3) arquivos de referência copiados para o workdir
-  oracle/          (K1-K3) transcript simulado (events.jsonl) usado pelo fake-oracle e pelo validate.sh
-  rubric.md        (T1, T6: 10 itens; T5: 2 itens) gabarito
+  setup.patch      applied before the base commit: planted bug and/or visible tests removed
+  pending.patch    (T7) applied after the base commit, without a commit: the "user's diff"
+  hidden/          hidden tests; copied into the workdir only during the checks
+  mutants/*.patch  (T4, S3) mutations of the module under test
+  solution.patch   reference solution (relative to the state after setup)
+  solution/        (T1, K1, K3) reference files copied into the workdir
+  oracle/          (K1-K3) simulated transcript (events.jsonl) used by fake-oracle and validate.sh
+  rubric.md        (T1, T6: 10 items; T5: 2 items) rubric
 ```
 
-As tarefas ficam em `eval/tasks/` (T1–T7), `eval/smoke/` (S1–S3) e `eval/skills/` (K1–K3).
+The tasks live in `eval/tasks/` (T1–T7), `eval/smoke/` (S1–S3) and `eval/skills/` (K1–K3).
 
-Para criar uma tarefa nova, copie `lib/task-setup.sh` e `lib/task-check.sh` como `setup.sh`/`check.sh`, escreva `task.md` e `task.json`, gere os patches com `git diff` num workdir e confira com `eval/validate.sh <tarefa>`.
+To create a new task, copy `lib/task-setup.sh` and `lib/task-check.sh` as `setup.sh`/`check.sh`, write `task.md` and `task.json`, generate the patches with `git diff` in a workdir and check with `eval/validate.sh <task>`. (T3's `setup.sh`/`check.sh` keep the older Portuguese comments; they behave the same.)
 
-O workdir é um repositório git com **um único commit** ("Initial import", autor e data fixos, sempre com o mesmo hash). Não carrega o histórico do upstream, para que o bug plantado não apareça em `git log -p`. `.venv/`, `node_modules/` e afins ficam em `.git/info/exclude`, e o `git status` começa limpo (no T7, só com o diff do usuário).
+The workdir is a git repository with **a single commit** ("Initial import", fixed author and date, always the same hash). It does not carry the upstream history, so the planted bug does not show up in `git log -p`. `.venv/`, `node_modules/` and the like are in `.git/info/exclude`, and `git status` starts clean (in T7, only with the user's diff).
 
-As verificações (`lib/check.py`) são declarativas no `task.json`:
+The checks (`lib/check.py`) are declared in `task.json`:
 
-| Tipo | O que faz |
+| Type | What it does |
 |---|---|
-| `hidden_tests` | Copia `hidden/*` para o workdir, roda com pytest (`--junitxml`) ou jest (`--json`) e remove. |
-| `baseline_tests` | Restaura os arquivos versionados sob as pastas de teste que o agente alterou e roda a suíte original inteira ("nada mais quebra"). |
-| `unchanged` | Caminhos que não deveriam mudar. |
-| `report` | Relatório na raiz: existe, tamanho mínimo, grupos de palavras-chave (pelo menos uma de cada grupo) e, opcionalmente, mínimo de linhas com pergunta e de opções ("Opção A", "Abordagem"...). |
-| `mutation` | Acha os arquivos de teste **novos** do agente (inexistentes no commit-base), confirma que passam no código original e aplica cada mutante. O mutante está "morto" se os testes falham. Testes já existentes que o agente editou não contam, e tudo que é versionado sob as pastas de teste volta ao commit-base antes. |
-| `rubric` | Não decide sozinho: registra o gabarito e uma pista automática por palavras-chave. O status fica `pending_grading` até a nota. |
-| `skill_usage` | Lê o transcript do agente (`events.jsonl`) e diz se a skill foi carregada (seção "Skills"). |
-| `plan_format` | Entre os `.md` novos ou alterados, acha o que melhor casa com os marcadores do formato (K3) e registra se o caminho segue a convenção da skill. |
+| `hidden_tests` | Copies `hidden/*` into the workdir, runs it with pytest (`--junitxml`) or jest (`--json`) and removes it. |
+| `baseline_tests` | Restores the versioned files under the test directories that the agent changed and runs the whole original suite ("nothing else breaks"). |
+| `unchanged` | Paths that should not change. |
+| `report` | Report at the root: exists, minimum size, keyword groups (at least one from each group) and, optionally, a minimum of lines with a question and of options ("Option A", "Approach"...). |
+| `mutation` | Finds the agent's **new** test files (absent from the base commit), confirms they pass on the original code and applies each mutant. The mutant is "killed" if the tests fail. Existing tests that the agent edited do not count, and everything versioned under the test directories goes back to the base commit first. |
+| `rubric` | Does not decide by itself: records the rubric and an automatic keyword hint. The status stays `pending_grading` until the grade. |
+| `skill_usage` | Reads the agent transcript (`events.jsonl`) and says whether the skill was loaded (section "Skills"). |
+| `plan_format` | Among the new or changed `.md` files, finds the one that best matches the format markers (K3) and records whether the path follows the skill's convention. |
 
-### Os testes não rodam com nada que o agente possa ter alterado
+### The tests never run with anything the agent may have changed
 
-- **Dependências limpas.** O `setup.sh` cria uma vez, antes de qualquer agente, um ambiente por repositório em `eval/.cache/envs/<repo>-<commit>-<lock>/`, instalado do cache. As verificações usam o `.venv` de lá (Python) ou trocam o `node_modules` do workdir por uma cópia nova de lá (Node). O `.venv`/`node_modules` que o agente usou nunca roda nos testes.
-- **Configuração na linha de comando.**
-  - pytest: `python -I -B -m pytest -c <ini vazio> --rootdir <workdir> --noconftest -p no:cacheprovider`, com `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`. Assim `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `setup.cfg`, `tox.ini` e qualquer `conftest.py` do repositório são ignorados (o upstream fixado não tem nenhum deles com configuração de pytest).
-  - jest: `--config '<json do repo.json + rootDir>'`, que ignora o `"jest"` do `package.json` e qualquer `jest.config.*`, com `--cacheDirectory` novo. Os scripts do `package.json` nunca são chamados.
-  - O processo de teste recebe só `PATH`, `HOME` temporária, `TZ`, `LANG` e `CI`: nada de `PYTEST_*`, `PYTHON*` ou `NODE_OPTIONS`.
-- **Arquivos versionados de volta ao commit-base.**
-  - Configuração: padrões de `protected_config` em `repos/<repo>/repo.json`, como `**/conftest.py`, `tsconfig*.json` e `jest.config.*`. Os novos são apagados.
-  - Pastas de teste: testes, `__init__.py` e helpers como `test/test_util.ts`.
-  - O que foi restaurado fica em `checks.json`.
-- **Limite.** O código sob teste é do agente por definição (os testes ocultos importam o `src/` dele). Um agente que sabote o próprio placar pelo código da biblioteca, por exemplo alterando o `unittest`, só é pego lendo o `agent.patch`.
+- **Clean dependencies.** `setup.sh` creates once, before any agent, one environment per repository in `eval/.cache/envs/<repo>-<commit>-<lock>/`, installed from the cache. The checks use the `.venv` from there (Python) or replace the workdir's `node_modules` with a fresh copy from there (Node). The `.venv`/`node_modules` the agent used never runs in the tests.
+- **Configuration on the command line.**
+  - pytest: `python -I -B -m pytest -c <empty ini> --rootdir <workdir> --noconftest -p no:cacheprovider`, with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`. So `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `setup.cfg`, `tox.ini` and any `conftest.py` in the repository are ignored (the pinned upstream has none of them with pytest configuration).
+  - jest: `--config '<json from repo.json + rootDir>'`, which ignores the `"jest"` key in `package.json` and any `jest.config.*`, with a fresh `--cacheDirectory`. The `package.json` scripts are never called.
+  - The test process gets only `PATH`, a temporary `HOME`, `TZ`, `LANG` and `CI`: no `PYTEST_*`, `PYTHON*` or `NODE_OPTIONS`.
+- **Versioned files back to the base commit.**
+  - Configuration: `protected_config` patterns in `repos/<repo>/repo.json`, such as `**/conftest.py`, `tsconfig*.json` and `jest.config.*`. New ones are deleted.
+  - Test directories: tests, `__init__.py` and helpers such as `test/test_util.ts`.
+  - What was restored is recorded in `checks.json`.
+- **Limit.** The code under test is the agent's by definition (the hidden tests import its `src/`). An agent that sabotages its own score through the library code, for example by altering `unittest`, is only caught by reading `agent.patch`.
 
 ## `result.json`
 
-Gravado em `eval/runs/<run-id>/<harness>/<task-id>/`, junto com:
+Written to `eval/runs/<run-id>/<harness>/<task-id>/`, together with:
 
-| Arquivo | Conteúdo |
+| File | Content |
 |---|---|
-| `agent.patch` | Diff do agente, com arquivos novos, capturado antes das verificações. |
-| `agent-logs/` | Logs do harness. |
-| `agent.stdout`/`agent.stderr` | Saída do harness. |
-| `setup.log` | Saída do setup. |
-| `checks.json` e `check.log` | Resultado e saída completa dos testes. |
-| `metrics.before.prom`/`metrics.after.prom` | Snapshots de `/metrics`. |
-| `resources.tsv` | Série de RAM/VRAM. |
+| `agent.patch` | The agent's diff, with new files, captured before the checks. |
+| `agent-logs/` | Harness logs. |
+| `agent.stdout`/`agent.stderr` | Harness output. |
+| `setup.log` | Setup output. |
+| `checks.json` and `check.log` | Result and full output of the tests. |
+| `metrics.before.prom`/`metrics.after.prom` | `/metrics` snapshots. |
+| `resources.tsv` | RAM/VRAM series. |
 
-`eval/runs/` e `eval/.cache/` estão no `.gitignore`.
+`eval/runs/` and `eval/.cache/` are in `.gitignore`.
 
 ```jsonc
 {
@@ -221,17 +230,17 @@ Gravado em `eval/runs/<run-id>/<harness>/<task-id>/`, junto com:
   "run_id": "e8-qwen36/r1", "harness": "qwen-code", "task_id": "T2",
   "task_dir": "eval/tasks/T2-pypika-join-leak", "task_title": "...", "task_category": "bugfix",
   "repo": "pypika", "repo_commit": "443e10f...",
-  "status": "pass",            // pass | fail | pending_grading (T1/T5/T6 até a nota) | error (setup ou ambiente falhou)
+  "status": "pass",            // pass | fail | pending_grading (T1/T5/T6 until graded) | error (setup or environment failed)
   "success": true,             // true / false / null
-  "auto_checks_pass": true,    // verificações automáticas obrigatórias
-  "interventions": 0,          // sempre 0 no runner; ajuste com grade.py --interventions se houve ajuda
+  "auto_checks_pass": true,    // required automatic checks
+  "interventions": 0,          // always 0 in the runner; adjust with grade.py --interventions if there was help
   "started_at": "...", "finished_at": "...",
   "timing": {"setup_s": 0.3, "agent_wall_s": 412.7, "check_s": 1.4, "timeout_s": 1800},
   "agent": {"exit_code": 0, "timed_out": false, "commits_made": 0,
             "diff": {"files_changed": 2, "insertions": 11, "deletions": 0},
-            "metrics": {/* agent-metrics.json do harness, se existir */}},
-  "llm": {"base_url": "...", "model": "...", "api_key_source": "file",   // env | file | none (nunca a chave)
-          "available": true, "counter_reset": false,     // sem métricas: "available": false, "reason": "HTTP 401: ..."
+            "metrics": {/* the harness agent-metrics.json, if present */}},
+  "llm": {"base_url": "...", "model": "...", "api_key_source": "file",   // env | file | none (never the key)
+          "available": true, "counter_reset": false,     // without metrics: "available": false, "reason": "HTTP 401: ..."
           "tokens_in": 182345, "tokens_out": 9120, "prefill_seconds": 520.3, "gen_seconds": 260.1,
           "prefill_tps": 350.5, "gen_tps": 35.1, "decode_calls": 9800, "counters_delta": {/* ... */}},
   "resources": {"interval_s": 3, "samples": 140, "ram_total_mib": 52206,
@@ -239,78 +248,78 @@ Gravado em `eval/runs/<run-id>/<harness>/<task-id>/`, junto com:
                 "vram_available": true, "vram_total_mib": 8151,
                 "vram_used_mib_first": 7300, "vram_used_mib_peak": 7700,
                 "process": "llama-server", "process_rss_mib_peak": 23000},
-  "checks": [{"name": "testes_ocultos", "type": "hidden_tests", "required": true, "pass": true,
-              "detail": "6/6 testes ocultos passaram", "tests": {/* total, failed, failing[] ... */}}],
+  "checks": [{"name": "hidden_tests", "type": "hidden_tests", "required": true, "pass": true,
+              "detail": "6/6 hidden tests passed", "tests": {/* total, failed, failing[] ... */}}],
   "rubric": null,              // T1/T5/T6: {"score": null, "threshold": 7, "max": 10, "auto_hint": 8, ...}
   "paths": {"workdir": "...", "baseline_commit": "...", "agent_patch": "agent.patch", ...},
   "env": {"eval_commit": "abc1234", "eval_dirty": false, "hostname": "...", "kernel": "..."}
 }
 ```
 
-### Métricas
+### Metrics
 
-- **Tokens e velocidade:** diferença entre `GET $LLM_BASE_URL/metrics` antes e depois do agente, com `Authorization: Bearer $LLM_API_KEY` (o servidor da E5 exige a chave também no `/metrics`). O `llama-server` precisa rodar com `--metrics`. Os contadores usados são `llamacpp:prompt_tokens_total`, `prompt_seconds_total`, `tokens_predicted_total`, `tokens_predicted_seconds_total` e `n_decode_total`.
-  - `tokens_in` conta só o prefill efetivamente processado: tokens reaproveitados do cache de prompt não entram. Assim, `tokens_in` mostra o custo real e `prefill_tps` a velocidade real.
-  - O total enviado pelo cliente vem do `agent-metrics.json`, se o harness fornecer.
-  - **Aquecimento (E4, M4).** Com harness real, o `run.sh` manda um pedido curto (`max_tokens: 4`) **antes** do snapshot "antes", e por isso ele fica fora dos deltas. Motivo: os primeiros pedidos depois da carga geram ~10% mais devagar, e o primeiro pedido depois da carga, medido em 29/10, levou ~75 s. O resultado vai para `llm.warmup` (`done`, `http_status`, `seconds`, `reason`); 503 enquanto o modelo carrega é esperado por até 300 s. `EVAL_WARMUP=0` desliga.
-  - Sem métricas, os campos ficam `null`, `available: false` e `reason` diz o motivo: servidor fora, 401 sem chave ou com chave inválida, 404 sem `--metrics`. O motivo fica também em `metrics.*.prom.err`, e o `summarize.py` mostra um aviso com a contagem por motivo. Se o servidor reiniciar no meio, `counter_reset: true` e os deltas são descartados.
-- **RAM e VRAM:** `lib/sampler.py` amostra a cada 3 s:
-  - RAM usada = `MemTotal - MemAvailable` (sistema todo) e swap;
-  - VRAM via `nvidia-smi --query-gpu=memory.used` (só leitura);
-  - RSS do processo `llama-server`.
+- **Tokens and speed:** difference between `GET $LLM_BASE_URL/metrics` before and after the agent, with `Authorization: Bearer $LLM_API_KEY` (the E5 server requires the key on `/metrics` too). `llama-server` must run with `--metrics`. The counters used are `llamacpp:prompt_tokens_total`, `prompt_seconds_total`, `tokens_predicted_total`, `tokens_predicted_seconds_total` and `n_decode_total`.
+  - `tokens_in` counts only the prefill actually processed: tokens reused from the prompt cache are not included. So `tokens_in` shows the real cost and `prefill_tps` the real speed.
+  - The total sent by the client comes from `agent-metrics.json`, if the harness provides it.
+  - **Warm-up (E4, M4).** With a real harness, `run.sh` sends a short request (`max_tokens: 4`) **before** the "before" snapshot, so it stays out of the deltas. Reason: the first requests after loading generate ~10% slower, and the first request after loading, measured on 2026-10-29, took ~75 s. The result goes to `llm.warmup` (`done`, `http_status`, `seconds`, `reason`); a 503 while the model loads is waited out for up to 300 s. `EVAL_WARMUP=0` disables it.
+  - Without metrics, the fields are `null`, `available: false` and `reason` gives the reason: server down, 401 without a key or with an invalid key, 404 without `--metrics`. The reason is also in `metrics.*.prom.err`, and `summarize.py` shows a warning with the count per reason. If the server restarts midway, `counter_reset: true` and the deltas are discarded.
+- **RAM and VRAM:** `lib/sampler.py` samples every 3 s:
+  - used RAM = `MemTotal - MemAvailable` (whole system) and swap;
+  - VRAM via `nvidia-smi --query-gpu=memory.used` (read-only);
+  - RSS of the `llama-server` process.
 
-  Registra a primeira amostra (linha de base) e o pico. Os números são do sistema todo, então **a máquina deve ficar dedicada durante as medições** (decisão 2 do plano).
+  It records the first sample (baseline) and the peak. The numbers are system-wide, so **the machine must stay dedicated during the measurements** (decision 2 of the plan).
 
-## T1, T5 e T6: gabarito e nota
+## T1, T5 and T6: rubric and grade
 
-- **T1:** o `rubric.md` lista 10 fatos verificáveis sobre a arquitetura do chrono, escritos antes das execuções. Um fato vale 1 ponto se o `ARQUITETURA.md` o afirma corretamente e com os nomes reais. Afirmações inventadas tiram pontos. A resposta de referência fica em `solution/ARQUITETURA.md`.
-- **T5:** a parte automática só confere que o `INVESTIGACAO.md` existe e cita `parseDuration` (ou `parsedDurationCache`) **e** `addDuration`. Palavras soltas ("cache", "imutável", "estado compartilhado") não bastam. A causa raiz é conferida por pessoa no `rubric.md` (2 itens, sucesso = 2/2).
-- **T6:** o `rubric.md` avalia o `PLANO.md` em 10 itens. O corretor também confere no transcript se o plano foi escrito **antes** das edições em `pypika/`; se não foi, tira 2 pontos. A implementação é avaliada pelos testes ocultos.
-- **Fluxo:** o runner grava `status: "pending_grading"`, `rubric.score: null` e `rubric.auto_hint` (0–10). A pista automática conta itens com a palavra-chave esperada e serve só para triagem. O orquestrador e o usuário leem o relatório, dão a nota e registram com `eval/grade.py ... --score N --by NOME`.
-- **Sucesso** = verificações automáticas obrigatórias passaram **e** nota ≥ limiar (7/10 no T1 e T6; 2/2 no T5).
-- O `summarize.py` lista as execuções que aguardam nota e não as conta na taxa até lá.
+- **T1:** `rubric.md` lists 10 verifiable facts about chrono's architecture, written before the runs. A fact is worth 1 point if `ARCHITECTURE.md` states it correctly and with the real names. Invented claims cost points. The reference answer is in `solution/ARCHITECTURE.md`.
+- **T5:** the automatic part only checks that `INVESTIGATION.md` exists and cites `parseDuration` (or `parsedDurationCache`) **and** `addDuration`. Loose words ("cache", "immutable", "shared state") are not enough. The root cause is checked by a person against `rubric.md` (2 items, success = 2/2).
+- **T6:** `rubric.md` assesses `PLAN.md` on 10 items. The grader also checks in the transcript whether the plan was written **before** the edits in `pypika/`; if not, 2 points are subtracted. The implementation is assessed by the hidden tests.
+- **Flow:** the runner writes `status: "pending_grading"`, `rubric.score: null` and `rubric.auto_hint` (0–10). The automatic hint counts items with the expected keyword and is only for triage. The orchestrator and the user read the report, give the grade and record it with `eval/grade.py ... --score N --by NAME`.
+- **Success** = required automatic checks passed **and** grade ≥ threshold (7/10 for T1 and T6; 2/2 for T5).
+- `summarize.py` lists the runs awaiting a grade and does not count them in the rate until then.
 
-## T4 e S3: mutantes
+## T4 and S3: mutants
 
-Os mutantes são patches pequenos e corretos em tipo, cada um mudando um comportamento observável:
+The mutants are small, type-correct patches, each changing one observable behavior:
 
-- **T4:** unidade errada numa abreviação, fator do trimestre, frações, sinal da hora, `reverseDuration` sem inverter etc.;
-- **S3:** `all`/`any`, aspas não escapadas, precedência de `alias_quote_char` etc.
+- **T4:** wrong unit in an abbreviation, quarter factor, fractions, hour sign, `reverseDuration` without reversing etc.;
+- **S3:** `all`/`any`, unescaped quotes, `alias_quote_char` precedence etc.
 
-Os testes de referência (o arquivo removido do upstream, no T4) matam 12/12 e 6/6. Um mutante que não aplica (o agente mexeu no módulo) é restaurado e registrado. A meta é ≥ 60%, como no plano.
+The reference tests (the file removed from upstream, in T4) kill 12/12 and 6/6. A mutant that does not apply (the agent touched the module) is restored and recorded. The target is ≥ 60%, as in the plan.
 
-Só contam arquivos de teste **novos**. No T4, os testes de `test/en/*_time_units_*` já passam por `addDuration`. Se um teste já existente contasse quando o agente o editasse, até uma edição de passagem inflaria a nota. Por isso eles ficam fora, aparecem em `ignored_existing_test_files` e voltam ao commit-base antes da mutação.
+Only **new** test files count. In T4, the tests in `test/en/*_time_units_*` already go through `addDuration`. If an existing test counted once the agent edited it, even an incidental edit would inflate the score. So they are left out, show up in `ignored_existing_test_files` and go back to the base commit before mutation.
 
 ## Skills (K1–K3)
 
-Medem, por harness, se as skills montadas em `AGENT_SKILLS_DIRS` (perfil base `skills/profiles/base.txt`; `/opt/skills/...` no container) funcionam com o modelo local:
+They measure, per harness, whether the skills mounted in `AGENT_SKILLS_DIRS` (base profile `skills/profiles/base.txt`; `/opt/skills/...` in the container) work with the local model:
 
-- **K1, chamada explícita:** o prompt pede a skill `brainstorming`. A tarefa passa se a skill foi carregada, se o `BRAINSTORM.md` tem perguntas e opções, e se nenhum código mudou.
-- **K2, acionamento automático:** um bug comum, sem citar skills. Registra se `systematic-debugging` foi carregada; isso é medição e não reprova. O sucesso da tarefa é a correção.
-- **K3, efeito no formato:** o prompt pede a skill `writing-plans`. A tarefa passa se a skill foi carregada e o plano tem os marcadores do formato. O caminho da convenção (`docs/superpowers/plans/AAAA-MM-DD-*.md` ou `docs/plans/`) é só medição.
+- **K1, explicit call:** the prompt asks for the `brainstorming` skill. The task passes if the skill was loaded, if `BRAINSTORM.md` has questions and options, and if no code changed.
+- **K2, automatic triggering:** a common bug, without mentioning skills. It records whether `systematic-debugging` was loaded; this is a measurement and does not fail the task. Task success is the fix.
+- **K3, effect on the format:** the prompt asks for the `writing-plans` skill. The task passes if the skill was loaded and the plan has the format markers. The conventional path (`docs/superpowers/plans/YYYY-MM-DD-*.md` or `docs/plans/`) is only a measurement.
 
-**"Skill carregada"** é decidido pelo `events.jsonl` do log do agente, olhando só os **argumentos** das chamadas de ferramenta, nunca os resultados (um `find -name SKILL.md` listaria todas):
+**"Skill loaded"** is decided from the `events.jsonl` in the agent log, looking only at the **arguments** of tool calls, never at the results (a `find -name SKILL.md` would list them all):
 
-1. qualquer ferramenta cujo argumento contenha `.../<skill>/SKILL.md` (read, `cat`, `sed -n`...). Registra-se também se o caminho está sob as pastas de skills que o agente viu (`--skills-dirs`: `/opt/skills` com `EVAL_WRAPPER`, senão `$AGENT_SKILLS_DIRS`);
-2. ou uma ferramenta cujo nome contém "skill" com o nome da skill no argumento (aceita `superpowers:<nome>` e `/<nome>`).
+1. any tool whose argument contains `.../<skill>/SKILL.md` (read, `cat`, `sed -n`...). It also records whether the path is under the skill directories the agent saw (`--skills-dirs`: `/opt/skills` with `EVAL_WRAPPER`, otherwise `$AGENT_SKILLS_DIRS`);
+2. or a tool whose name contains "skill" with the skill name in the argument (accepts `superpowers:<name>` and `/<name>`).
 
-Definições de ferramenta (JSON schema) não contam.
+Tool definitions (JSON schema) do not count.
 
-| Harness | Formato do `events.jsonl` (de `agents/lib/agent_metrics.py`) | Como a skill deve aparecer | Estado |
+| Harness | `events.jsonl` format (from `agents/lib/agent_metrics.py`) | How the skill should show up | State |
 |---|---|---|---|
-| claude-local | stream-json: `assistant` → `tool_use` (`name`, `input`) | ferramenta `Skill` (`{"skill": ...}`) ou `Read` do `SKILL.md` | não verificado |
-| qwen-code | stream-json, igual ao Claude | ferramenta de skill do Qwen (nome com "skill") ou `read_file` do `SKILL.md` | não verificado |
-| pi | `message_end` → `toolCall` (`name`, `arguments`) | `read` do `SKILL.md` (o Pi lista as skills com o caminho no prompt) | não verificado |
-| opencode | `tool_use` → `part.tool` + `part.state.input` | ferramenta nativa `skill` (`{"name": ...}`) ou `read` | não verificado |
-| codex-local | `item.*` → `command_execution.command` | comando de shell que lê o `SKILL.md` | não verificado |
+| claude-local | stream-json: `assistant` → `tool_use` (`name`, `input`) | `Skill` tool (`{"skill": ...}`) or `Read` of `SKILL.md` | unverified |
+| qwen-code | stream-json, same as Claude | Qwen's skill tool (name containing "skill") or `read_file` of `SKILL.md` | unverified |
+| pi | `message_end` → `toolCall` (`name`, `arguments`) | `read` of `SKILL.md` (Pi lists the skills with their path in the prompt) | unverified |
+| opencode | `tool_use` → `part.tool` + `part.state.input` | native `skill` tool (`{"name": ...}`) or `read` | unverified |
+| codex-local | `item.*` → `command_execution.command` | shell command that reads `SKILL.md` | unverified |
 
-Os `oracle/events.jsonl` do K1 (formato Claude), K2 (Pi) e K3 (OpenCode, ferramenta `skill`) exercitam a detecção sem LLM. Quando os agentes rodarem de verdade, conferir num transcript real de cada um. Se um agente carregar skills de outro jeito (por exemplo, injetando o texto sem chamada de ferramenta), a detecção dele precisa de outra regra.
+The `oracle/events.jsonl` files of K1 (Claude format), K2 (Pi) and K3 (OpenCode, `skill` tool) exercise the detection without an LLM. When the agents run for real, check against a real transcript from each one. If an agent loads skills some other way (for example, injecting the text without a tool call), its detection needs another rule.
 
-Os marcadores de formato do K3 (título "Implementation Plan", Goal, `### Task N`, `**Files:**`, passos `- [ ]`, blocos de código, comando de teste) seguem o `writing-plans` do Superpowers conhecido até a v6. **Não foram conferidos com o `SKILL.md` da v6.4.1 fixada**, que ainda não foi baixada. Depois do `scripts/fetch-skills.sh`, comparar e ajustar `markers`, `optional_markers` e `path_regex` no `task.json` do K3.
+The K3 format markers (title "Implementation Plan", Goal, `### Task N`, `**Files:**`, `- [ ]` steps, code blocks, test command) follow the Superpowers `writing-plans` as known up to v6. **They were not checked against the `SKILL.md` of the pinned v6.4.1**, which has not been downloaded yet. After `scripts/fetch-skills.sh`, compare and adjust `markers`, `optional_markers` and `path_regex` in K3's `task.json`.
 
-## Validação feita (29/10/2026, sem LLM)
+## Validation done (2026-10-29, without an LLM)
 
-`eval/validate.sh`: para cada tarefa, (a) logo após o setup as verificações **falham**, e (b) com a solução de referência elas **passam**. T1, T5 e T6 ficam em "aguarda nota", com pista automática no máximo. As tarefas K usam o transcript simulado de `oracle/`. Rodada no host, depois do lote I1/I5/I6/I7 + K1–K3 + chave da API, em 4 min 11 s:
+`eval/validate.sh`: for each task, (a) right after setup the checks **fail**, and (b) with the reference solution they **pass**. T1, T5 and T6 stay "awaiting grade", with the automatic hint at most. The K tasks use the simulated transcript from `oracle/`. Run on the host, after the I1/I5/I6/I7 + K1–K3 + API key batch, in 4 min 11 s. Output as printed at the time, by the then-Portuguese script (the current script prints the same table in English: `TASK`, `fails (ok)`, `passes (ok)`, `awaiting grade (ok)`, `OK`):
 
 ```
 TAREFA                           (a) após setup        (b) após solução    RESULTADO
@@ -329,25 +338,25 @@ K2-pypika-debugging              falha (ok)             passa (ok)             O
 K3-pypika-writing-plans          falha (ok)             passa (ok)             OK
 ```
 
-Com o runner isolado (ambiente limpo, `pytest -c/--noconftest`, `jest --config`), as contagens são as mesmas de antes: pypika 1361 testes, chrono 753 (747 no T4, sem o arquivo removido). Mutantes: T4 12/12, S3 6/6. Skills: K1 (formato Claude, `Read`), K2 (Pi, `read`) e K3 (OpenCode, ferramenta `skill`) detectados; antes da solução, "não carregada".
+With the isolated runner (clean environment, `pytest -c/--noconftest`, `jest --config`), the counts are the same as before: pypika 1361 tests, chrono 753 (747 in T4, without the removed file). Mutants: T4 12/12, S3 6/6. Skills: K1 (Claude format, `Read`), K2 (Pi, `read`) and K3 (OpenCode, `skill` tool) detected; before the solution, "not loaded".
 
-Ponta a ponta com o harness `fake-oracle`:
+End to end with the `fake-oracle` harness:
 
-- `eval/matrix.sh -r 1 e2e2 fake-oracle all`, no host, sem wrapper, com o llama-server da E5 no ar: 10 pass, 3 aguardando nota (T1, T5, T6), 0 erros, 2 min 21 s.
-  - `llm.available: true` nas 13 execuções, com `api_key_source: file`.
-  - Tabela de skills: 1/1 carregada em K1, K2 e K3.
-- Aquecimento, conferido à parte contra o servidor, com o lock de execução: 200 em ~75 s, o primeiro pedido depois da carga. Com chave errada: 401 e `reason` preenchido.
-- Antes deste lote (`e2e-oracle`, `e2e-negative`):
-  - `FAKE_ORACLE_MODE=noop` deu fail;
-  - `sleep:60` com `EVAL_TIMEOUT_S=5` deu exit 124, `timed_out: true` e fail;
-  - sem servidor, `llm.available: false`.
+- `eval/matrix.sh -r 1 e2e2 fake-oracle all`, on the host, without a wrapper, with the E5 llama-server up: 10 pass, 3 awaiting grade (T1, T5, T6), 0 errors, 2 min 21 s.
+  - `llm.available: true` in all 13 runs, with `api_key_source: file`.
+  - Skills table: 1/1 loaded in K1, K2 and K3.
+- Warm-up, checked separately against the server, with the run lock: 200 in ~75 s, the first request after loading. With a wrong key: 401 and `reason` filled in.
+- Before this batch (`e2e-oracle`, `e2e-negative`):
+  - `FAKE_ORACLE_MODE=noop` gave fail;
+  - `sleep:60` with `EVAL_TIMEOUT_S=5` gave exit 124, `timed_out: true` and fail;
+  - without a server, `llm.available: false`.
 
-## Limitações conhecidas
+## Known limitations
 
-- **Isolamento.** Sem `EVAL_WRAPPER`, o agente roda no host. O workdir fica fora do repositório e o agente não recebe nenhum caminho para `eval/`, mas um agente que vasculhe o disco pode achar `hidden/` e `solution.patch`. Com `EVAL_WRAPPER=sandbox/run-in-box.sh` (E7), o container do agente monta só o workdir, o log-dir, o prompt e `agents/`. O processamento de saída no host não segue symlinks plantados pelo agente (ver `eval/lib/boxio.py` e a seção "No container"). As verificações rodam sem a pasta do resultado montada e o host grava o `checks.json` a partir do veredito do grader (não de um arquivo que o agente pudesse plantar), então o agente não forja o próprio placar nem alcança o host. Resíduo conhecido: nos testes que o próprio agente escreve (T4/S3), código do agente roda no mesmo processo do pytest/jest e poderia, em tese, forjar o relatório JUnit/jest daquele processo; mitigar isso exige isolar ainda mais o runner de testes.
-- **Contaminação.** Os dois projetos são públicos e os modelos podem tê-los visto. T2, T5 e T7 usam bugs plantados que não existem no upstream. T3 e T6 pedem recursos inexistentes. T4 tem o risco maior: o arquivo de teste removido existe no GitHub.
-- **T5:** um relatório correto que não cite `parseDuration` nem `addDuration` pelo nome reprova na parte automática. A causa raiz em si é sempre conferida por pessoa.
-- **Skills:** a detecção depende do formato de transcript de cada agente, ainda não conferido com execuções reais, e os marcadores do K3 não foram conferidos com a v6.4.1 (seção "Skills").
-- **RAM/VRAM** são do sistema todo, não só do agente e do servidor.
-- **Fuso horário.** Os testes do chrono e os testes ocultos usam datas locais e passam em `America/Sao_Paulo`. As datas foram escolhidas longe de transições de horário de verão, mas outra máquina ou fuso deve rodar `eval/validate.sh` antes.
-- **Tokens do cliente** (incluindo cache) e erros de chamada de ferramenta dependem do harness gravar `agent-metrics.json`. Sem isso, só há os números do servidor.
+- **Isolation.** Without `EVAL_WRAPPER`, the agent runs on the host. The workdir is outside the repository and the agent gets no path to `eval/`, but an agent that searches the disk could find `hidden/` and `solution.patch`. With `EVAL_WRAPPER=sandbox/run-in-box.sh` (E7), the agent container mounts only the workdir, the log-dir, the prompt and `agents/`. Output processing on the host does not follow symlinks planted by the agent (see `eval/lib/boxio.py` and the section "In the container"). The checks run without the result directory mounted and the host writes `checks.json` from the grader's verdict (not from a file the agent could plant), so the agent cannot forge its own score or reach the host. Known residue: in the tests the agent writes itself (T4/S3), agent code runs in the same pytest/jest process and could, in theory, forge that process's JUnit/jest report; mitigating that requires isolating the test runner even further.
+- **Contamination.** Both projects are public and the models may have seen them. T2, T5 and T7 use planted bugs that do not exist upstream. T3 and T6 ask for nonexistent features. T4 carries the highest risk: the removed test file exists on GitHub.
+- **T5:** a correct report that does not cite `parseDuration` or `addDuration` by name fails the automatic part. The root cause itself is always checked by a person.
+- **Skills:** detection depends on each agent's transcript format, not yet checked against real runs, and the K3 markers were not checked against v6.4.1 (section "Skills").
+- **RAM/VRAM** are system-wide, not just the agent and the server.
+- **Time zone.** chrono's tests and the hidden tests use local dates and pass in `America/Sao_Paulo`. The dates were chosen far from daylight saving transitions, but another machine or time zone should run `eval/validate.sh` first.
+- **Client tokens** (cache included) and tool call errors depend on the harness writing `agent-metrics.json`. Without it, only the server numbers exist.

@@ -1,15 +1,15 @@
 {
   "id": "T1",
-  "title": "Explicar a arquitetura do chrono",
+  "title": "Explain the chrono architecture",
   "repo": "chrono",
   "category": "architecture",
-  "plan_task": "T1 - explicar a arquitetura de um repositório desconhecido",
+  "plan_task": "T1 - explain the architecture of an unfamiliar repository",
   "timeout_min": 30,
-  "notes": "AGENTS.md do upstream é removido no setup (contém um resumo da arquitetura). Sucesso = nota >= 7 no rubric.md, dada depois.",
+  "notes": "The upstream AGENTS.md is removed during setup (it contains an architecture summary). Success = grade >= 7 on rubric.md, given afterwards.",
   "checks": [
     {
       "type": "unchanged",
-      "name": "codigo_inalterado",
+      "name": "code_unchanged",
       "paths": [
         "src",
         "test"
@@ -17,20 +17,20 @@
     },
     {
       "type": "report",
-      "name": "documento_existe",
+      "name": "document_exists",
       "file": [
-        "ARQUITETURA.md",
-        "arquitetura.md"
+        "ARCHITECTURE.md",
+        "architecture.md"
       ],
       "min_words": 300
     },
     {
       "type": "rubric",
-      "name": "gabarito",
+      "name": "rubric",
       "rubric": "rubric.md",
       "report": [
-        "ARQUITETURA.md",
-        "arquitetura.md"
+        "ARCHITECTURE.md",
+        "architecture.md"
       ],
       "threshold": 7,
       "max": 10,

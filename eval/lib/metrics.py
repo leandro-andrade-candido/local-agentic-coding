@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Métricas Prometheus do llama-server (GET <base>/metrics; exige --metrics no servidor).
+"""Prometheus metrics of llama-server (GET <base>/metrics; requires --metrics on the server).
 
-Uso:
-    python3 -I metrics.py snapshot <base_url> <saida.prom>   # nunca falha; sem servidor, não grava o .prom
-    python3 -I metrics.py delta <antes.prom> <depois.prom>    # imprime JSON com as diferenças
-    python3 -I metrics.py warmup <base_url> <modelo> <saida.json>  # pedido de aquecimento (E4, M4)
+Usage:
+    python3 -I metrics.py snapshot <base_url> <out.prom>   # never fails; without a server, writes no .prom
+    python3 -I metrics.py delta <before.prom> <after.prom>  # prints JSON with the differences
+    python3 -I metrics.py warmup <base_url> <model> <out.json>  # warm-up request (E4, M4)
 
-Chave (E5: o servidor exige a chave em todas as rotas, inclusive /metrics): enviada como
-"Authorization: Bearer <chave>", lida de LLM_API_KEY ou LOCAL_LLM_API_KEY. Nunca é impressa.
-Quando o snapshot falha, o motivo vai para <saida.prom>.err e aparece no result.json
-(llm.available=false, llm.reason), em vez de sumir sem aviso.
+Key (E5: the server requires the key on every route, /metrics included): sent as
+"Authorization: Bearer <key>", read from LLM_API_KEY or LOCAL_LLM_API_KEY. Never printed.
+When the snapshot fails, the reason goes to <out.prom>.err and shows up in result.json
+(llm.available=false, llm.reason), instead of disappearing silently.
 
-Contadores usados (nomes do llama-server):
-    llamacpp:prompt_tokens_total            tokens de prompt processados (prefill; não conta cache)
-    llamacpp:prompt_seconds_total           tempo de prefill
-    llamacpp:tokens_predicted_total         tokens gerados
-    llamacpp:tokens_predicted_seconds_total tempo de geração
-    llamacpp:n_decode_total                 chamadas de decode
-Qualquer outro contador *_total também entra em "counters_delta".
+Counters used (llama-server names):
+    llamacpp:prompt_tokens_total            prompt tokens processed (prefill; cache not counted)
+    llamacpp:prompt_seconds_total           prefill time
+    llamacpp:tokens_predicted_total         generated tokens
+    llamacpp:tokens_predicted_seconds_total generation time
+    llamacpp:n_decode_total                 decode calls
+Any other *_total counter also goes into "counters_delta".
 """
 from __future__ import annotations
 
@@ -53,19 +53,19 @@ def snapshot(base: str, out: str) -> int:
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         if "llamacpp:" not in body:
-            reason = f"resposta sem métricas do llama-server (HTTP {resp.status}; servidor sem --metrics?)"
+            reason = f"response without llama-server metrics (HTTP {resp.status}; server without --metrics?)"
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
-            reason = (f"HTTP {e.code}: " + ("chave inválida" if key else
-                      "sem chave (defina LLM_API_KEY ou crie ~/.config/local-agentic/llm-api-key)"))
+            reason = (f"HTTP {e.code}: " + ("invalid key" if key else
+                      "no key (set LLM_API_KEY or create ~/.config/local-agentic/llm-api-key)"))
         elif e.code == 404:
-            reason = "HTTP 404: /metrics desligado (servidor sem --metrics)"
+            reason = "HTTP 404: /metrics disabled (server without --metrics)"
         else:
             reason = f"HTTP {e.code}"
     except (urllib.error.URLError, OSError, ValueError) as e:
-        reason = f"servidor indisponível ({getattr(e, 'reason', e)})"
+        reason = f"server unavailable ({getattr(e, 'reason', e)})"
     if reason:
-        print(f"[metrics] AVISO: sem métricas de {metrics_url(base)}: {reason}", file=sys.stderr)
+        print(f"[metrics] WARNING: no metrics from {metrics_url(base)}: {reason}", file=sys.stderr)
         with open(err, "w") as f:
             f.write(reason + "\n")
         return 0
@@ -75,15 +75,15 @@ def snapshot(base: str, out: str) -> int:
 
 
 def warmup(base: str, model: str, out: str, wait_s: int = 300) -> int:
-    """Pedido curto antes de medir (E4, M4: os 1-2 primeiros pedidos depois da carga geram
-    ~10% mais devagar; no primeiro pedido depois da carga, medido em 29/10, ~75 s). Roda antes
-    do snapshot "antes", então fica fora dos deltas. Espera o servidor sair do 503 (modelo
-    carregando) por até wait_s. Nunca falha."""
+    """Short request before measuring (E4, M4: the first 1-2 requests after loading generate
+    ~10% slower; the first request after loading, measured on 2026-10-29, took ~75 s). Runs before
+    the "before" snapshot, so it stays out of the deltas. Waits for the server to leave 503 (model
+    loading) for up to wait_s. Never fails."""
     import json
     import time
     url = base.rstrip("/")
     url = (url[:-3] if url.endswith("/v1") else url) + "/v1/chat/completions"
-    body = json.dumps({"model": model, "messages": [{"role": "user", "content": "Responda só: ok"}],
+    body = json.dumps({"model": model, "messages": [{"role": "user", "content": "Reply only: ok"}],
                        "max_tokens": 4, "temperature": 0}).encode()
     key = api_key()
     t0, status, reason = time.time(), None, None
@@ -97,20 +97,20 @@ def warmup(base: str, model: str, out: str, wait_s: int = 300) -> int:
                 status, reason = resp.status, None
             break
         except urllib.error.HTTPError as e:
-            status, reason = e.code, f"HTTP {e.code}" + (": chave ausente ou inválida" if e.code in (401, 403) else "")
+            status, reason = e.code, f"HTTP {e.code}" + (": key missing or invalid" if e.code in (401, 403) else "")
             if e.code != 503 or time.time() - t0 > wait_s:
                 break
         except (urllib.error.URLError, OSError, ValueError) as e:
             cause = getattr(e, "reason", e)
             if isinstance(e, TimeoutError) or isinstance(cause, TimeoutError):
-                status, reason = None, f"tempo esgotado ({wait_s} s) no pedido de aquecimento"
+                status, reason = None, f"timed out ({wait_s} s) on the warm-up request"
             else:
-                status, reason = None, f"servidor indisponível ({cause})"
+                status, reason = None, f"server unavailable ({cause})"
             break
         time.sleep(3)
     result = {"done": status == 200, "http_status": status, "seconds": round(time.time() - t0, 2), "reason": reason}
     if reason:
-        print(f"[metrics] AVISO: aquecimento falhou: {reason}", file=sys.stderr)
+        print(f"[metrics] WARNING: warm-up failed: {reason}", file=sys.stderr)
     with open(out, "w") as f:
         json.dump(result, f)
     return 0
@@ -144,7 +144,7 @@ def delta(before: str, after: str) -> dict:
         reasons = [r for r in (_reason(before), _reason(after)) if r]
         missing = [os.path.basename(p) for p in (before, after) if not os.path.exists(p)]
         return {"available": False,
-                "reason": "; ".join(dict.fromkeys(reasons)) or f"snapshot ausente: {', '.join(missing)}"}
+                "reason": "; ".join(dict.fromkeys(reasons)) or f"snapshot missing: {', '.join(missing)}"}
     b, a = parse(before), parse(after)
     counters = {k: a[k] - b.get(k, 0.0) for k in a if k.endswith("_total")}
     reset = any(v < 0 for v in counters.values())
@@ -157,7 +157,7 @@ def delta(before: str, after: str) -> dict:
     pin, pout = d("llamacpp:prompt_seconds_total"), d("llamacpp:tokens_predicted_seconds_total")
     return {
         "available": True,
-        "counter_reset": reset,  # servidor reiniciado durante a execução: deltas inválidos
+        "counter_reset": reset,  # server restarted during the run: deltas invalid
         "tokens_in": None if tin is None else int(tin),
         "tokens_out": None if tout is None else int(tout),
         "prefill_seconds": None if pin is None else round(pin, 2),

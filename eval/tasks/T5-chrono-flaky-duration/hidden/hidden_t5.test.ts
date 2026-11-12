@@ -1,11 +1,11 @@
-// Testes ocultos do T5: o resultado de uma expressão relativa não pode depender
-// do que já foi analisado antes (estado compartilhado entre chamadas).
+// T5 hidden tests: the result of a relative expression must not depend on
+// what was parsed before (state shared between calls).
 import * as chrono from "../src";
 
 const REF = new Date(2012, 7, 10, 12, 14);
 
 const CASES: Array<[string, Date, boolean]> = [
-    // [texto, data esperada, hora "certa"?] - valores do upstream sem a regressão
+    // [text, expected date, hour "certain"?] - upstream values without the regression
     ["in half a quarter", new Date(2012, 8, 24, 12, 14), false],
     ["within half an hour", new Date(2012, 7, 10, 12, 44), true],
     ["half an hour from now", new Date(2012, 7, 10, 12, 44), true],

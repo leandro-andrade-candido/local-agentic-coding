@@ -1,11 +1,11 @@
-Use a skill `brainstorming` para me ajudar com uma ideia ainda vaga.
+Use the `brainstorming` skill to help me with an idea that is still vague.
 
-Quero um jeito de reaproveitar filtros comuns entre consultas do pypika (este repositório), por exemplo "só registros ativos", "só do tenant X" ou "só do mês atual", sem repetir os mesmos `.where(...)` em todo lugar. Não sei se isso deveria virar parte da biblioteca ou só um padrão de uso.
+I want a way to reuse common filters across pypika queries (this repository), for example "only active records", "only tenant X" or "only the current month", without repeating the same `.where(...)` everywhere. I don't know whether this should become part of the library or just a usage pattern.
 
-Esta sessão roda sem interação: não vou conseguir responder perguntas agora. Siga a skill até onde der sem respostas minhas e deixe em `BRAINSTORM.md`, na raiz do repositório:
+This session runs without interaction: I won't be able to answer questions now. Follow the skill as far as you can without my answers and leave in `BRAINSTORM.md`, at the repository root:
 
-- o que você entendeu da ideia e do que o código já oferece;
-- as perguntas que você me faria, numeradas;
-- de 2 a 3 abordagens possíveis, com prós e contras, e qual você recomendaria.
+- what you understood of the idea and of what the code already offers;
+- the questions you would ask me, numbered;
+- 2 to 3 possible approaches, with pros and cons, and which one you would recommend.
 
-Não escreva nem altere código: por enquanto quero só pensar no design.
+Don't write or change code: for now I only want to think about the design.

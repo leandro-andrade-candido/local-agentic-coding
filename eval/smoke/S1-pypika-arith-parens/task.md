@@ -1,11 +1,11 @@
-Achei um bug no pypika (este repositório) que muda o resultado das contas no SQL:
+I found a bug in pypika (this repository) that changes the result of arithmetic in the SQL:
 
 ```python
 from pypika import Query, Field as F
-q = Query.from_("contas").select((F("receita") - (F("custo") + F("imposto"))).as_("saldo"))
+q = Query.from_("accounts").select((F("revenue") - (F("cost") + F("tax"))).as_("balance"))
 print(q)
 ```
 
-Sai `SELECT "receita"-"custo"+"imposto" "saldo" FROM "contas"`, que no banco vira `(receita - custo) + imposto`. O certo é manter os parênteses: `"receita"-("custo"+"imposto")`. O mesmo acontece com `a - (b - c)`.
+It outputs `SELECT "revenue"-"cost"+"tax" "balance" FROM "accounts"`, which the database reads as `(revenue - cost) + tax`. The right thing is to keep the parentheses: `"revenue"-("cost"+"tax")`. The same happens with `a - (b - c)`.
 
-Corrija na biblioteca, sem colocar parênteses desnecessários em outros casos, e adicione um teste. Dependências já instaladas em `.venv` (testes: `.venv/bin/python -m pytest`).
+Fix it in the library, without adding unnecessary parentheses in other cases, and add a test. The dependencies are already installed in `.venv` (tests: `.venv/bin/python -m pytest`).

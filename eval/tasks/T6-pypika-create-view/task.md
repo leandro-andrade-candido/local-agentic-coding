@@ -1,35 +1,35 @@
-Quero adicionar suporte a `CREATE VIEW` no pypika (este repositório). É uma mudança maior, então trabalhe em duas fases:
+I want to add `CREATE VIEW` support to pypika (this repository). It's a bigger change, so work in two phases:
 
-1. **Planejamento.** Antes de alterar qualquer código, estude como o projeto implementa os outros comandos DDL e escreva o plano em `PLANO.md`, na raiz do repositório: quais arquivos vai mexer, classes e métodos novos, como os dialetos entram, validações, riscos e como vai testar.
-2. **Implementação.** Depois implemente seguindo o plano, com testes. Se mudar de ideia no caminho, atualize o `PLANO.md`.
+1. **Planning.** Before changing any code, study how the project implements the other DDL commands and write the plan, in English, in `PLAN.md`, at the repository root: which files you'll touch, new classes and methods, how the dialects fit in, validations, risks and how you'll test it.
+2. **Implementation.** Then implement it following the plan, with tests. If you change your mind along the way, update `PLAN.md`.
 
-Especificação:
+Specification:
 
-- Ponto de entrada: `Query.create_view(view)`, onde `view` é um nome (`str`) ou um `Table` (que pode ter schema).
-- `.as_select(query)` define a consulta da view (obrigatória). Se `query` não for um builder de consulta do pypika, levante `TypeError`. Sem `as_select`, o `str()` do builder devolve string vazia, como acontece no `create_table`.
-- `.columns("a", "b")` define a lista de colunas da view (opcional).
-- `.or_replace()` gera `CREATE OR REPLACE VIEW`; `.temporary()` gera `CREATE TEMPORARY VIEW`; `.if_not_exists()` gera `CREATE VIEW IF NOT EXISTS`.
-- `or_replace()` com `if_not_exists()` é inválido: levante `QueryException` (de `pypika.utils`) na chamada que criar o conflito, em qualquer ordem.
-- PostgreSQL: `PostgreSQLQuery.create_view(...)` tem também `.materialized()`, que gera `CREATE MATERIALIZED VIEW`. View materializada não pode ser combinada com `or_replace()` nem com `temporary()` (`QueryException`, em qualquer ordem). Nos outros dialetos o método `materialized()` não existe.
-- Ordem das palavras: `CREATE [OR REPLACE] [TEMPORARY | MATERIALIZED] VIEW [IF NOT EXISTS] nome [(colunas)] AS consulta`.
-- O nome da view e as colunas usam as aspas do dialeto (`MySQLQuery.create_view` usa crase). A consulta depois do `AS` deve sair exatamente como `str(query)` sairia sozinha.
-- Como no resto do pypika, os métodos são imutáveis (devolvem um builder novo) e podem ser chamados em qualquer ordem.
+- Entry point: `Query.create_view(view)`, where `view` is a name (`str`) or a `Table` (which may have a schema).
+- `.as_select(query)` sets the view's query (required). If `query` is not a pypika query builder, raise `TypeError`. Without `as_select`, the builder's `str()` returns an empty string, as happens with `create_table`.
+- `.columns("a", "b")` sets the view's column list (optional).
+- `.or_replace()` produces `CREATE OR REPLACE VIEW`; `.temporary()` produces `CREATE TEMPORARY VIEW`; `.if_not_exists()` produces `CREATE VIEW IF NOT EXISTS`.
+- `or_replace()` together with `if_not_exists()` is invalid: raise `QueryException` (from `pypika.utils`) in the call that creates the conflict, in either order.
+- PostgreSQL: `PostgreSQLQuery.create_view(...)` also has `.materialized()`, which produces `CREATE MATERIALIZED VIEW`. A materialized view cannot be combined with `or_replace()` or `temporary()` (`QueryException`, in either order). In the other dialects the `materialized()` method does not exist.
+- Word order: `CREATE [OR REPLACE] [TEMPORARY | MATERIALIZED] VIEW [IF NOT EXISTS] name [(columns)] AS query`.
+- The view name and the columns use the dialect's quotes (`MySQLQuery.create_view` uses backticks). The query after `AS` must come out exactly as `str(query)` would on its own.
+- As in the rest of pypika, the methods are immutable (they return a new builder) and can be called in any order.
 
-Exemplos (resultado de `str()`):
+Examples (result of `str()`):
 
 ```python
 from pypika import Field, MySQLQuery, PostgreSQLQuery, Query, Table
 
-q = Query.from_("pedidos").select("id", "total").where(Field("status") == "pago")
+q = Query.from_("orders").select("id", "total").where(Field("status") == "paid")
 
-Query.create_view("v_pagos").as_select(q)
-# CREATE VIEW "v_pagos" AS SELECT "id","total" FROM "pedidos" WHERE "status"='pago'
+Query.create_view("v_paid").as_select(q)
+# CREATE VIEW "v_paid" AS SELECT "id","total" FROM "orders" WHERE "status"='paid'
 
-Query.create_view("v_pagos").or_replace().columns("pid", "valor").as_select(q)
-# CREATE OR REPLACE VIEW "v_pagos" ("pid","valor") AS SELECT "id","total" FROM "pedidos" WHERE "status"='pago'
+Query.create_view("v_paid").or_replace().columns("oid", "amount").as_select(q)
+# CREATE OR REPLACE VIEW "v_paid" ("oid","amount") AS SELECT "id","total" FROM "orders" WHERE "status"='paid'
 
-Query.create_view(Table("v_pagos", schema="relatorios")).if_not_exists().as_select(q)
-# CREATE VIEW IF NOT EXISTS "relatorios"."v_pagos" AS SELECT "id","total" FROM "pedidos" WHERE "status"='pago'
+Query.create_view(Table("v_paid", schema="reports")).if_not_exists().as_select(q)
+# CREATE VIEW IF NOT EXISTS "reports"."v_paid" AS SELECT "id","total" FROM "orders" WHERE "status"='paid'
 
 MySQLQuery.create_view("v").as_select(MySQLQuery.from_("t").select("a"))
 # CREATE VIEW `v` AS SELECT `a` FROM `t`
@@ -38,4 +38,4 @@ PostgreSQLQuery.create_view("mv").materialized().as_select(PostgreSQLQuery.from_
 # CREATE MATERIALIZED VIEW "mv" AS SELECT "a" FROM "t"
 ```
 
-Documente o recurso no README. As dependências estão em `.venv` (testes: `.venv/bin/python -m pytest`). Não precisa commitar.
+Document the feature in the README. The dependencies are in `.venv` (tests: `.venv/bin/python -m pytest`). No need to commit.

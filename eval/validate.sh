@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Valida as tarefas sem LLM:
-#   (a) logo após o setup.sh, as verificações ocultas FALHAM (bug presente / recurso ausente);
-#   (b) após aplicar a solução de referência, as verificações PASSAM
-#       (ou ficam "aguarda nota" nas tarefas com gabarito: T1 e T6).
-# Uso: eval/validate.sh [tarefa ...]     (padrão: todas as tarefas de tasks/ e smoke/)
+# Validates the tasks without an LLM:
+#   (a) right after setup.sh, the hidden checks FAIL (bug present / feature missing);
+#   (b) after applying the reference solution, the checks PASS
+#       (or are "awaiting grade" for the tasks with a rubric: T1, T5 and T6).
+# Usage: eval/validate.sh [task ...]     (default: every task in tasks/, smoke/ and skills/)
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/common.sh
@@ -17,13 +17,13 @@ fi
 vroot="$EVAL_WORK_ROOT/_validate"
 mkdir -p "$vroot"
 rc=0
-printf '%-32s %-22s %-22s %s\n' TAREFA "(a) após setup" "(b) após solução" RESULTADO
+printf '%-32s %-22s %-22s %s\n' TASK "(a) after setup" "(b) after solution" RESULT
 for t in "${tasks[@]}"; do
     td="$(resolve_task "$t")"; name="$(basename "$td")"; wd="$vroot/$name"
     if ! "$td/setup.sh" "$wd" >"$vroot/$name.setup.log" 2>&1; then
-        printf '%-32s %s\n' "$name" "ERRO no setup (ver $vroot/$name.setup.log)"; rc=1; continue
+        printf '%-32s %s\n' "$name" "SETUP ERROR (see $vroot/$name.setup.log)"; rc=1; continue
     fi
-    # (a) sem transcript do agente; (b) com o transcript simulado de oracle/ (tarefas K).
+    # (a) without an agent transcript; (b) with the simulated transcript from oracle/ (K tasks).
     empty_logs="$(mktemp -d)"
     "$td/check.sh" "$wd" --out "$vroot/$name.a.json" --log "$vroot/$name.a.log" \
         --agent-logs "$empty_logs" >/dev/null 2>&1; a=$?
@@ -33,11 +33,11 @@ for t in "${tasks[@]}"; do
     oracle_logs=(); [ -d "$td/oracle" ] && oracle_logs=(--agent-logs "$td/oracle")
     "$td/check.sh" "$wd" --out "$vroot/$name.b.json" --log "$vroot/$name.b.log" \
         "${oracle_logs[@]}" >/dev/null 2>&1; b=$?
-    sa=$( [ $a -eq 1 ] && echo "falha (ok)" || echo "exit $a (ERRADO)" )
-    case $b in 0) sb="passa (ok)";; 3) sb="aguarda nota (ok)";; *) sb="exit $b (ERRADO)";; esac
-    if [ $a -eq 1 ] && { [ $b -eq 0 ] || [ $b -eq 3 ]; }; then res=OK; else res=FALHOU; rc=1; fi
+    sa=$( [ $a -eq 1 ] && echo "fails (ok)" || echo "exit $a (WRONG)" )
+    case $b in 0) sb="passes (ok)";; 3) sb="awaiting grade (ok)";; *) sb="exit $b (WRONG)";; esac
+    if [ $a -eq 1 ] && { [ $b -eq 0 ] || [ $b -eq 3 ]; }; then res=OK; else res=FAILED; rc=1; fi
     printf '%-32s %-22s %-22s %s\n' "$name" "$sa" "$sb" "$res"
-    rm -rf "$wd/node_modules" "$wd/.venv"   # fontes ficam para inspeção
+    rm -rf "$wd/node_modules" "$wd/.venv"   # sources are kept for inspection
 done
-echo "detalhes: $vroot/<tarefa>.{a,b}.json e .log"
+echo "details: $vroot/<task>.{a,b}.json and .log"
 exit $rc

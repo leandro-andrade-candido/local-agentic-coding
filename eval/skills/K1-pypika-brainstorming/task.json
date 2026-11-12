@@ -1,16 +1,16 @@
 {
   "id": "K1",
-  "title": "Chamada explícita: brainstorming de uma ideia vaga, sem interação",
+  "title": "Explicit call: brainstorming a vague idea, without interaction",
   "repo": "pypika",
   "category": "skills",
-  "plan_task": "E6 skills - chamada explícita da skill",
+  "plan_task": "E6 skills - explicit skill call",
   "timeout_min": 15,
-  "notes": "Passa se o transcript mostra a skill brainstorming carregada (leitura de brainstorming/SKILL.md ou chamada de ferramenta de skill) E o BRAINSTORM.md tem perguntas e opções de design E nenhum código foi alterado. A detecção da skill depende do formato de events.jsonl de cada harness (ver README, 'Skills'); não verificada com agentes reais.",
+  "notes": "Passes if the transcript shows the brainstorming skill loaded (a read of brainstorming/SKILL.md or a skill tool call) AND BRAINSTORM.md has questions and design options AND no code was changed. Skill detection depends on each harness's events.jsonl format (see README, 'Skills'); not verified with real agents.",
   "checks": [
     {"type": "skill_usage", "name": "skill_brainstorming", "skill": "brainstorming",
      "transcript_files": ["events.jsonl"]},
-    {"type": "report", "name": "perguntas_e_opcoes", "file": ["BRAINSTORM.md", "brainstorm.md"],
+    {"type": "report", "name": "questions_and_options", "file": ["BRAINSTORM.md", "brainstorm.md"],
      "min_words": 150, "min_questions": 3, "min_options": 2},
-    {"type": "unchanged", "name": "sem_codigo", "paths": ["pypika"]}
+    {"type": "unchanged", "name": "no_code_changes", "paths": ["pypika"]}
   ]
 }

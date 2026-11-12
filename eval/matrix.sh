@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Roda uma matriz harness x tarefa x repetição, SEMPRE em série (uma GPU, um modelo).
+# Runs a harness x task x repetition matrix, ALWAYS serially (one GPU, one model).
 #
-# Uso: eval/matrix.sh [-r REPETICOES] <run-id> <harnesses> <tarefas>
-#   harnesses  lista separada por vírgula (ex.: qwen-code,pi)
-#   tarefas    lista separada por vírgula (ex.: T1,T2,S1) ou um grupo: full (T1-T7), smoke (S1-S3),
-#              skills (K1-K3), all (os três grupos)
-#   -r N       repetições (padrão 3). Cada repetição grava em eval/runs/<run-id>/r<k>/...
+# Usage: eval/matrix.sh [-r REPETITIONS] <run-id> <harnesses> <tasks>
+#   harnesses  comma-separated list (e.g. qwen-code,pi)
+#   tasks      comma-separated list (e.g. T1,T2,S1) or a group: full (T1-T7), smoke (S1-S3),
+#              skills (K1-K3), all (the three groups)
+#   -r N       repetitions (default 3). Each repetition writes to eval/runs/<run-id>/r<k>/...
 #
-# A ordem é: repetição -> tarefa -> harness, para que os harnesses se alternem e
-# variações de temperatura/carga da máquina não favoreçam um deles.
-# Ao final grava eval/runs/<run-id>/summary.md (eval/summarize.py).
-# Variáveis de ambiente do eval/run.sh valem aqui também (LLM_*, EVAL_TIMEOUT_MIN ...).
+# The order is repetition -> task -> harness, so the harnesses alternate and
+# changes in machine temperature/load do not favor any of them.
+# At the end it writes eval/runs/<run-id>/summary.md (eval/summarize.py).
+# The eval/run.sh environment variables apply here too (LLM_*, EVAL_TIMEOUT_MIN ...).
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
@@ -44,5 +44,5 @@ for ((k = 1; k <= reps; k++)); do
     done
 done
 
-echo "=== fim: pass=${tally[pass]:-0} fail=${tally[fail]:-0} aguarda_nota=${tally[pending]:-0} erro=${tally[error]:-0}" >&2
+echo "=== done: pass=${tally[pass]:-0} fail=${tally[fail]:-0} awaiting_grade=${tally[pending]:-0} error=${tally[error]:-0}" >&2
 python3 -I "$here/summarize.py" "$here/runs/$run_id" | tee "$here/runs/$run_id/summary.md"

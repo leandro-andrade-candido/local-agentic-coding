@@ -1,22 +1,22 @@
 {
   "id": "T4",
-  "title": "Escrever testes para src/calculation/duration.ts",
+  "title": "Write tests for src/calculation/duration.ts",
   "repo": "chrono",
   "category": "tests",
-  "plan_task": "T4 - escrever testes para um módulo sem testes",
+  "plan_task": "T4 - write tests for a module without tests",
   "timeout_min": 30,
-  "notes": "O teste original do upstream (test/calculation_duration.test.ts) é removido no setup e serve de solução de referência. 12 mutantes; meta >= 60% mortos. Só contam arquivos de teste NOVOS (inexistentes no commit-base): editar test/en/*_time_units_* (que já passam por addDuration) não infla a nota; os arquivos versionados sob test/ voltam ao commit-base antes da mutação.",
+  "notes": "The original upstream test (test/calculation_duration.test.ts) is removed during setup and serves as the reference solution. 12 mutants; target >= 60% killed. Only NEW test files count (absent from the base commit): editing test/en/*_time_units_* (which already go through addDuration) does not inflate the score; versioned files under test/ go back to the base commit before mutation.",
   "checks": [
     {
       "type": "unchanged",
-      "name": "modulo_inalterado",
+      "name": "module_unchanged",
       "paths": [
         "src/calculation/duration.ts"
       ]
     },
     {
       "type": "mutation",
-      "name": "mutantes",
+      "name": "mutants",
       "module": "src/calculation/duration.ts",
       "mutants": "mutants/*.patch",
       "min_score": 0.6,
@@ -25,7 +25,7 @@
     },
     {
       "type": "baseline_tests",
-      "name": "suite_original"
+      "name": "original_suite"
     }
   ]
 }

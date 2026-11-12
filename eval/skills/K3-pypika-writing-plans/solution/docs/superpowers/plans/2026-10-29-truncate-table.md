@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-(Resposta de referência do K3, usada pelo harness `fake-oracle` e pelo `validate.sh`.)
+(K3 reference answer, used by the `fake-oracle` harness and by `validate.sh`.)
 
 **Goal:** Add `Query.truncate(table)` producing `TRUNCATE TABLE`, with PostgreSQL `RESTART IDENTITY`/`CASCADE` and MySQL quoting.
 

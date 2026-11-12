@@ -1,15 +1,15 @@
 {
   "id": "T5",
-  "title": "Testes falham por estado compartilhado (cache de parseDuration + addDuration que muta)",
+  "title": "Tests fail because of shared state (parseDuration cache + mutating addDuration)",
   "repo": "chrono",
   "category": "investigation",
-  "plan_task": "T5 - investigar um teste que falha por causa não óbvia",
+  "plan_task": "T5 - investigate a test that fails for a non-obvious reason",
   "timeout_min": 30,
-  "notes": "Causa plantada: cache em parseDuration (src/locales/en/constants.ts) devolve o mesmo objeto, e addDuration (src/calculation/duration.ts) muta o objeto recebido em valores fracionários. Tornar addDuration imutável NÃO é correção válida (quebra 'Test - The normal within expression'). A causa raiz do relatório é conferida por pessoa (rubric.md): o status fica pending_grading até eval/grade.py --score 2.",
+  "notes": "Planted cause: a cache in parseDuration (src/locales/en/constants.ts) returns the same object, and addDuration (src/calculation/duration.ts) mutates the object it receives for fractional values. Making addDuration immutable is NOT a valid fix (it breaks 'Test - The normal within expression'). The root cause in the report is checked by a person (rubric.md): the status stays pending_grading until eval/grade.py --score 2.",
   "checks": [
     {
       "type": "unchanged",
-      "name": "testes_visiveis_intactos",
+      "name": "visible_tests_intact",
       "paths": [
         "test"
       ],
@@ -17,11 +17,10 @@
     },
     {
       "type": "report",
-      "name": "relatorio_existe",
+      "name": "report_exists",
       "file": [
-        "INVESTIGACAO.md",
-        "INVESTIGAÇÃO.md",
-        "investigacao.md"
+        "INVESTIGATION.md",
+        "investigation.md"
       ],
       "min_words": 60,
       "keyword_groups": [
@@ -36,12 +35,11 @@
     },
     {
       "type": "rubric",
-      "name": "causa_raiz",
+      "name": "root_cause",
       "rubric": "rubric.md",
       "report": [
-        "INVESTIGACAO.md",
-        "INVESTIGAÇÃO.md",
-        "investigacao.md"
+        "INVESTIGATION.md",
+        "investigation.md"
       ],
       "max": 2,
       "threshold": 2,
@@ -57,14 +55,14 @@
     },
     {
       "type": "hidden_tests",
-      "name": "testes_ocultos",
+      "name": "hidden_tests",
       "files": {
         "hidden/hidden_t5.test.ts": "test/hidden_t5.test.ts"
       }
     },
     {
       "type": "baseline_tests",
-      "name": "suite_original"
+      "name": "original_suite"
     }
   ]
 }

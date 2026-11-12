@@ -1,5 +1,5 @@
-Implementei um helper de paginação no pypika, `QueryBuilder.paginate(page, per_page)`, e aproveitei para simplificar o `_apply_pagination`. As mudanças estão no working tree, ainda sem commit (veja com `git diff`). Os testes passam aqui.
+I implemented a pagination helper in pypika, `QueryBuilder.paginate(page, per_page)`, and took the chance to simplify `_apply_pagination`. The changes are in the working tree, not committed yet (see them with `git diff`). The tests pass on my machine.
 
-Antes de eu commitar, revise o diff com cuidado, como um revisor exigente: procure bugs e mudanças de comportamento que eu não tenha percebido, inclusive em código que já existia. Se encontrar problemas, corrija-os mantendo a funcionalidade nova, e no fim me diga o que encontrou e o que mudou. Não precisa commitar.
+Before I commit, review the diff carefully, like a demanding reviewer: look for bugs and behavior changes I may have missed, including in code that already existed. If you find problems, fix them while keeping the new feature, and at the end tell me what you found and what you changed. No need to commit.
 
-As dependências estão em `.venv` (testes: `.venv/bin/python -m pytest`).
+The dependencies are in `.venv` (tests: `.venv/bin/python -m pytest`).

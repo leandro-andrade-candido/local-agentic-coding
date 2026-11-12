@@ -1,35 +1,35 @@
-diff --git a/INVESTIGACAO.md b/INVESTIGACAO.md
+diff --git a/INVESTIGATION.md b/INVESTIGATION.md
 new file mode 100644
-index 0000000..e591f31
+index 0000000..a4ccbc1
 --- /dev/null
-+++ b/INVESTIGACAO.md
++++ b/INVESTIGATION.md
 @@ -0,0 +1,26 @@
-+# Investigação: testes de expressões relativas falhando
++# Investigation: relative-expression tests failing
 +
-+## Sintoma
++## Symptom
 +
-+- `Test - Strict mode` (`test/en/en_time_units_within.test.ts`) falha na suíte, mas passa sozinho: "in half a quarter" deveria dar 24/09/2012 12:14 e dá 24/11/2012.
-+- `Test - From now Expression` (`test/en/en_time_units_later.test.ts`) falha mesmo sozinho: "half An hour from now" dá 13:14 em vez de 12:44, logo depois de "half an hour from now" ter funcionado.
++- `Test - Strict mode` (`test/en/en_time_units_within.test.ts`) fails in the suite but passes alone: "in half a quarter" should give 2012-09-24 12:14 and gives 2012-11-24.
++- `Test - From now Expression` (`test/en/en_time_units_later.test.ts`) fails even alone: "half An hour from now" gives 13:14 instead of 12:44, right after "half an hour from now" worked.
 +
-+O resultado depende do que foi analisado antes no mesmo processo, então há estado compartilhado.
++The result depends on what was parsed earlier in the same process, so there is shared state.
 +
-+## Causa raiz
++## Root cause
 +
-+`parseDuration` em `src/locales/en/constants.ts` ganhou um cache (`parsedDurationCache`, chave = texto em minúsculas) que devolve **o mesmo objeto** `Duration` a cada chamada.
++`parseDuration` in `src/locales/en/constants.ts` gained a cache (`parsedDurationCache`, key = lowercased text) that returns **the same `Duration` object** on every call.
 +
-+Esse objeto é passado para `addDuration` (`src/calculation/duration.ts`) via `ParsingComponents.createRelativeFromReference`, e `addDuration` **muta** o objeto recebido: para valores fracionários ele soma o resto na unidade menor (`{quarter: 0.5}` ganha `month: 1.5`, `{hour: 0.5}` ganha `minute: 30`). Na segunda análise do mesmo texto, o objeto do cache já vem com essas chaves somadas e o resto é somado de novo: meio trimestre vira 1,5 + 1,5 meses, meia hora vira 30 + 30 minutos.
++That object is passed to `addDuration` (`src/calculation/duration.ts`) via `ParsingComponents.createRelativeFromReference`, and `addDuration` **mutates** the object it receives: for fractional values it adds the remainder to the smaller unit (`{quarter: 0.5}` gains `month: 1.5`, `{hour: 0.5}` gains `minute: 30`). On the second parse of the same text, the cached object already carries those added keys and the remainder is added again: half a quarter becomes 1.5 + 1.5 months, half an hour becomes 30 + 30 minutes.
 +
-+Por isso só falham expressões fracionárias analisadas mais de uma vez no mesmo arquivo de teste (o jest isola módulos por arquivo). "Strict mode" passa sozinho porque, isolado, é a primeira vez que "in half a quarter" é analisado.
++That is why only fractional expressions parsed more than once in the same test file fail (jest isolates modules per file). "Strict mode" passes alone because, in isolation, it is the first time "in half a quarter" is parsed.
 +
-+## Correção
++## Fix
 +
-+O cache passa a guardar uma cópia e a devolver uma cópia (`{ ...cached }`), de modo que nenhum chamador recebe a instância compartilhada.
++The cache now stores a copy and returns a copy (`{ ...cached }`), so no caller receives the shared instance.
 +
-+Não corrigi tornando `addDuration` imutável: `createRelativeFromReference` depende das chaves que `addDuration` acrescenta (ex.: `"hour" in duration` para "in half a day"), e mudar isso altera o resultado de outros testes (`Test - The normal within expression`).
++I did not fix it by making `addDuration` immutable: `createRelativeFromReference` depends on the keys `addDuration` adds (e.g. `"hour" in duration` for "in half a day"), and changing that alters the result of other tests (`Test - The normal within expression`).
 +
-+## Verificação
++## Verification
 +
-+Suíte inteira (`npx jest`) passa, incluindo os dois testes, sem nenhuma alteração nos testes.
++The whole suite (`npx jest`) passes, including the two tests, with no change to the tests.
 diff --git a/src/locales/en/constants.ts b/src/locales/en/constants.ts
 index 7bd5271..2a5c646 100644
 --- a/src/locales/en/constants.ts

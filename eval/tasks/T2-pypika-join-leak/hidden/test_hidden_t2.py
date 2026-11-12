@@ -1,4 +1,4 @@
-"""Testes ocultos do T2: joins não podem vazar entre queries derivadas da mesma base."""
+"""T2 hidden tests: joins must not leak between queries derived from the same base."""
 import unittest
 
 from pypika import MySQLQuery, PostgreSQLQuery, Query, Tables
@@ -8,7 +8,7 @@ class HiddenJoinImmutabilityTests(unittest.TestCase):
     a, b, c = Tables("a", "b", "c")
 
     def test_queries_after_join(self):
-        # Teste original do upstream (removido da suíte visível).
+        # Original upstream test (removed from the visible suite).
         query1 = Query.from_(self.a).select(self.a.foo)
         query2 = query1.join(self.b).on(self.a.foo == self.b.bar).select(self.b.buz)
 

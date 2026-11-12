@@ -1,51 +1,51 @@
-diff --git a/PLANO.md b/PLANO.md
+diff --git a/PLAN.md b/PLAN.md
 new file mode 100644
-index 0000000..7015511
+index 0000000..3abf5a8
 --- /dev/null
-+++ b/PLANO.md
++++ b/PLAN.md
 @@ -0,0 +1,42 @@
-+# Plano: suporte a CREATE VIEW no pypika
++# Plan: CREATE VIEW support in pypika
 +
-+## Como o projeto faz DDL hoje
++## How the project does DDL today
 +
-+- `pypika/queries.py`: `Query` é a fábrica (métodos de classe `create_table`, `create_index`, `drop_*`), e cada comando tem um builder próprio (`CreateQueryBuilder`, `CreateIndexBuilder`, `DropQueryBuilder`).
-+- Os builders são imutáveis via decorador `@builder` (`pypika/utils.py`), que faz `copy.copy(self)` antes de cada método. A cópia é rasa: listas precisam ser recriadas, não modificadas com `append`.
-+- As aspas vêm de `QUOTE_CHAR`/`SECONDARY_QUOTE_CHAR` do builder, passadas como kwargs para `get_sql` via `_set_kwargs_defaults`.
-+- Dialetos (`pypika/dialects.py`) sobrescrevem os métodos de fábrica de `Query` para devolver subclasses com outras aspas (ex.: `MySQLQuery.create_table` -> `MySQLCreateQueryBuilder` com crase).
++- `pypika/queries.py`: `Query` is the factory (class methods `create_table`, `create_index`, `drop_*`), and each command has its own builder (`CreateQueryBuilder`, `CreateIndexBuilder`, `DropQueryBuilder`).
++- The builders are immutable via the `@builder` decorator (`pypika/utils.py`), which does `copy.copy(self)` before each method. The copy is shallow: lists must be recreated, not modified with `append`.
++- Quotes come from the builder's `QUOTE_CHAR`/`SECONDARY_QUOTE_CHAR`, passed as kwargs to `get_sql` via `_set_kwargs_defaults`.
++- Dialects (`pypika/dialects.py`) override the `Query` factory methods to return subclasses with other quotes (e.g. `MySQLQuery.create_table` -> `MySQLCreateQueryBuilder` with backticks).
 +
-+## Mudanças
++## Changes
 +
 +1. `pypika/queries.py`
-+   - Nova classe `CreateViewBuilder` (ao lado de `CreateQueryBuilder`), com estado `_view`, `_columns`, `_as_select`, `_or_replace`, `_temporary`, `_materialized`, `_if_not_exists`, `dialect`.
-+   - Métodos `@builder`: `create_view`, `columns`, `as_select`, `or_replace`, `temporary`, `if_not_exists`.
-+   - `get_sql` monta `CREATE [OR REPLACE] [TEMPORARY|MATERIALIZED] VIEW [IF NOT EXISTS] nome [(colunas)] AS consulta`. Sem `as_select` devolve `""`, como o `create_table`.
-+   - Novo `Query.create_view(view)`.
++   - New class `CreateViewBuilder` (next to `CreateQueryBuilder`), with state `_view`, `_columns`, `_as_select`, `_or_replace`, `_temporary`, `_materialized`, `_if_not_exists`, `dialect`.
++   - `@builder` methods: `create_view`, `columns`, `as_select`, `or_replace`, `temporary`, `if_not_exists`.
++   - `get_sql` builds `CREATE [OR REPLACE] [TEMPORARY|MATERIALIZED] VIEW [IF NOT EXISTS] name [(columns)] AS query`. Without `as_select` it returns `""`, like `create_table`.
++   - New `Query.create_view(view)`.
 +2. `pypika/dialects.py`
-+   - `MySQLQuery.create_view` -> `MySQLCreateViewBuilder` (`QUOTE_CHAR = "`"`, dialeto MySQL).
-+   - `PostgreSQLQuery.create_view` -> `PostgreSQLCreateViewBuilder`, único com `materialized()`.
-+3. Testes em `pypika/tests/test_create_view.py`. Documentação em `README.rst` (seção "Creating Views").
++   - `MySQLQuery.create_view` -> `MySQLCreateViewBuilder` (`QUOTE_CHAR = "`"`, MySQL dialect).
++   - `PostgreSQLQuery.create_view` -> `PostgreSQLCreateViewBuilder`, the only one with `materialized()`.
++3. Tests in `pypika/tests/test_create_view.py`. Documentation in `README.rst` (section "Creating Views").
 +
-+## Decisões e validações
++## Decisions and validations
 +
-+- `view` aceita `str` ou `Table`; com `Table` o schema sai qualificado (`"s"."v"`), reaproveitando `Table.get_sql`.
-+- `as_select` aceita `QueryBuilder` ou `_SetOperation` (UNION); outro tipo -> `TypeError`.
-+- Conflitos levantam `QueryException` na chamada que cria o conflito: `or_replace` + `if_not_exists`; `materialized` + `or_replace`; `materialized` + `temporary`.
-+- A consulta interna é renderizada com `get_sql()` sem repassar kwargs, para sair exatamente como `str(query)`. Repassar `dialect`/`quote_char` do builder da view poderia trocar aspas ou o escape de barras invertidas do MySQL.
-+- `columns` cria uma lista nova a cada chamada, para que cópias do `@builder` não compartilhem estado.
++- `view` accepts `str` or `Table`; with a `Table` the schema comes out qualified (`"s"."v"`), reusing `Table.get_sql`.
++- `as_select` accepts `QueryBuilder` or `_SetOperation` (UNION); any other type -> `TypeError`.
++- Conflicts raise `QueryException` in the call that creates the conflict: `or_replace` + `if_not_exists`; `materialized` + `or_replace`; `materialized` + `temporary`.
++- The inner query is rendered with `get_sql()` without passing kwargs, so it comes out exactly as `str(query)`. Passing the view builder's `dialect`/`quote_char` could change the quotes or MySQL's backslash escaping.
++- `columns` creates a new list on each call, so `@builder` copies do not share state.
 +
-+## Riscos
++## Risks
 +
-+- Cópia rasa do `@builder` compartilhando listas (coberto por teste de imutabilidade).
-+- Divergência de aspas entre o nome da view e a consulta quando se mistura dialetos; documentado: use o mesmo dialeto nos dois.
-+- Nenhuma mudança em código existente além de novos métodos; a suíte inteira deve continuar passando.
++- `@builder` shallow copy sharing lists (covered by an immutability test).
++- Quote mismatch between the view name and the query when dialects are mixed; documented: use the same dialect for both.
++- No change to existing code besides new methods; the whole suite must keep passing.
 +
-+## Testes
++## Tests
 +
-+- Um teste por modificador e pela ordem das palavras-chave combinadas.
-+- Erros: `TypeError` em `as_select`, `QueryException` nos conflitos, `AttributeError` para `materialized()` fora do PostgreSQL.
-+- Imutabilidade (o builder base não muda).
-+- MySQL (crase) e PostgreSQL (materializada).
-+- Rodar `.venv/bin/python -m pytest` completo no fim.
++- One test per modifier and for the order of combined keywords.
++- Errors: `TypeError` in `as_select`, `QueryException` on conflicts, `AttributeError` for `materialized()` outside PostgreSQL.
++- Immutability (the base builder does not change).
++- MySQL (backticks) and PostgreSQL (materialized).
++- Run the full `.venv/bin/python -m pytest` at the end.
 diff --git a/README.rst b/README.rst
 index 1ed3ba2..90349e5 100644
 --- a/README.rst

@@ -23,5 +23,5 @@
   "jest_config": {
     "preset": "ts-jest"
   },
-  "notes": "jest roda com --config igual ao 'jest' do package.json fixado (só o preset ts-jest; 'verbose' é irrelevante), node_modules copiado do ambiente limpo (eval/.cache/envs) e --cacheDirectory novo."
+  "notes": "jest runs with --config equal to the 'jest' key of the pinned package.json (only the ts-jest preset; 'verbose' is irrelevant), node_modules copied from the clean environment (eval/.cache/envs) and a fresh --cacheDirectory."
 }

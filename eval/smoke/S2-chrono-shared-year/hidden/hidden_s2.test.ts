@@ -1,4 +1,4 @@
-// Testes ocultos do S2: YEAR_PATTERN/parseYear de pt e es centralizados em src/calculation/years.ts.
+// S2 hidden tests: YEAR_PATTERN/parseYear of pt and es centralized in src/calculation/years.ts.
 import * as fs from "fs";
 import * as path from "path";
 import * as chrono from "../src";

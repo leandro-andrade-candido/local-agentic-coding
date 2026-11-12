@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Amostra o uso de RAM e VRAM em intervalos fixos até receber SIGTERM/SIGINT.
+"""Samples RAM and VRAM usage at fixed intervals until it receives SIGTERM/SIGINT.
 
-Uso: python3 -I sampler.py --out resumo.json --tsv serie.tsv [--interval 3]
+Usage: python3 -I sampler.py --out summary.json --tsv series.tsv [--interval 3]
 
-- RAM usada = MemTotal - MemAvailable (/proc/meminfo), em MiB; também swap usada.
-- VRAM usada = nvidia-smi --query-gpu=memory.used (soma das GPUs), em MiB. Só leitura;
-  se o nvidia-smi não existir ou falhar, os campos de VRAM ficam null.
-- RSS do processo llama-server (se estiver rodando), em MiB.
-O resumo traz o valor da primeira amostra (linha de base) e o pico.
+- Used RAM = MemTotal - MemAvailable (/proc/meminfo), in MiB; also used swap.
+- Used VRAM = nvidia-smi --query-gpu=memory.used (sum over GPUs), in MiB. Read-only;
+  if nvidia-smi is missing or fails, the VRAM fields stay null.
+- RSS of the llama-server process (if running), in MiB.
+The summary has the first sample's value (baseline) and the peak.
 """
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ def main() -> int:
             tsv.write(f"{time.time() - t0:.1f}\t{ram:.0f}\t{swap:.0f}\t{'' if not v else f'{v[0]:.0f}'}\t"
                       f"{'' if rss is None else f'{rss:.0f}'}\n")
             tsv.flush()
-        # Dorme em fatias curtas para responder rápido ao SIGTERM.
+        # Sleeps in short slices to respond quickly to SIGTERM.
         deadline = time.time() + a.interval
         while not STOP and time.time() < deadline:
             time.sleep(0.2)

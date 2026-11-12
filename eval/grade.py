@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Registra a nota do gabarito (T1, T6) num result.json e recalcula o sucesso.
+"""Records the rubric grade (T1, T5, T6) in a result.json and recomputes success.
 
-Uso:
-    python3 -I eval/grade.py <result.json> --score N --by NOME [--notes TEXTO] [--interventions K]
+Usage:
+    python3 -I eval/grade.py <result.json> --score N --by NAME [--notes TEXT] [--interventions K]
 
-Sucesso = verificações automáticas obrigatórias passaram E nota >= threshold do gabarito.
---interventions registra intervenções humanas feitas durante a execução (padrão: mantém).
+Success = required automatic checks passed AND grade >= the rubric threshold.
+--interventions records human interventions made during the run (default: keep the current value).
 """
 from __future__ import annotations
 
@@ -30,11 +30,11 @@ def main() -> int:
     if a.score is not None:
         rub = r.get("rubric")
         if not rub:
-            ap.error("este result.json não tem gabarito (rubric)")
+            ap.error("this result.json has no rubric")
         if not a.by:
-            ap.error("--by é obrigatório junto com --score")
+            ap.error("--by is required with --score")
         if not 0 <= a.score <= rub.get("max", 10):
-            ap.error(f"nota fora de 0..{rub.get('max', 10)}")
+            ap.error(f"grade outside 0..{rub.get('max', 10)}")
         rub.update(score=a.score, graded_by=a.by, notes=a.notes,
                    graded_at=datetime.datetime.now().astimezone().isoformat(timespec="seconds"))
         if r.get("auto_checks_pass") is True:

@@ -1,4 +1,4 @@
-"""Testes ocultos do T6: CREATE VIEW conforme a especificação do task.md."""
+"""T6 hidden tests: CREATE VIEW as specified in task.md."""
 import unittest
 
 from pypika import Field, MySQLQuery, PostgreSQLQuery, Query, Table
@@ -121,9 +121,9 @@ class HiddenCreateViewImmutabilityTests(unittest.TestCase):
         self.assertEqual('CREATE VIEW "v" AS SELECT 1', str(base.as_select(Query.select(1))))
 
     def test_columns_branches_are_independent(self):
-        # Ramos a partir de uma base SEM colunas: vale tanto para columns() que acumula quanto
-        # para o que substitui (a especificação não define), e ainda pega lista compartilhada
-        # entre cópias rasas do @builder (b2 sairia com "a","b","c").
+        # Branches from a base WITHOUT columns: works both for a columns() that accumulates and
+        # for one that replaces (the specification does not say), and still catches a list shared
+        # between shallow @builder copies (b2 would come out with "a","b","c").
         base = Query.create_view("v")
         b1 = base.columns("a", "b").as_select(Query.select(1))
         b2 = base.columns("c").as_select(Query.select(1))

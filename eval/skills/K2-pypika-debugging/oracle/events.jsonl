@@ -1,5 +1,5 @@
-{"type": "agent_start", "note": "transcript simulado (formato do Pi --mode json) para o fake-oracle e o validate.sh"}
-{"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "Vou seguir um processo de depuração sistemático."}, {"type": "toolCall", "id": "c1", "name": "read", "arguments": {"path": "/opt/skills/base/systematic-debugging/SKILL.md"}}], "usage": {"input": 900, "output": 40}}}
+{"type": "agent_start", "note": "simulated transcript (Pi --mode json format) for fake-oracle and validate.sh"}
+{"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "I'll follow a systematic debugging process."}, {"type": "toolCall", "id": "c1", "name": "read", "arguments": {"path": "/opt/skills/base/systematic-debugging/SKILL.md"}}], "usage": {"input": 900, "output": 40}}}
 {"type": "tool_execution_end", "toolCallId": "c1", "toolName": "read", "isError": false, "result": {"content": [{"type": "text", "text": "---\nname: systematic-debugging\ndescription: ...\n---"}]}}
 {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "toolCall", "id": "c2", "name": "bash", "arguments": {"command": ".venv/bin/python -m pytest -q pypika/tests/test_criterions.py -k between"}}], "usage": {"input": 1200, "output": 30}}}
 {"type": "turn_end"}
