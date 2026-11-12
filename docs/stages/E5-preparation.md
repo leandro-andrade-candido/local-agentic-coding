@@ -1,41 +1,43 @@
-# E5: preparação do serviço do llama-server
+> Translated from the Portuguese original (commit 30666ad).
 
-Preparado em 29/10/2026, enquanto a E4 e a verificação dela usavam a porta 9931 e a GPU. Nada foi instalado nem iniciado: só a chave foi criada e o `--dry-run` e o pré-voo foram executados. Requisitos atendidos: [`E5-requirements.md`](E5-requirements.md), mais o pedido da E7 de manter desligadas as rotas perigosas.
+# E5: preparing the llama-server service
 
-## Divisão de responsabilidades
+Prepared on Oct 29, 2026, while E4 and its verification were using port 9931 and the GPU. Nothing was installed or started: only the key was created, and the `--dry-run` and the preflight were run. Requirements met: [`E5-requirements.md`](E5-requirements.md), plus the E7 request to keep the dangerous routes disabled.
 
-| Arquivo | Dono | Conteúdo |
+## Division of responsibilities
+
+| File | Owner | Content |
 |---|---|---|
-| `runtime/llama-server.args` | E4 | desempenho: contexto, offload, lotes, threads, cache, `--metrics` e amostragem `--temp/--top-p/--top-k` |
+| `runtime/llama-server.args` | E4 | performance: context, offload, batches, threads, cache, `--metrics` and the `--temp/--top-p/--top-k` sampling |
 | `runtime/llama-server.env` | E4 | `GGML_OP_OFFLOAD_MIN_BATCH=1024` |
-| `runtime/llama-server.policy.args` | E5 | segurança e padrões: host, porta, chave, CORS, `--no-agent`, `--offline`, `--min-p 0`, `--presence-penalty 0`, `-n 32768` |
-| `runtime/llama-server-args.py` | E5 | monta a linha final e aplica as regras abaixo |
-| `runtime/llama-server-start.sh` | E5 | wrapper: ambiente, conferências, pré-voo e `exec` |
-| `runtime/llama-server.service.in` | E5 | modelo da unidade `systemd --user` |
-| `runtime/common.sh` | E5 | caminhos e funções comuns (versions.env, models.tsv, PID da unidade) |
-| `scripts/llm` | E5 | comando único: chave, instalação, início/parada, saúde, teste |
-| `scripts/preflight.sh` | E5 | pré-voo (só leitura, ~0,2 s) |
+| `runtime/llama-server.policy.args` | E5 | security and defaults: host, port, key, CORS, `--no-agent`, `--offline`, `--min-p 0`, `--presence-penalty 0`, `-n 32768` |
+| `runtime/llama-server-args.py` | E5 | builds the final line and applies the rules below |
+| `runtime/llama-server-start.sh` | E5 | wrapper: environment, checks, preflight and `exec` |
+| `runtime/llama-server.service.in` | E5 | template of the `systemd --user` unit |
+| `runtime/common.sh` | E5 | common paths and functions (versions.env, models.tsv, unit PID) |
+| `scripts/llm` | E5 | single command: key, install, start/stop, health, test |
+| `scripts/preflight.sh` | E5 | preflight (read-only, ~0.2 s) |
 
-`scripts/tool_calls.py` ganhou `--api-key-file` (e usa `$LLM_API_KEY` se nenhuma chave for passada), para a chave não aparecer na linha de comando (`ps`). O `--api-key` continua aceito.
+`scripts/tool_calls.py` gained `--api-key-file` (and uses `$LLM_API_KEY` if no key is passed), so the key does not appear on the command line (`ps`). `--api-key` is still accepted.
 
-## Como a linha de comando é montada
+## How the command line is built
 
-`-m <modelo>` + perfil (E4) + política (E5), nesta ordem.
+`-m <model>` + profile (E4) + policy (E5), in this order.
 
-- **Modelo:** o nome na API é sempre o `-a` do perfil (`qwen3.6-35b`). O item do `models.tsv` a carregar vem de `LLM_SERVER_MODEL` (só no início à mão), senão da escolha gravada por `scripts/llm model <alias>` em `~/.config/local-agentic/model` (vale também para o serviço), senão do próprio `-a`. Assim, trocar Q4 por Q6 não muda nada nos agentes (adicionado em 03/11). O arquivo e o tamanho vêm do `models.tsv`, e a pasta, do `MODELS_DIR` do `versions.env`. Se o arquivo faltar ou o tamanho não bater, o wrapper recusa iniciar. O SHA-256 não é recalculado (22 GB); quem confere o hash é o `scripts/fetch-model.sh`.
-- **Binário:** `$LLAMA_CPP_PREFIX/$LLAMA_CPP_BUILD/llama-server`, com o marcador `.complete`. Usa o build do `versions.env`, não o link `current`.
-- **Sobreposição:** no b11982 vale a última ocorrência de cada flag (`common/arg.cpp`), e cada repetição gera o aviso `DEPRECATED: argument specified multiple times`. O montador agrupa os aliases pela ajuda do próprio binário (`-n` = `--predict` = `--n-predict`; `_` vira `-`, como no llama.cpp). Quando uma flag está nos dois arquivos, **vence a política**: a do perfil sai da linha e, se o valor for diferente, fica uma nota no log. Com os arquivos atuais não há nenhuma flag nos dois. A política traz só o que falta no perfil.
-- **Recusas** (código 2, o serviço não sobe):
-  - flag desconhecida para o build, ou repetida no mesmo arquivo;
-  - flag proibida, no perfil ou na política (abaixo);
-  - flag de segurança no perfil (host, porta, chave, CORS, `--no-agent`, `--offline`, `--ui`, SSL);
-  - `--host` fora do loopback;
-  - `--cors-origins *` ou uma lista de origens;
-  - chave ausente, legível por outros usuários, guardada dentro do repositório ou com espaço nas pontas;
-  - linha final sem `--metrics`, `--temp`, `--top-p`, `--top-k`, `--min-p`, `--presence-penalty` ou `-n`: estas podem vir do perfil ou da política, mas não podem faltar.
-- **Ambiente:** o wrapper tira do ambiente `LLAMA_*`, `GGML_*`, `HF_TOKEN` e `MTMD_BACKEND_DEVICE`, porque o llama-server lê `LLAMA_ARG_*` como flags e a política não pode ser contornada por fora. Depois carrega `runtime/llama-server.env`, recusando nele qualquer `LLAMA_*`. Valores `${...}` nos arquivos só aceitam `LLAMA_SERVER_HOST`, `LLAMA_SERVER_PORT` e `LLM_API_KEY_FILE`.
+- **Model:** the name in the API is always the profile's `-a` (`qwen3.6-35b`). The `models.tsv` entry to load comes from `LLM_SERVER_MODEL` (only for a manual start), otherwise from the choice saved by `scripts/llm model <alias>` in `~/.config/local-agentic/model` (which also applies to the service), otherwise from the `-a` itself. This way, switching Q4 for Q6 changes nothing for the agents (added on Nov 3). The file and size come from `models.tsv`, and the folder from `MODELS_DIR` in `versions.env`. If the file is missing or the size does not match, the wrapper refuses to start. The SHA-256 is not recomputed (22 GB); `scripts/fetch-model.sh` is what checks the hash.
+- **Binary:** `$LLAMA_CPP_PREFIX/$LLAMA_CPP_BUILD/llama-server`, with the `.complete` marker. It uses the build from `versions.env`, not the `current` link.
+- **Overlap:** in b11982 the last occurrence of each flag wins (`common/arg.cpp`), and each repetition produces the warning `DEPRECATED: argument specified multiple times`. The builder groups the aliases using the binary's own help (`-n` = `--predict` = `--n-predict`; `_` becomes `-`, as in llama.cpp). When a flag is in both files, **the policy wins**: the profile's one is removed from the line and, if the value differs, a note is left in the log. With the current files there is no flag in both. The policy brings only what the profile lacks.
+- **Refusals** (code 2, the service does not come up):
+  - a flag unknown to the build, or repeated in the same file;
+  - a forbidden flag, in the profile or in the policy (below);
+  - a security flag in the profile (host, port, key, CORS, `--no-agent`, `--offline`, `--ui`, SSL);
+  - `--host` outside loopback;
+  - `--cors-origins *` or a list of origins;
+  - a key that is missing, readable by other users, stored inside the repository, or with whitespace at the ends;
+  - a final line without `--metrics`, `--temp`, `--top-p`, `--top-k`, `--min-p`, `--presence-penalty` or `-n`: these may come from the profile or the policy, but cannot be missing.
+- **Environment:** the wrapper removes `LLAMA_*`, `GGML_*`, `HF_TOKEN` and `MTMD_BACKEND_DEVICE` from the environment, because llama-server reads `LLAMA_ARG_*` as flags and the policy cannot be bypassed from outside. It then loads `runtime/llama-server.env`, refusing any `LLAMA_*` in it. `${...}` values in the files only accept `LLAMA_SERVER_HOST`, `LLAMA_SERVER_PORT` and `LLM_API_KEY_FILE`.
 
-### Linha final (`scripts/llm dry-run`, 29/10, perfil final da E4)
+### Final line (`scripts/llm dry-run`, Oct 29, final E4 profile)
 
 ```
 GGML_OP_OFFLOAD_MIN_BATCH=1024 ~/.local/opt/llama.cpp/b11982/llama-server \
@@ -48,160 +50,160 @@ GGML_OP_OFFLOAD_MIN_BATCH=1024 ~/.local/opt/llama.cpp/b11982/llama-server \
   --min-p 0 --presence-penalty 0 -n 32768
 ```
 
-## Segurança (conferido no código do b11982, commit `8a199ad`)
+## Security (checked in the b11982 code, commit `8a199ad`)
 
-- **Chave.** `--api-key-file` lê uma chave por linha (linhas com `#` são comentário). O servidor aceita `Authorization: Bearer <chave>` (OpenAI) ou `x-api-key` (Anthropic) e compara byte a byte. Só `/health`, `/v1/health` e os arquivos da interface web são públicos. **`/metrics`, `/props`, `/slots` e `/v1/models` exigem a chave** (`server-http.cpp`).
-- **Arquivo da chave.** `~/.config/local-agentic/llm-api-key`, modo 0600, pasta 0700, uma linha (`sk-llama-` + 64 hex). É criado por `scripts/llm key`, que nunca imprime a chave. O wrapper e a unidade só conhecem o caminho; na linha de comando aparece `--api-key-file <caminho>`.
-- **CORS.** `--cors-origins` vai literal no `Access-Control-Allow-Origin`: a "lista separada por vírgulas" da ajuda não é tratada. Por isso a política usa uma origem só, a do próprio servidor. O valor especial `localhost` aceitaria qualquer porta de localhost. Com `--no-cors-credentials`, o preflight responde `Allow-Credentials: false`. A barreira principal é a chave: um navegador não consegue pôr `Authorization` em requisição simples.
-- **Rotas desligadas** (pedido da E7: o encaminhador do container expõe todas as rotas aos agentes). Todas já vêm desligadas no b11982. A política acrescenta `--no-agent`, que no código esvazia `--tools` e desliga o proxy CORS. O montador recusa:
+- **Key.** `--api-key-file` reads one key per line (lines with `#` are comments). The server accepts `Authorization: Bearer <key>` (OpenAI) or `x-api-key` (Anthropic) and compares byte by byte. Only `/health`, `/v1/health` and the web interface files are public. **`/metrics`, `/props`, `/slots` and `/v1/models` require the key** (`server-http.cpp`).
+- **Key file.** `~/.config/local-agentic/llm-api-key`, mode 0600, folder 0700, one line (`sk-llama-` + 64 hex). It is created by `scripts/llm key`, which never prints the key. The wrapper and the unit only know the path; the command line shows `--api-key-file <path>`.
+- **CORS.** `--cors-origins` goes literally into `Access-Control-Allow-Origin`: the "comma-separated list" in the help is not handled. For this reason the policy uses a single origin, the server's own. The special value `localhost` would accept any localhost port. With `--no-cors-credentials`, the preflight answers `Allow-Credentials: false`. The main barrier is the key: a browser cannot put `Authorization` on a simple request.
+- **Disabled routes** (E7 request: the container's forwarder exposes all routes to the agents). All are already disabled in b11982. The policy adds `--no-agent`, which in the code empties `--tools` and turns off the CORS proxy. The builder refuses:
 
-  | Flag | Rota ou efeito |
+  | Flag | Route or effect |
   |---|---|
-  | `--props` | `POST /props` responde 501 sem ela |
-  | `--slot-save-path` | `POST /slots/<id>?action=save\|restore` responde 501 sem ela |
-  | `-ag/--agent`, `--tools`, `--tools-runtime`, `--mcp-servers-*` | ferramentas embutidas (`exec_shell_command`, `write_file`…) e MCP; `/tools` responde 403 |
-  | `--ui-mcp-proxy` | `/cors-proxy` responde 403 |
-  | `--media-path`, `--path` | leitura de arquivos locais e servidor de arquivos estáticos |
-  | `--connect` | túnel peer-to-peer para fora da máquina |
-  | `--log-prompts-dir` | prompts gravados em disco |
-  | `--api-key` | chave visível no `ps` e no git |
-  | `-hf`, `-mu`, `-dr`, `--models-dir`, `--models-preset`, presets `--fim-*` etc. | downloads e modo roteador |
-  | `--cors-credentials`, `--reuse-port` | credenciais em CORS; outro processo na mesma porta |
+  | `--props` | `POST /props` answers 501 without it |
+  | `--slot-save-path` | `POST /slots/<id>?action=save\|restore` answers 501 without it |
+  | `-ag/--agent`, `--tools`, `--tools-runtime`, `--mcp-servers-*` | built-in tools (`exec_shell_command`, `write_file`…) and MCP; `/tools` answers 403 |
+  | `--ui-mcp-proxy` | `/cors-proxy` answers 403 |
+  | `--media-path`, `--path` | reading local files and a static file server |
+  | `--connect` | peer-to-peer tunnel out of the machine |
+  | `--log-prompts-dir` | prompts written to disk |
+  | `--api-key` | key visible in `ps` and in git |
+  | `-hf`, `-mu`, `-dr`, `--models-dir`, `--models-preset`, `--fim-*` presets, etc. | downloads and router mode |
+  | `--cors-credentials`, `--reuse-port` | credentials in CORS; another process on the same port |
 
-  `GET /slots` (monitoramento, sem escrita) continua ligado.
-- **`-n 32768`** é só o padrão. No b11982, o `max_tokens` do pedido vence e não é limitado pelo `-n` (`server-context.cpp`, "the per-request limit takes priority").
-- **Interface web** continua ligada em `http://127.0.0.1:9931`: carrega sem chave e pede a chave para conversar. Para desligar, `--no-ui` na política.
+  `GET /slots` (monitoring, no writes) stays enabled.
+- **`-n 32768`** is only the default. In b11982, the request's `max_tokens` wins and is not capped by `-n` (`server-context.cpp`, "the per-request limit takes priority").
+- **Web interface** stays enabled at `http://127.0.0.1:9931`: it loads without a key and asks for the key to chat. To turn it off, `--no-ui` in the policy.
 
-## Pré-voo (`scripts/preflight.sh`)
+## Preflight (`scripts/preflight.sh`)
 
-Só lê, nunca encerra nada, ~0,2 s. Roda em `scripts/llm start` e `restart`, no terminal, e de novo dentro da unidade, antes do `exec`. Código 0 = pode iniciar, com ou sem avisos; código 2 = bloqueio.
+Read-only, never kills anything, ~0.2 s. It runs on `scripts/llm start` and `restart`, in the terminal, and again inside the unit, before the `exec`. Code 0 = may start, with or without warnings; code 2 = blocker.
 
-| Item | Bloqueia | Avisa |
+| Item | Blocks | Warns |
 |---|---|---|
-| Binário do build e marcador `.complete` | ausente | — |
-| Modelo | ausente ou com tamanho diferente do `models.tsv` | — |
-| Argumentos (montador em modo `check`) | recusados (inclui chave ausente e flag proibida) | — |
-| Porta 9931 | ocupada por outro processo | — |
-| Outra instância do llama.cpp (`llama-server`, `llama-bench`…) | — | sempre |
-| Processos na GPU | — | do Windows (jogos, NVIDIA Broadcast) ou do WSL fora do serviço |
-| VRAM livre, com o serviço parado | — | < 7.500 MiB (sem nada na GPU: 7.910) |
-| Temperatura e redução térmica | — | ≥ 80 °C, ou qualquer `Slowdown` ativo |
-| PCIe (`nvidia-smi -q`) | — | máximo abaixo de Gen4, replays > 0, estouros do contador > 0 |
-| RAM do WSL, com o serviço parado | — | `MemAvailable` < modelo + 2 GiB (a carga pode falhar) ou < modelo + `--cache-ram` + 4 GiB |
-| Swap | — | > 1 GiB em uso |
+| Build binary and `.complete` marker | missing | — |
+| Model | missing or with a size different from `models.tsv` | — |
+| Arguments (builder in `check` mode) | refused (includes missing key and forbidden flag) | — |
+| Port 9931 | in use by another process | — |
+| Another llama.cpp instance (`llama-server`, `llama-bench`…) | — | always |
+| Processes on the GPU | — | from Windows (games, NVIDIA Broadcast) or from WSL outside the service |
+| Free VRAM, with the service stopped | — | < 7,500 MiB (with nothing on the GPU: 7,910) |
+| Temperature and thermal throttling | — | ≥ 80 °C, or any active `Slowdown` |
+| PCIe (`nvidia-smi -q`) | — | maximum below Gen4, replays > 0, counter rollovers > 0 |
+| WSL RAM, with the service stopped | — | `MemAvailable` < model + 2 GiB (loading may fail) or < model + `--cache-ram` + 4 GiB |
+| Swap | — | > 1 GiB in use |
 
-Limites mudam por `PREFLIGHT_MIN_FREE_VRAM_MIB`, `PREFLIGHT_MAX_TEMP_C` e `PREFLIGHT_MAX_SWAP_USED_MIB`. `LLM_PREFLIGHT=off` no ambiente da unidade pula o pré-voo (`systemctl --user edit llama-server`).
+Limits can be changed with `PREFLIGHT_MIN_FREE_VRAM_MIB`, `PREFLIGHT_MAX_TEMP_C` and `PREFLIGHT_MAX_SWAP_USED_MIB`. `LLM_PREFLIGHT=off` in the unit's environment skips the preflight (`systemctl --user edit llama-server`).
 
-**Como a GPU é lida.** O `nvidia-smi.exe` do Windows mostra os processos do Windows. O trabalho CUDA do WSL aparece lá como **PID 4 (System), tipo C, sem nome**, observado em 29/10 com o llama-server da E4 no ar; com a GPU ociosa, a lista fica vazia. O `nvidia-smi` do WSL (`/usr/lib/wsl/lib`) mostra os processos do Linux com PID e nome. O pré-voo cruza os dois: o PID 4 é atribuído ao WSL quando há processo do WSL na GPU, e o PID principal da unidade é reconhecido como o próprio serviço.
+**How the GPU is read.** The Windows `nvidia-smi.exe` shows the Windows processes. CUDA work from WSL appears there as **PID 4 (System), type C, unnamed**, observed on Oct 29 with the E4 llama-server up; with an idle GPU, the list is empty. The WSL `nvidia-smi` (`/usr/lib/wsl/lib`) shows the Linux processes with PID and name. The preflight cross-references the two: PID 4 is attributed to WSL when there is a WSL process on the GPU, and the unit's main PID is recognized as the service itself.
 
-Com a GPU ociosa (29/10): `0 bloqueio(s), 0 aviso(s)`, VRAM livre 7.910 MiB, PCIe Gen4 sem replays, RAM disponível 49.586 MiB. Com o servidor do verificador da E4 no ar, a porta deu bloqueio e houve 3 avisos (outra instância, VRAM livre 4.791 MiB, RAM abaixo do recomendado), e nenhum processo do Windows foi apontado.
+With an idle GPU (Oct 29): 0 blockers, 0 warnings, free VRAM 7,910 MiB, PCIe Gen4 without replays, available RAM 49,586 MiB. With the E4 verifier's server up, the port gave a blocker and there were 3 warnings (another instance, free VRAM 4,791 MiB, RAM below recommended), and no Windows process was flagged.
 
-## Unidade `systemd --user`
+## `systemd --user` unit
 
-| Item | Valor | Por quê |
+| Item | Value | Why |
 |---|---|---|
-| `Type` | `exec` | o wrapper faz `exec`, e o llama-server vira o `MainPID`: parar é sinal para o PID (resolve o `pkill` da E3) |
-| `ExecStartPost` | `scripts/llm wait-ready --timeout 600` | o início só termina com `GET /health` = 200 (modelo carregado); desiste se o processo morrer |
-| `TimeoutStartSec` | 11 min | carga de ~30 s na E4 com `-lm dio`; mmap levou ~2,5 min |
-| `Restart` | `on-failure`, 10 s crescendo até 5 min em 5 passos | sinal, saída ≠ 0, falha da espera |
-| `RestartPreventExitStatus` | 2 | recusa do wrapper (configuração, pré-voo): reiniciar não resolve |
-| `StartLimitBurst` / `IntervalSec` | 5 em 30 min | evita laço; `scripts/llm start` faz `reset-failed` |
-| `KillMode` / `KillSignal` | `mixed` / `SIGTERM` | SIGTERM só no llama-server (desligamento limpo); SIGKILL no grupo após 90 s |
+| `Type` | `exec` | the wrapper does `exec`, and llama-server becomes the `MainPID`: stopping is a signal to the PID (solves the E3 `pkill` problem) |
+| `ExecStartPost` | `scripts/llm wait-ready --timeout 600` | the start only finishes with `GET /health` = 200 (model loaded); gives up if the process dies |
+| `TimeoutStartSec` | 11 min | ~30 s load in E4 with `-lm dio`; mmap took ~2.5 min |
+| `Restart` | `on-failure`, 10 s growing up to 5 min in 5 steps | signal, exit ≠ 0, wait failure |
+| `RestartPreventExitStatus` | 2 | wrapper refusal (configuration, preflight): restarting does not help |
+| `StartLimitBurst` / `IntervalSec` | 5 in 30 min | avoids a loop; `scripts/llm start` does `reset-failed` |
+| `KillMode` / `KillSignal` | `mixed` / `SIGTERM` | SIGTERM only to llama-server (clean shutdown); SIGKILL to the group after 90 s |
 | Logs | journald, `SyslogIdentifier=llama-server` | `scripts/llm logs [-f]` |
-| Endurecimento | `NoNewPrivileges`, `UMask=0077` | `ProtectSystem`/`PrivateTmp` exigem namespaces e não foram testados com o `/dev/dxg` do WSL |
-| `[Install]` | `WantedBy=default.target` | só com `scripts/llm install --enable` |
+| Hardening | `NoNewPrivileges`, `UMask=0077` | `ProtectSystem`/`PrivateTmp` require namespaces and were not tested with the WSL `/dev/dxg` |
+| `[Install]` | `WantedBy=default.target` | only with `scripts/llm install --enable` |
 
-O `versions.env` e os arquivos de argumentos são lidos a cada início: mudou o perfil, basta `scripts/llm restart`. `scripts/llm install` de novo só é necessário se o repositório mudar de lugar ou se o modelo da unidade mudar. `LimitMEMLOCK` não foi mexido: a E4 carrega com `-lm dio` num shell com `ulimit -l` de 64 MiB, e o padrão do gerenciador do usuário é maior (6,8 GB). `systemd-analyze --user verify` na unidade gerada: sem erros.
+`versions.env` and the argument files are read at every start: if the profile changed, `scripts/llm restart` is enough. `scripts/llm install` again is only needed if the repository moves or the unit template changes. `LimitMEMLOCK` was not touched: E4 loads with `-lm dio` in a shell with `ulimit -l` of 64 MiB, and the user manager's default is larger (6.8 GB). `systemd-analyze --user verify` on the generated unit: no errors.
 
-## Comandos
+## Commands
 
 ```bash
-scripts/llm key                  # cria a chave se não existir; imprime o caminho
-scripts/llm install --dry-run    # mostra a unidade e roda systemd-analyze verify
-scripts/llm install [--enable]   # grava ~/.config/systemd/user/llama-server.service + daemon-reload
+scripts/llm key                  # creates the key if it does not exist; prints the path
+scripts/llm install --dry-run    # shows the unit and runs systemd-analyze verify
+scripts/llm install [--enable]   # writes ~/.config/systemd/user/llama-server.service + daemon-reload
 scripts/llm start | stop | restart | status
 scripts/llm logs [-f] [-n N]
-scripts/llm health               # disponibilidade, latência e política no servidor
-scripts/llm test [--reps N]      # tool_calls.py; JSON em logs/tool_calls-<data>.json
+scripts/llm health               # availability, latency and policy on the server
+scripts/llm test [--reps N]      # tool_calls.py; JSON in logs/tool_calls-<date>.json
 scripts/llm preflight
-scripts/llm dry-run              # linha de comando final, sem iniciar
-eval "$(scripts/llm env)"        # LLM_BASE_URL, LLM_MODEL, LLM_API_KEY e LOCAL_LLM_API_KEY
+scripts/llm dry-run              # final command line, without starting
+eval "$(scripts/llm env)"        # LLM_BASE_URL, LLM_MODEL, LLM_API_KEY and LOCAL_LLM_API_KEY
 ```
 
-`scripts/llm env` imprime `export LLM_API_KEY="$(cat <caminho>)"`: a chave só é lida no `eval`, e a saída do comando não a contém.
+`scripts/llm env` prints `export LLM_API_KEY="$(cat <path>)"`: the key is only read at the `eval`, and the command's output does not contain it.
 
-`scripts/llm health` confere:
+`scripts/llm health` checks:
 
-- `/health` sem chave;
-- `/v1/models` e `/metrics` com a chave;
-- um chat de 1 token, com a latência;
-- 401 sem a chave;
-- `/props` bate com a linha final (amostragem, `max_tokens`, `n_ctx`, `total_slots`, `endpoint_props=false`, `cors_proxy_enabled=false`, `endpoint_metrics=true`);
-- `POST /props` responde 501;
-- `POST /slots/0?action=<inválida>` responde 501: sem `--slot-save-path` a resposta vem antes de olhar a ação; com ela ligada, viria 400, e nada é gravado em nenhum dos dois casos;
-- `/tools` e `/cors-proxy` respondem 403;
-- CORS para outra origem é negado;
-- o servidor escuta só no loopback;
-- o log da execução atual não tem `failed to fit params`.
+- `/health` without a key;
+- `/v1/models` and `/metrics` with the key;
+- a 1-token chat, with the latency;
+- 401 without the key;
+- `/props` matches the final line (sampling, `max_tokens`, `n_ctx`, `total_slots`, `endpoint_props=false`, `cors_proxy_enabled=false`, `endpoint_metrics=true`);
+- `POST /props` answers 501;
+- `POST /slots/0?action=<invalid>` answers 501: without `--slot-save-path` the answer comes before the action is looked at; with it enabled, it would be 400, and nothing is written in either case;
+- `/tools` and `/cors-proxy` answer 403;
+- CORS for another origin is denied;
+- the server listens only on loopback;
+- the current run's log has no `failed to fit params`.
 
-O chat de 1 token ocupa o slot único: rode com os agentes parados.
+The 1-token chat occupies the single slot: run it with the agents stopped.
 
-## Instalação (quando a porta e a GPU estiverem livres)
+## Installation (when the port and the GPU are free)
 
 ```bash
 scripts/llm install --dry-run && scripts/llm install
-scripts/llm start          # pré-voo + espera o modelo carregar
+scripts/llm start          # preflight + waits for the model to load
 scripts/llm health
-scripts/llm test           # primeira execução real do tool_calls.py contra o Qwen3.6-35B
+scripts/llm test           # first real run of tool_calls.py against Qwen3.6-35B
 ```
 
-## Como desfazer
+## How to undo
 
 ```bash
 scripts/llm uninstall
-# o mesmo, à mão:
+# the same, by hand:
 scripts/llm stop; systemctl --user disable llama-server.service
 rm ~/.config/systemd/user/llama-server.service; systemctl --user daemon-reload
-# opcional: rm ~/.config/local-agentic/llm-api-key
+# optional: rm ~/.config/local-agentic/llm-api-key
 ```
 
-Trocar a chave: apague o arquivo, rode `scripts/llm key` e `scripts/llm restart`, e refaça o `eval "$(scripts/llm env)"` nos terminais dos agentes.
+To change the key: delete the file, run `scripts/llm key` and `scripts/llm restart`, and redo `eval "$(scripts/llm env)"` in the agents' terminals.
 
-## Mudanças pendentes em `agents/` e `eval/` (não aplicadas aqui)
+## Pending changes in `agents/` and `eval/` (not applied here)
 
-Sem elas, os agentes mandam a chave fictícia (401) e os retratos de `/metrics` somem sem erro, porque `/metrics` agora exige a chave.
+Without them, the agents send the dummy key (401) and the `/metrics` snapshots vanish without an error, because `/metrics` now requires the key.
 
-1. `agents/lib/common.sh`, no lugar da linha `LOCAL_LLM_API_KEY="${LOCAL_LLM_API_KEY:-sk-local-no-key}"` e do comentário acima dela:
+1. `agents/lib/common.sh`, in place of the line `LOCAL_LLM_API_KEY="${LOCAL_LLM_API_KEY:-sk-local-no-key}"` and the comment above it:
    ```bash
-   # Chave do llama-server (E5): LLM_API_KEY (no container vem do ambiente), senão o arquivo
-   # de scripts/llm key. Nunca uma chave de nuvem: ela seria enviada ao servidor local.
+   # llama-server key (E5): LLM_API_KEY (in the container it comes from the environment), otherwise
+   # the file from scripts/llm key. Never a cloud key: it would be sent to the local server.
    LLM_API_KEY_FILE="${LLM_API_KEY_FILE:-$HOME/.config/local-agentic/llm-api-key}"
    if [ -z "${LLM_API_KEY:-}" ] && [ -r "$LLM_API_KEY_FILE" ]; then
      LLM_API_KEY="$(cat "$LLM_API_KEY_FILE")"
    fi
    LOCAL_LLM_API_KEY="${LLM_API_KEY:-${LOCAL_LLM_API_KEY:-sk-local-no-key}}"
    ```
-   Os cinco agentes já leem `LOCAL_LLM_API_KEY`: Qwen Code por `envKey`, Codex por `env_key`, Pi por `apiKey`, OpenCode por `{env:...}` e Claude Code por `ANTHROPIC_AUTH_TOKEN`, que vai como Bearer.
-2. `agents/lib/common.sh`, `metrics_snapshot`, com a chave pela entrada padrão, fora do `ps`:
+   The five agents already read `LOCAL_LLM_API_KEY`: Qwen Code through `envKey`, Codex through `env_key`, Pi through `apiKey`, OpenCode through `{env:...}` and Claude Code through `ANTHROPIC_AUTH_TOKEN`, which goes as Bearer.
+2. `agents/lib/common.sh`, `metrics_snapshot`, with the key through standard input, out of `ps`:
    ```bash
    printf 'Authorization: Bearer %s\n' "$LOCAL_LLM_API_KEY" \
      | curl -fsS --max-time 5 -H @- "$LLM_BASE_URL/metrics" -o "$1" 2>/dev/null || rm -f "$1"
    ```
-3. `eval/lib/metrics.py`, `snapshot()`: montar um `urllib.request.Request(metrics_url(base))` com `Authorization: Bearer` + `os.environ.get("LLM_API_KEY") or os.environ.get("LOCAL_LLM_API_KEY")` e passá-lo ao `urlopen`.
-4. `eval/run.sh`, depois do `export LLM_MODEL=...` (linha 41): o mesmo bloco do item 1, terminando em `export LLM_API_KEY`. O `sandbox/run-in-box.sh` já repassa `LLM_*` ao container.
-5. Textos que dizem "chave fictícia, o servidor não confere": `agents/claude-local/env.sh` e `README.md`, `agents/qwen-code/README.md` e `agents/pi/README.md`.
+3. `eval/lib/metrics.py`, `snapshot()`: build a `urllib.request.Request(metrics_url(base))` with `Authorization: Bearer` + `os.environ.get("LLM_API_KEY") or os.environ.get("LOCAL_LLM_API_KEY")` and pass it to `urlopen`.
+4. `eval/run.sh`, after `export LLM_MODEL=...` (line 41): the same block as item 1, ending in `export LLM_API_KEY`. `sandbox/run-in-box.sh` already forwards `LLM_*` to the container.
+5. Texts that say "dummy key, the server does not check it": `agents/claude-local/env.sh` and `README.md`, `agents/qwen-code/README.md` and `agents/pi/README.md`.
 
-## O que verificar com o servidor no ar
+## What to verify with the server up
 
-1. `scripts/llm install` real e `scripts/llm start`: tempo até pronto e `wait-ready` vendo o `$MAINPID` dentro do `ExecStartPost`.
-2. `scripts/llm health` todo `ok`, em especial `/props` com os padrões da linha final e o log sem `failed to fit params`.
-3. `scripts/llm test`: primeira execução real, sem `RUNTIME`/`TRUNCADO`, com o JSON em `logs/`.
-4. Reinício automático: `kill -9` no `MainPID` → volta em ~10 s (`systemctl --user show -p NRestarts llama-server`).
-5. Parada limpa: `scripts/llm stop` em menos de 90 s, sem SIGKILL no journal, VRAM livre de volta a ~7.910 MiB (`scripts/llm preflight`).
-6. Pré-voo dentro da unidade: o `nvidia-smi.exe` (interop do WSL) responde a partir do systemd. No journal, não deve aparecer "nvidia-smi.exe do Windows não respondeu".
-7. Vida do serviço: com `Linger=no`, conferir se ele para ao fechar o último terminal do WSL ou no desligamento ocioso do WSL. Não ligar o linger sem decidir, pela regra da GPU dedicada.
-8. `ps -o args -p <MainPID>` mostra só o caminho da chave; `--offline` não gera erro na inicialização.
-9. Reuso de checkpoint no log numa sessão de agente com vários turnos (verificação da E5 no plano). Pode exigir o `-lv 4`, hoje comentado no perfil.
-10. Do navegador do Windows: a interface em `http://127.0.0.1:9931` carrega e pede a chave; um `fetch` de outra origem é bloqueado.
-11. Com os itens 1–4 da seção anterior aplicados: `metrics-before.prom`/`metrics.before.prom` não vazios num run do eval, e agentes sem 401.
-12. De dentro do container da E7, pelo encaminhador: `POST /props` e `POST /slots/0?action=save` recusados, `/tools` e `/cors-proxy` com 403.
+1. A real `scripts/llm install` and `scripts/llm start`: time until ready and `wait-ready` seeing `$MAINPID` inside `ExecStartPost`.
+2. `scripts/llm health` all `ok`, in particular `/props` with the defaults from the final line and the log without `failed to fit params`.
+3. `scripts/llm test`: first real run, with no `RUNTIME`/`TRUNCADO`, with the JSON in `logs/`.
+4. Automatic restart: `kill -9` on the `MainPID` → back in ~10 s (`systemctl --user show -p NRestarts llama-server`).
+5. Clean stop: `scripts/llm stop` in under 90 s, no SIGKILL in the journal, free VRAM back to ~7,910 MiB (`scripts/llm preflight`).
+6. Preflight inside the unit: `nvidia-smi.exe` (WSL interop) answers from systemd. In the journal, the warning that the Windows `nvidia-smi.exe` did not respond must not appear.
+7. Service lifetime: with `Linger=no`, check whether it stops when the last WSL terminal closes or on WSL's idle shutdown. Do not turn lingering on without deciding, per the dedicated-GPU rule.
+8. `ps -o args -p <MainPID>` shows only the key path; `--offline` does not cause an error at startup.
+9. Checkpoint reuse in the log in a multi-turn agent session (E5 verification in the plan). It may require `-lv 4`, currently commented out in the profile.
+10. From the Windows browser: the interface at `http://127.0.0.1:9931` loads and asks for the key; a `fetch` from another origin is blocked.
+11. With items 1–4 of the previous section applied: `metrics-before.prom`/`metrics.before.prom` non-empty in an eval run, and agents without 401.
+12. From inside the E7 container, through the forwarder: `POST /props` and `POST /slots/0?action=save` refused, `/tools` and `/cors-proxy` with 403.

