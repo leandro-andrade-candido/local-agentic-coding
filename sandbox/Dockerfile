@@ -1,36 +1,37 @@
-# Imagem agent-box (E7): os cinco agentes da E6 e as ferramentas das tarefas do eval.
-# Construir só com sandbox/build.sh, que monta o contexto (estes arquivos +
-# agents/versions.env) e passa UID/GID do usuário e a impressão digital das versões.
+# agent-box image (E7): the five E6 agents and the tools for the eval tasks.
+# Build only with sandbox/build.sh, which assembles the context (these files +
+# agents/versions.env) and passes the user's UID/GID and the versions fingerprint.
 #
-# Base: Ubuntu 24.04, porque o Python 3.12 do sistema fica em /usr/bin/python3.12,
-# o mesmo caminho do host. Os .venv que o eval cria no host (uv venv --python 3.12)
-# apontam para esse executável e funcionam dentro do container sem recriar nada.
+# Base: Ubuntu 24.04, because the system Python 3.12 lives at /usr/bin/python3.12,
+# the same path as on the host. The .venv directories that the eval creates on the host
+# (uv venv --python 3.12) point to that executable and work inside the container
+# without recreating anything.
 
-# ubuntu:24.04 (índice multiplataforma), publicado em 25/10/2026.
+# ubuntu:24.04 (multi-platform index), published on 2026-10-25.
 FROM ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
 
-# Usuário sem privilégios com o mesmo UID/GID do dono dos projetos no host.
-# O Claude Code recusa bypassPermissions como root.
+# Unprivileged user with the same UID/GID as the owner of the projects on the host.
+# Claude Code refuses bypassPermissions as root.
 ARG AGENT_UID=1000
 ARG AGENT_GID=1000
-# Node 24 LTS (24.22.2, 27/10/2026; a 24.22.1 foi versão de segurança).
-# sha256 do SHASUMS256.txt oficial de nodejs.org/dist/v24.22.2/.
+# Node 24 LTS (24.22.2, 2026-10-27; 24.22.1 was a security release).
+# sha256 from the official SHASUMS256.txt at nodejs.org/dist/v24.22.2/.
 ARG NODE_VERSION=24.22.2
 ARG NODE_SHA256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
-# uv 0.12.13 (a mesma do host); sha256 do .sha256 publicado no release do GitHub.
+# uv 0.12.13 (the same as the host); sha256 from the .sha256 published in the GitHub release.
 ARG UV_VERSION=0.12.13
 ARG UV_SHA256=745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd
-# Pacotes extras do apt (ex.: "build-essential" para um projeto com extensões nativas).
+# Extra apt packages (e.g. "build-essential" for a project with native extensions).
 ARG EXTRA_APT_PACKAGES=""
-# Preenchido pelo build.sh (sha das linhas *_PKG/*_VERSION/*_INTEGRITY de versions.env).
+# Filled in by build.sh (sha of the *_PKG/*_VERSION/*_INTEGRITY lines of versions.env).
 ARG AGENTS_VERSIONS_SHA=""
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-# Ferramentas: git, ripgrep, fd, jq, curl (métricas do llama-server), Python 3.12,
-# coreutils/procps. Sem sudo, sem openssh-client, sem docker.
+# Tools: git, ripgrep, fd, jq, curl (llama-server metrics), Python 3.12,
+# coreutils/procps. No sudo, no openssh-client, no docker.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -56,11 +57,11 @@ RUN set -eux; \
     rm /tmp/uv.tar.gz; \
     uv --version
 
-# Navegador para validar a entrega na interface (skill webapp-testing, perfil frontend):
-# Playwright para Python num venv próprio, com hashes conferidos, e só o Chromium
-# headless shell (o modo headless=True usa ele), com as libs e fontes do sistema.
-# `python` (que o Ubuntu não tem) chama esse venv; `python3` continua sendo o do sistema.
-# O Playwright não liga o sandbox do Chromium por padrão (o container já isola).
+# Browser to validate the delivery in the UI (webapp-testing skill, frontend profile):
+# Playwright for Python in its own venv, with verified hashes, and only the Chromium
+# headless shell (headless=True mode uses it), with the system libs and fonts.
+# `python` (which Ubuntu does not have) calls that venv; `python3` remains the system one.
+# Playwright does not enable the Chromium sandbox by default (the container already isolates).
 COPY playwright-requirements.txt /tmp/playwright-requirements.txt
 RUN set -eux; \
     uv venv -q --python /usr/bin/python3.12 /opt/playwright; \
@@ -73,20 +74,20 @@ RUN set -eux; \
     chmod -R a+rX /opt/ms-playwright; \
     rm -rf /tmp/playwright-requirements.txt /root/.cache /var/lib/apt/lists/*
 
-# Agentes nas versões fixadas, com o tarball conferido (install-agents.sh).
+# Agents at the pinned versions, with the tarball verified (install-agents.sh).
 COPY versions.env install-agents.sh /tmp/agents-build/
 RUN set -eux; \
     bash /tmp/agents-build/install-agents.sh /tmp/agents-build/versions.env /opt/agents; \
     rm -rf /tmp/agents-build /root/.npm /root/.cache
 
-# Usuário "agent". A imagem base já traz o usuário "ubuntu" com UID 1000.
+# User "agent". The base image already ships the "ubuntu" user with UID 1000.
 RUN set -eux; \
     if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi; \
     if ! getent group "${AGENT_GID}" >/dev/null; then groupadd -g "${AGENT_GID}" agent; fi; \
     useradd -m -u "${AGENT_UID}" -g "${AGENT_GID}" -s /bin/bash -d /home/agent agent
 
-# Git sem credenciais nem ajudantes; identidade genérica (o eval e o agent-shell.sh
-# sobrepõem por GIT_AUTHOR_*/GIT_COMMITTER_*).
+# Git without credentials or helpers; generic identity (the eval and agent-shell.sh
+# override it through GIT_AUTHOR_*/GIT_COMMITTER_*).
 RUN printf '%s\n' \
         '[user]' '	name = agent-box' '	email = agent-box@localhost' \
         '[init]' '	defaultBranch = main' \
@@ -94,7 +95,7 @@ RUN printf '%s\n' \
         '[advice]' '	detachedHead = false' \
         > /etc/gitconfig
 
-# Sem binários setuid/setgid (o no-new-privileges já os anula; isto é a segunda camada).
+# No setuid/setgid binaries (no-new-privileges already neutralizes them; this is the second layer).
 RUN find / -xdev -type f -perm /6000 -exec chmod a-s {} + 2>/dev/null || true
 
 COPY entrypoint.sh /usr/local/bin/agent-box-entrypoint

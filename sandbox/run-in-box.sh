@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
-# Executa um comando num container agent-box novo: a barreira real da E7.
+# Runs a command in a new agent-box container: the real barrier of E7.
 #
-# Uso: sandbox/run-in-box.sh [opções] -- <comando> [argumentos...]
+# Usage: sandbox/run-in-box.sh [options] -- <command> [arguments...]
 #
-#   --rw <caminho>        monta com leitura e escrita, no MESMO caminho absoluto (repetível)
-#   --ro <caminho>        monta só leitura, no mesmo caminho absoluto (repetível)
-#   --cwd <dir>           diretório de trabalho (padrão: o atual, se estiver montado; senão o 1º --rw)
-#   --env NOME[=VALOR]    repassa mais uma variável (repetível)
-#   --no-llm              sem o encaminhador para o llama-server
-#   --tty                 sessão interativa (docker run -it)
-#   --protect-git <repo>  .git preso no lugar, .git/config e .git/hooks só leitura, e
-#                         auditoria do .git no fim (ver sandbox/README.md, "Git")
-#   --skills-dir <dir>    skills pessoais, só leitura em /opt/skills/extra-N (repetível;
-#                         BOX_SKILLS_DIRS=dir1:dir2 faz o mesmo)
-#   --no-skills           sem skills (nem a base nem as extras)
+#   --rw <path>           mounts read-write, at the SAME absolute path (repeatable)
+#   --ro <path>           mounts read-only, at the same absolute path (repeatable)
+#   --cwd <dir>           working directory (default: the current one, if mounted; else the 1st --rw)
+#   --env NAME[=VALUE]    passes one more variable (repeatable)
+#   --no-llm              no forwarder to llama-server
+#   --tty                 interactive session (docker run -it)
+#   --protect-git <repo>  .git pinned in place, .git/config and .git/hooks read-only, and
+#                         a .git audit at the end (see sandbox/README.md, "Git")
+#   --skills-dir <dir>    personal skills, read-only at /opt/skills/extra-N (repeatable;
+#                         BOX_SKILLS_DIRS=dir1:dir2 does the same)
+#   --no-skills           no skills (neither the base nor the extra ones)
 #
-# Skills: o perfil base ($SKILLS_PREFIX/profiles/base, de scripts/fetch-skills.sh) entra
-# só leitura em /opt/skills/base; as do projeto vêm com o workdir (.agents/skills,
-# .claude/skills). AGENT_SKILLS_DIRS lista, separadas por ":", as montadas em /opt/skills.
+# Skills: the base profile ($SKILLS_PREFIX/profiles/base, from scripts/fetch-skills.sh) is
+# mounted read-only at /opt/skills/base; the project's come with the workdir (.agents/skills,
+# .claude/skills). AGENT_SKILLS_DIRS lists, separated by ":", those mounted under /opt/skills.
 #
-# Sempre: agents/ só leitura; raiz do container só leitura; HOME, /tmp e /var/tmp em
-# tmpfs; --network none (o único caminho para fora é o encaminhador do llama-server);
-# --cap-drop ALL; no-new-privileges; limites de memória, CPU e processos; sem o socket
-# do Docker, sem a HOME do host, sem nenhuma variável do host além das listadas abaixo.
+# Always: agents/ read-only; container root read-only; HOME, /tmp and /var/tmp on
+# tmpfs; --network none (the only way out is the llama-server forwarder);
+# --cap-drop ALL; no-new-privileges; memory, CPU and process limits; no Docker socket,
+# no host HOME, no host variable other than those listed below.
 #
-# Definidas pelo wrapper (valores do host são ignorados): AGENT_BOX=1 (os run.sh no perfil
-# autonomous recusam rodar sem ela), AGENT_SKILLS_DIRS, LLM_BASE_URL (reescrita para o
-# encaminhador interno), HOME, TZ (fuso do host), TERM (com --tty).
-# Repassadas do host: LLM_* (inclui LLM_API_KEY; sem ela, lida de LLM_API_KEY_FILE ou
-# ~/.config/local-agentic/llm-api-key), LOCAL_LLM_API_KEY, os ajustes AGENT_*
-# (menos AGENT_BIN/HOME/WORKDIR/LOG_DIR/GUARD), CLAUDE_LOCAL_*, CODEX_LOCAL_*, QWEN_LOCAL_*,
+# Set by the wrapper (host values are ignored): AGENT_BOX=1 (the run.sh scripts in the
+# autonomous profile refuse to run without it), AGENT_SKILLS_DIRS, LLM_BASE_URL (rewritten to
+# the internal forwarder), HOME, TZ (host time zone), TERM (with --tty).
+# Passed through from the host: LLM_* (includes LLM_API_KEY; without it, read from LLM_API_KEY_FILE or
+# ~/.config/local-agentic/llm-api-key), LOCAL_LLM_API_KEY, the AGENT_* settings
+# (except AGENT_BIN/HOME/WORKDIR/LOG_DIR/GUARD), CLAUDE_LOCAL_*, CODEX_LOCAL_*, QWEN_LOCAL_*,
 # PI_LOCAL_*, OPENCODE_LOCAL_*, FAKE_ORACLE_*, GIT_AUTHOR_*, GIT_COMMITTER_*, EVAL_TEST_TIMEOUT_S.
 #
-# Ajustes: BOX_IMAGE (agent-box:latest), BOX_MEMORY (8g), BOX_CPUS (8), BOX_PIDS (2048),
-# BOX_TMP_SIZE (4g), BOX_HOME_SIZE (1g), BOX_ALLOW_STALE=1 (aceita imagem de outras versões),
-# BOX_DRY_RUN=1 (só mostra o docker run, sem conferir a imagem nem subir nada).
+# Settings: BOX_IMAGE (agent-box:latest), BOX_MEMORY (8g), BOX_CPUS (8), BOX_PIDS (2048),
+# BOX_TMP_SIZE (4g), BOX_HOME_SIZE (1g), BOX_ALLOW_STALE=1 (accepts an image with other versions),
+# BOX_DRY_RUN=1 (only prints the docker run, without checking the image or starting anything).
 #
-# Saída: a do comando; 125 = erro do wrapper ou do Docker. SIGTERM/SIGINT removem o container.
+# Exit: that of the command; 125 = wrapper or Docker error. SIGTERM/SIGINT remove the container.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
@@ -44,71 +44,71 @@ source "$(dirname "$(readlink -f "$0")")/lib.sh"
 rw=() ro=() extra_env=() protect=() skills=() cwd="" llm=1 tty=0 use_skills=1 net="${BOX_NETWORK:-none}"
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rw) rw+=("${2:?--rw sem caminho}"); shift 2 ;;
-        --ro) ro+=("${2:?--ro sem caminho}"); shift 2 ;;
-        --cwd) cwd="${2:?--cwd sem caminho}"; shift 2 ;;
-        --env) extra_env+=("${2:?--env sem variável}"); shift 2 ;;
+        --rw) rw+=("${2:?--rw without a path}"); shift 2 ;;
+        --ro) ro+=("${2:?--ro without a path}"); shift 2 ;;
+        --cwd) cwd="${2:?--cwd without a path}"; shift 2 ;;
+        --env) extra_env+=("${2:?--env without a variable}"); shift 2 ;;
         --no-llm) llm=0; shift ;;
         --tty) tty=1; shift ;;
-        --protect-git) protect+=("${2:?--protect-git sem caminho}"); shift 2 ;;
-        --skills-dir) skills+=("${2:?--skills-dir sem caminho}"); shift 2 ;;
+        --protect-git) protect+=("${2:?--protect-git without a path}"); shift 2 ;;
+        --skills-dir) skills+=("${2:?--skills-dir without a path}"); shift 2 ;;
         --no-skills) use_skills=0; shift ;;
         --net) net=bridge; shift ;;
         --) shift; break ;;
         -h|--help) box_usage "$0"; exit 0 ;;
-        *) box_die "opção desconhecida: $1 (o comando vem depois de --)" ;;
+        *) box_die "unknown option: $1 (the command comes after --)" ;;
     esac
 done
-[ $# -gt 0 ] || box_die "falta o comando (depois de --)"
+[ $# -gt 0 ] || box_die "missing command (after --)"
 
-# Absoluto e normalizado, sem resolver links: o mesmo caminho dentro e fora.
+# Absolute and normalized, without resolving links: the same path inside and out.
 abs() { realpath -m -s -- "$1"; }
 
-# Recusa montagens que exporiam o host: raiz, HOME inteira (ou um ancestral dela),
-# diretórios de sistema e de sockets, discos do Windows, pastas de credenciais.
-check_mount() { # <caminho absoluto>
+# Refuses mounts that would expose the host: root, the whole HOME (or an ancestor of it),
+# system and socket directories, Windows drives, credential folders.
+check_mount() { # <absolute path>
     local p="$1" real x
-    [ -e "$p" ] || box_die "não existe: $p"
-    case "$p" in *,*|*\"*|*$'\n'*) box_die "caminho com vírgula, aspas ou quebra de linha não é suportado: $p" ;; esac
+    [ -e "$p" ] || box_die "does not exist: $p"
+    case "$p" in *,*|*\"*|*$'\n'*) box_die "path with a comma, quote or newline is not supported: $p" ;; esac
     real="$(realpath -m -- "$p")"
     for x in "$p" "$real"; do
         case "$x" in
             /|/tmp|/var|/var/tmp|/home|/mnt|/mnt/?|/mnt/wsl|/mnt/wsl/*|/mnt/wslg|/mnt/wslg/*|\
             /proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/var/run|/var/run/*|/etc|/etc/*|\
             /boot|/boot/*|/root|/root/*|/usr|/usr/*|/opt|/var/lib|/var/lib/*)
-                box_die "montagem recusada: $x" ;;
+                box_die "mount refused: $x" ;;
         esac
-        case "$HOME/" in "$x"/*) box_die "montagem recusada: $x contém a HOME do host" ;; esac
+        case "$HOME/" in "$x"/*) box_die "mount refused: $x contains the host HOME" ;; esac
         case "$x/" in
             "$HOME"/.ssh/*|"$HOME"/.gnupg/*|"$HOME"/.aws/*|"$HOME"/.docker/*|"$HOME"/.kube/*|\
             "$HOME"/.config/gh/*|"$HOME"/.claude/*|"$HOME"/.claude.json/*|"$HOME"/.codex/*|\
             "$HOME"/.git-credentials/*|"$HOME"/.netrc/*|"$HOME"/.npmrc/*|"$HOME"/.pypirc/*|\
             "$HOME"/.local/share/keyrings/*|"$HOME"/.password-store/*)
-                box_die "montagem recusada (credenciais): $x" ;;
+                box_die "mount refused (credentials): $x" ;;
         esac
     done
 }
 
-# .git aninhados (submódulos, repositórios embutidos) de um projeto.
+# Nested .git directories (submodules, embedded repositories) of a project.
 nested_git_list() { # <repo>
     find "$1" \( -path "$1/.git" -o -name node_modules -o -name .venv \) -prune \
         -o -name .git -print 2>/dev/null | LC_ALL=C sort
 }
 
-# --- imagem -----------------------------------------------------------------------
+# --- image -----------------------------------------------------------------------
 dry="${BOX_DRY_RUN:-0}"
 if [ "$dry" = 1 ]; then labels="$(agents_versions_hash)|$(id -u)"; else
 labels="$(docker image inspect -f \
     '{{index .Config.Labels "local-agentic.agents-versions"}}|{{index .Config.Labels "local-agentic.uid"}}' \
-    "$BOX_IMAGE" 2>/dev/null)" || box_die "imagem $BOX_IMAGE não encontrada: rode sandbox/build.sh"
+    "$BOX_IMAGE" 2>/dev/null)" || box_die "image $BOX_IMAGE not found: run sandbox/build.sh"
 fi
 IFS='|' read -r img_hash img_uid <<<"$labels"
 if [ "$img_hash" != "$(agents_versions_hash)" ] && [ "${BOX_ALLOW_STALE:-0}" != 1 ]; then
-    box_die "a imagem $BOX_IMAGE foi construída com outras versões dos agentes (agents/versions.env mudou): rode sandbox/build.sh (ou BOX_ALLOW_STALE=1)"
+    box_die "image $BOX_IMAGE was built with other agent versions (agents/versions.env changed): run sandbox/build.sh (or BOX_ALLOW_STALE=1)"
 fi
-[ "$img_uid" = "$(id -u)" ] || box_warn "imagem construída para o UID $img_uid; rodando como $(id -u)"
+[ "$img_uid" = "$(id -u)" ] || box_warn "image built for UID $img_uid; running as $(id -u)"
 
-# --- estado temporário (socket do encaminhador, auditoria do git) ------------------
+# --- temporary state (forwarder socket, git audit) ------------------
 started=0 finished=0 fwd_pid="" rt=""
 cname="agent-box-$(date +%Y%m%d-%H%M%S)-$$-$RANDOM"
 cleanup() {
@@ -125,12 +125,12 @@ trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 trap 'exit 129' HUP
-# Caminho curto: o socket unix tem limite de 107 bytes.
+# Short path: the unix socket has a 107-byte limit.
 rt_base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
 [ "${#rt_base}" -le 60 ] || rt_base=/tmp
 rt="$(mktemp -d "$rt_base/agent-box.XXXXXX")"
 
-# --- montagens --------------------------------------------------------------------
+# --- mounts --------------------------------------------------------------------
 mounts=(--mount "type=bind,source=$AGENTS_DIR,target=$AGENTS_DIR,readonly")
 rw_abs=() ro_abs=()
 for p in "${ro[@]}"; do
@@ -142,7 +142,7 @@ for p in "${rw[@]}"; do
     mounts+=(--mount "type=bind,source=$p,target=$p")
 done
 
-# Skills: base e pessoais só leitura, fora das montagens de trabalho.
+# Skills: base and personal, read-only, outside the working mounts.
 skill_dirs=()
 if [ "$use_skills" = 1 ]; then
     base="$(skills_prefix)/profiles/base"
@@ -151,14 +151,14 @@ if [ "$use_skills" = 1 ]; then
         mounts+=(--mount "type=bind,source=$base,target=/opt/skills/base,readonly")
         skill_dirs+=(/opt/skills/base)
     else
-        box_warn "perfil base de skills ausente ($base): rode scripts/fetch-skills.sh; seguindo sem ele"
+        box_warn "base skills profile missing ($base): run scripts/fetch-skills.sh; continuing without it"
     fi
     IFS=: read -r -a env_skills <<<"${BOX_SKILLS_DIRS:-}"
     n=0
     for p in "${skills[@]}" "${env_skills[@]}"; do
         [ -n "$p" ] || continue
         p="$(abs "$p")"
-        [ -d "$p" ] || box_die "--skills-dir não é diretório: $p"
+        [ -d "$p" ] || box_die "--skills-dir is not a directory: $p"
         check_mount "$p"
         n=$((n + 1))
         mounts+=(--mount "type=bind,source=$p,target=/opt/skills/extra-$n,readonly")
@@ -170,16 +170,16 @@ git_repos=()
 for r in "${protect[@]}"; do
     r="$(abs "$r")"; g="$r/.git"
     if [ -L "$g" ] || [ ! -e "$g" ]; then
-        box_warn "$r não tem diretório .git; nada a proteger"; continue
+        box_warn "$r has no .git directory; nothing to protect"; continue
     fi
     if [ -f "$g" ]; then
-        box_warn "$g é um arquivo (worktree ou submódulo): o gitdir real fica fora do container e o git não funciona lá dentro"
+        box_warn "$g is a file (worktree or submodule): the real gitdir is outside the container and git does not work inside it"
         continue
     fi
-    [ -f "$g/config" ] || box_die "$g/config não existe"
+    [ -f "$g/config" ] || box_die "$g/config does not exist"
     mkdir -p "$g/hooks"
-    # .git montado sobre si mesmo: vira ponto de montagem e não pode ser renomeado nem
-    # trocado por outro .git; config e hooks (e os config de submódulos) só leitura.
+    # .git mounted over itself: it becomes a mount point and cannot be renamed or
+    # swapped for another .git; config and hooks (and the submodule configs) read-only.
     mounts+=(--mount "type=bind,source=$g,target=$g"
              --mount "type=bind,source=$g/config,target=$g/config,readonly"
              --mount "type=bind,source=$g/hooks,target=$g/hooks,readonly")
@@ -200,10 +200,10 @@ if [ -z "$cwd" ]; then
 fi
 cwd="$(abs "$cwd")"
 
-# --- ambiente ---------------------------------------------------------------------
-# Chave do llama-server (E5): o arquivo fica fora do container; sem LLM_API_KEY no
-# ambiente, lê de LLM_API_KEY_FILE (~/.config/local-agentic/llm-api-key). Vai por nome
-# (-e LLM_API_KEY), nunca na linha de comando.
+# --- environment ---------------------------------------------------------------------
+# llama-server key (E5): the file stays outside the container; without LLM_API_KEY in the
+# environment, it is read from LLM_API_KEY_FILE (~/.config/local-agentic/llm-api-key). It goes by name
+# (-e LLM_API_KEY), never on the command line.
 if [ "$llm" = 1 ] && [ -z "${LLM_API_KEY:-}" ]; then
     kf="${LLM_API_KEY_FILE:-$HOME/.config/local-agentic/llm-api-key}"
     if [ -r "$kf" ]; then
@@ -218,21 +218,21 @@ while IFS= read -r v; do
         LLM_BASE_URL|AGENT_BOX|AGENT_SKILLS_DIRS|AGENT_BIN|AGENT_HOME|AGENT_WORKDIR|AGENT_LOG_DIR|AGENT_GUARD) ;;
         LLM_*|LOCAL_LLM_API_KEY|AGENT_*|CLAUDE_LOCAL_*|CODEX_LOCAL_*|QWEN_LOCAL_*|PI_LOCAL_*|\
         OPENCODE_LOCAL_*|FAKE_ORACLE_*|GIT_AUTHOR_*|GIT_COMMITTER_*|EVAL_TEST_TIMEOUT_S)
-            envs+=(-e "$v") ;;   # sem valor: o docker lê do ambiente (não aparece no ps)
+            envs+=(-e "$v") ;;   # no value: docker reads it from the environment (it does not show in ps)
     esac
 done < <(compgen -e)
 for e in "${extra_env[@]}"; do envs+=(-e "$e"); done
 [ "$tty" != 1 ] || envs+=(-e "TERM=${TERM:-xterm-256color}")
 
-# --- encaminhador do llama-server -------------------------------------------------
+# --- llama-server forwarder -------------------------------------------------
 if [ "$llm" = 1 ] && [ "$dry" = 1 ]; then
-    envs+=(-e "LLM_BASE_URL=<reescrita>" -e "BOX_LLM_PORT=<porta>")
-    mounts+=(--mount "type=bind,source=<socket do encaminhador>,target=/run/agent-box,readonly")
+    envs+=(-e "LLM_BASE_URL=<rewritten>" -e "BOX_LLM_PORT=<port>")
+    mounts+=(--mount "type=bind,source=<forwarder socket>,target=/run/agent-box,readonly")
 elif [ "$llm" = 1 ]; then
     base="${LLM_BASE_URL:-http://127.0.0.1:9931}"
     base="${base%/}"
     re='^http://(127\.0\.0\.1|localhost)(:([0-9]+))?(/.*)?$'
-    [[ "$base" =~ $re ]] || box_die "LLM_BASE_URL precisa ser http://127.0.0.1:<porta> (o container só alcança o llama-server local): $base"
+    [[ "$base" =~ $re ]] || box_die "LLM_BASE_URL must be http://127.0.0.1:<port> (the container only reaches the local llama-server): $base"
     port="${BASH_REMATCH[3]:-80}" path="${BASH_REMATCH[4]}"
     mkdir -m 700 "$rt/llm"
     quiet=()
@@ -242,15 +242,15 @@ elif [ "$llm" = 1 ]; then
     fwd_pid=$!
     for _ in $(seq 50); do
         [ -S "$rt/llm/llm.sock" ] && break
-        kill -0 "$fwd_pid" 2>/dev/null || box_die "o encaminhador do host não subiu"
+        kill -0 "$fwd_pid" 2>/dev/null || box_die "the host forwarder did not start"
         sleep 0.1
     done
-    [ -S "$rt/llm/llm.sock" ] || box_die "o encaminhador do host não criou o socket"
+    [ -S "$rt/llm/llm.sock" ] || box_die "the host forwarder did not create the socket"
     mounts+=(--mount "type=bind,source=$rt/llm,target=/run/agent-box,readonly")
     envs+=(-e "LLM_BASE_URL=http://127.0.0.1:$port$path" -e "BOX_LLM_PORT=$port")
 fi
 
-[ "$net" = none ] || echo "agent-box: AVISO: rede externa liberada (--network $net). O agente pode acessar a internet e enviar o que estiver montado." >&2
+[ "$net" = none ] || echo "agent-box: WARNING: external network enabled (--network $net). The agent can reach the internet and send whatever is mounted." >&2
 
 # --- container --------------------------------------------------------------------
 uid="$(id -u)" gid="$(id -g)" mem="${BOX_MEMORY:-8g}"
@@ -275,33 +275,33 @@ if [ "$dry" = 1 ]; then
 fi
 
 if [ "$tty" = 1 ]; then
-    [ -t 0 ] && [ -t 1 ] || box_die "--tty precisa de um terminal"
+    [ -t 0 ] && [ -t 1 ] || box_die "--tty needs a terminal"
 fi
 started=1
 if [ "$tty" = 1 ]; then
     set +e; "${run[@]}"; rc=$?; set -e
 else
-    # Em segundo plano para que SIGTERM (timeout do eval) chegue logo ao trap.
+    # In the background so that SIGTERM (eval timeout) reaches the trap promptly.
     "${run[@]}" </dev/null &
     set +e; wait "$!"; rc=$?; set -e
 fi
 finished=1
 
-# --- auditoria do .git (--protect-git) ----------------------------------------------
+# --- .git audit (--protect-git) ----------------------------------------------
 i=0
 for r in "${git_repos[@]}"; do
     g="$r/.git" ts="$(date +%Y%m%d%H%M%S)"
     for f in commondir config.worktree; do
         if [ -e "$g/$f" ] || [ -L "$g/$f" ]; then
-            mv -- "$g/$f" "$g/$f.agent-box-quarentena-$ts" || box_warn "não consegui renomear $g/$f"
-            box_warn "$g/$f apareceu na sessão e foi renomeado para $f.agent-box-quarentena-$ts (faria o git do host ler a configuração de outro lugar)"
+            mv -- "$g/$f" "$g/$f.agent-box-quarantine-$ts" || box_warn "could not rename $g/$f"
+            box_warn "$g/$f appeared during the session and was renamed to $f.agent-box-quarantine-$ts (it would make the host git read its configuration from elsewhere)"
         fi
     done
     new="$(LC_ALL=C comm -13 "$rt/git-before.$i" <(nested_git_list "$r") || true)"
     if [ -n "$new" ]; then
-        box_warn "repositórios git aninhados novos em $r (o git do host executaria a configuração deles ao olhar submódulos):"
+        box_warn "new nested git repositories in $r (the host git would run their configuration when looking at submodules):"
         sed 's/^/    /' <<<"$new" >&2
-        box_warn "revise antes de usar git no host, por exemplo: git -c core.fsmonitor=false -c core.hooksPath=/dev/null status --ignore-submodules=all"
+        box_warn "review before using git on the host, for example: git -c core.fsmonitor=false -c core.hooksPath=/dev/null status --ignore-submodules=all"
     fi
     i=$((i + 1))
 done

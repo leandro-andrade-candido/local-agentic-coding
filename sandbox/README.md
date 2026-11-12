@@ -1,244 +1,244 @@
-# Container agent-box (E7)
+# agent-box container (E7)
 
-Barreira real para os agentes em modo autônomo (yolo, `bypassPermissions`,
-`danger-full-access`, sem aprovações). As regras de cada agente e a guarda
-comum (`agents/lib/guard.py`) são a segunda camada. Esta pasta é a primeira.
+The real barrier for agents in autonomous mode (yolo, `bypassPermissions`,
+`danger-full-access`, no approvals). Each agent's rules and the shared guard
+(`agents/lib/guard.py`) are the second layer. This folder is the first.
 
-**Estado (29/10/2026): construída e verificada (fase 2).**
+**Status (2026-10-29): built and verified (phase 2).**
 
-| Verificação | Resultado |
+| Check | Result |
 |---|---|
-| `sandbox/build.sh` | imagem `agent-box:latest` com 2,89 GB (camada dos agentes: 1,63 GB); os 5 tarballs conferem com o `versions.env`, e o `--version` de cada um sai com 0 |
-| `sandbox/escape-tests.sh` | 150 de 150: 127 dentro do container, 2 com o llama-server real (`/health` e `/v1/models` com a chave) e 21 no host (13 de regressão do item 7: host não segue symlinks do agente; box_post e box_check não deixam o agente forjar o placar) |
-| Eval com `fake-oracle` pelo wrapper | S1 (pytest, 1360 + 3 testes) passa; S2 (jest, 753 + 3 testes) passa; S3 com `sleep:60` e `EVAL_TIMEOUT_S=5` sai com 124, `timed_out: true`, sem container, encaminhador ou pasta temporária sobrando |
-| Sandbox do Codex no container | `codex sandbox -- true` falha: `bwrap: No permissions to create a new namespace` (esperado; ver abaixo) |
-| Trava do perfil autonomous (`agents/lib/common.sh`) | liberada no container (`AGENT_BOX=1` e `/.dockerenv`), recusada no host |
+| `sandbox/build.sh` | `agent-box:latest` image of 2.89 GB (agents layer: 1.63 GB); the 5 tarballs match `versions.env`, and each one's `--version` exits 0 |
+| `sandbox/escape-tests.sh` | 150 of 150: 127 inside the container, 2 with the real llama-server (`/health` and `/v1/models` with the key) and 21 on the host (13 regression tests for item 7: the host does not follow agent symlinks; box_post and box_check do not let the agent forge the scoreboard) |
+| Eval with `fake-oracle` through the wrapper | S1 (pytest, 1360 + 3 tests) passes; S2 (jest, 753 + 3 tests) passes; S3 with `sleep:60` and `EVAL_TIMEOUT_S=5` exits with 124, `timed_out: true`, with no container, forwarder or temporary folder left behind |
+| Codex sandbox in the container | `codex sandbox -- true` fails: `bwrap: No permissions to create a new namespace` (expected; see below) |
+| Autonomous-profile lock (`agents/lib/common.sh`) | released in the container (`AGENT_BOX=1` and `/.dockerenv`), refused on the host |
 
-Também verificado: o tmpfs da HOME aceita `uid=`/`gid=`; o `/.dockerenv` existe mesmo com
-`--read-only`; o seccomp padrão do Docker 29 bloqueia `AF_VSOCK`; o binário do Windows
-(interop do WSL) não executa; o encaminhador entrega SSE evento a evento
-(0,0/0,3/0,6/0,9/1,2 s), 4 conexões de 1,5 s em 1,51 s e 4 MiB de ida e volta.
+Also verified: the HOME tmpfs accepts `uid=`/`gid=`; `/.dockerenv` exists even with
+`--read-only`; Docker 29's default seccomp blocks `AF_VSOCK`; the Windows binary
+(WSL interop) does not run; the forwarder delivers SSE event by event
+(0.0/0.3/0.6/0.9/1.2 s), 4 connections of 1.5 s in 1.51 s, and 4 MiB round trip.
 
-Ainda falta ver, com os agentes de verdade na E6, o que está em "Pendências".
+What is still to be seen, with the real agents in E6, is under "Open items".
 
-## Arquivos
+## Files
 
-| Arquivo | Função |
+| File | Role |
 |---|---|
-| `Dockerfile` | Imagem `agent-box`: Ubuntu 24.04 fixado por digest, Node 24.22.2, Python 3.12, uv 0.12.13, git, ripgrep, fd, jq, Playwright 1.64.1 com Chromium headless e os 5 agentes |
-| `install-agents.sh` | Instala os agentes no build; confere o sha512 de cada tarball contra `agents/versions.env` |
-| `build.sh` | Constrói a imagem com o UID/GID de quem roda e o rótulo das versões |
-| `run-in-box.sh` | Roda um comando num container novo, com as montagens pedidas e nada mais |
-| `llm-forward.py` | Encaminhador TCP ↔ socket unix (só biblioteca padrão): o único caminho do container para fora |
-| `entrypoint.sh` | Sobe o encaminhador interno e executa o comando |
-| `agent-shell.sh` | Sessão interativa de um agente (ou bash) com só um projeto montado |
-| `escape-tests.sh` | Testes de fuga (rodam dentro do container, com conferência no host) |
-| `lib.sh` | Funções comuns |
+| `Dockerfile` | `agent-box` image: Ubuntu 24.04 pinned by digest, Node 24.22.2, Python 3.12, uv 0.12.13, git, ripgrep, fd, jq, Playwright 1.64.1 with headless Chromium, and the 5 agents |
+| `install-agents.sh` | Installs the agents at build time; checks each tarball's sha512 against `agents/versions.env` |
+| `build.sh` | Builds the image with the UID/GID of whoever runs it and the versions label |
+| `run-in-box.sh` | Runs a command in a new container, with the requested mounts and nothing else |
+| `llm-forward.py` | TCP ↔ unix socket forwarder (standard library only): the container's only way out |
+| `entrypoint.sh` | Starts the internal forwarder and runs the command |
+| `agent-shell.sh` | Interactive session of an agent (or bash) with only one project mounted |
+| `escape-tests.sh` | Escape tests (run inside the container, with checks on the host) |
+| `lib.sh` | Shared functions |
 
-## Uso
+## Usage
 
 ```bash
-sandbox/build.sh                    # constrói agent-box:latest (2,89 GB; ~2 min com cache do apt frio)
-sandbox/escape-tests.sh             # testes de fuga; saída 0 = tudo passou
+sandbox/build.sh                    # builds agent-box:latest (2.89 GB; ~2 min with a cold apt cache)
+sandbox/escape-tests.sh             # escape tests; exit 0 = everything passed
 
-# eval: agente, captura do diff e verificações em containers (ver eval/README.md)
-EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 lote1
+# eval: agent, diff capture and checks in containers (see eval/README.md)
+EVAL_WRAPPER=sandbox/run-in-box.sh eval/run.sh qwen-code S1 batch1
 
-# sessão interativa num projeto (só ele é montado)
-sandbox/agent-shell.sh claude-local ~/projetos/copia-do-piloto
-sandbox/agent-shell.sh shell ~/projetos/copia-do-piloto     # bash no mesmo isolamento
-sandbox/agent-shell.sh --skills-dir ~/minhas-skills pi ~/projetos/x   # + skills pessoais
-AGENT_PROFILE=autonomous sandbox/agent-shell.sh qwen-code ~/projetos/x
+# interactive session in a project (only it is mounted)
+sandbox/agent-shell.sh claude-local ~/projects/pilot-copy
+sandbox/agent-shell.sh shell ~/projects/pilot-copy     # bash with the same isolation
+sandbox/agent-shell.sh --skills-dir ~/my-skills pi ~/projects/x   # + personal skills
+AGENT_PROFILE=autonomous sandbox/agent-shell.sh qwen-code ~/projects/x
 
-# qualquer comando; por exemplo, medir o preâmbulo de um agente (E6) dentro do container
-sandbox/run-in-box.sh --rw ~/projetos/x -- bash -lc 'cd ~/projetos/x && npm test'
+# any command; for example, measuring an agent's preamble (E6) inside the container
+sandbox/run-in-box.sh --rw ~/projects/x -- bash -lc 'cd ~/projects/x && npm test'
 mkdir -p ~/.cache/local-agentic/preamble/pi
 sandbox/run-in-box.sh --rw ~/.cache/local-agentic/preamble/pi -- \
     "$PWD/agents/measure-preamble.sh" pi ~/.cache/local-agentic/preamble/pi
 ```
 
-`run-in-box.sh` recusa uma imagem construída com outras versões dos agentes
-(rótulo `local-agentic.agents-versions`). Depois de mudar `agents/versions.env`,
-rode `sandbox/build.sh` de novo.
+`run-in-box.sh` refuses an image built with other agent versions
+(label `local-agentic.agents-versions`). After changing `agents/versions.env`,
+run `sandbox/build.sh` again.
 
-## Desenho
+## Design
 
 ### Container
 
-| Opção do `docker run` | Por quê |
+| `docker run` option | Why |
 |---|---|
-| `--network none` | Sem interface além de `lo`: sem internet, sem a rede do WSL, sem a ponte `docker0`, sem o Windows. Os sockets unix abstratos do host também ficam de fora, porque pertencem ao namespace de rede. |
-| Encaminhador por socket unix | O único caminho para fora. O destino é fixo (`127.0.0.1:<porta do LLM_BASE_URL>`). Ver "Rede". |
-| `--read-only` + tmpfs em `/tmp`, `/var/tmp` e `HOME` (`/home/agent`) | Nada fora das montagens persiste nem muda a imagem. A HOME é vazia a cada execução. |
-| Montagens no mesmo caminho absoluto | Os `.venv` do eval têm caminhos absolutos (shebangs, `pyvenv.cfg`), e os `run.sh` usam `pwd -P`. Os logs ficam iguais aos do host. |
-| `agents/` só leitura | Lançadores, configuração, guarda. O agente não consegue alterar a própria guarda. |
-| `--user <UID>:<GID>` do host, sem `sudo` e sem setuid | Não roda como root (o Claude Code recusa `bypassPermissions` como root), e os arquivos criados ficam com o dono certo. |
-| `--cap-drop ALL`, `--security-opt no-new-privileges` | Sem capabilities, sem ganho de privilégio por setuid. O seccomp padrão do Docker continua ligado. |
-| `--memory`/`--memory-swap` 8g, `--cpus 8`, `--pids-limit 2048`, `--oom-score-adj 500` | Um agente em loop não derruba a máquina. Sob falta de memória, o kernel mata o agente antes do llama-server. |
-| `--init`, `--rm`, nome e rótulo `local-agentic.agent-box` | Reaproveita processos órfãos e apaga o container no fim. SIGTERM, SIGINT e o timeout do eval fazem o wrapper rodar `docker rm -f`. |
-| `--runtime runc`, sem `--gpus` | Os agentes não precisam de GPU, e o `/dev/dxg` do WSL fica de fora. |
-| Ambiente por lista | O wrapper define `AGENT_BOX=1` (os `run.sh` no perfil autonomous recusam rodar sem ela), `AGENT_SKILLS_DIRS`, `LLM_BASE_URL`, `HOME` e `TZ`; valores do host para elas são ignorados. Do host passam só `LLM_*` (inclui a chave `LLM_API_KEY`), os ajustes `AGENT_*`/`*_LOCAL_*`, `GIT_AUTHOR_*`/`GIT_COMMITTER_*` e poucas outras. Nada de `SSH_AUTH_SOCK`, `GITHUB_TOKEN`, `DOCKER_HOST`, `WSL_INTEROP` ou chaves de nuvem. |
-| Skills só leitura em `/opt/skills` | O agente usa as skills, mas não altera as que outras sessões vão carregar. Ver "Skills". |
+| `--network none` | No interface besides `lo`: no internet, no WSL network, no `docker0` bridge, no Windows. The host's abstract unix sockets are also left out, because they belong to the network namespace. |
+| Forwarder over a unix socket | The only way out. The destination is fixed (`127.0.0.1:<LLM_BASE_URL port>`). See "Network". |
+| `--read-only` + tmpfs on `/tmp`, `/var/tmp` and `HOME` (`/home/agent`) | Nothing outside the mounts persists or changes the image. HOME is empty on every run. |
+| Mounts at the same absolute path | The eval's `.venv` directories have absolute paths (shebangs, `pyvenv.cfg`), and the `run.sh` scripts use `pwd -P`. Logs end up identical to the host's. |
+| `agents/` read-only | Launchers, configuration, guard. The agent cannot change its own guard. |
+| `--user <UID>:<GID>` of the host, no `sudo` and no setuid | Does not run as root (Claude Code refuses `bypassPermissions` as root), and created files get the right owner. |
+| `--cap-drop ALL`, `--security-opt no-new-privileges` | No capabilities, no privilege gain through setuid. Docker's default seccomp stays on. |
+| `--memory`/`--memory-swap` 8g, `--cpus 8`, `--pids-limit 2048`, `--oom-score-adj 500` | A looping agent does not take the machine down. Under memory pressure, the kernel kills the agent before llama-server. |
+| `--init`, `--rm`, name and label `local-agentic.agent-box` | Reaps orphan processes and deletes the container at the end. SIGTERM, SIGINT and the eval timeout make the wrapper run `docker rm -f`. |
+| `--runtime runc`, no `--gpus` | The agents do not need a GPU, and WSL's `/dev/dxg` stays out. |
+| Environment by allowlist | The wrapper sets `AGENT_BOX=1` (the `run.sh` scripts in the autonomous profile refuse to run without it), `AGENT_SKILLS_DIRS`, `LLM_BASE_URL`, `HOME` and `TZ`; host values for them are ignored. Only `LLM_*` (includes the `LLM_API_KEY` key), the `AGENT_*`/`*_LOCAL_*` settings, `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and a few others pass from the host. No `SSH_AUTH_SOCK`, `GITHUB_TOKEN`, `DOCKER_HOST`, `WSL_INTEROP` or cloud keys. |
+| Skills read-only under `/opt/skills` | The agent uses the skills but cannot change the ones other sessions will load. See "Skills". |
 
-Montagens recusadas pelo `run-in-box.sh`:
+Mounts refused by `run-in-box.sh`:
 
-- `/` e a HOME inteira, ou um ancestral dela;
-- `/tmp`, `/etc`, `/usr`, `/run`, `/var/run` (onde ficam os sockets do Docker e da sessão), `/proc`, `/sys`, `/dev`;
-- os discos do Windows (`/mnt/c`...) e `/mnt/wsl*`;
-- `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.docker`, `~/.config/gh`, `~/.claude*`, `~/.codex`, `~/.git-credentials` e afins.
+- `/` and the whole HOME, or an ancestor of it;
+- `/tmp`, `/etc`, `/usr`, `/run`, `/var/run` (where the Docker and session sockets live), `/proc`, `/sys`, `/dev`;
+- the Windows drives (`/mnt/c`...) and `/mnt/wsl*`;
+- `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.docker`, `~/.config/gh`, `~/.claude*`, `~/.codex`, `~/.git-credentials` and the like.
 
-### Rede: o encaminhador
+### Network: the forwarder
 
 ```
-agente ──HTTP──► 127.0.0.1:9931 dentro do container   (llm-forward.py box)
-                     │ socket unix /run/agent-box/llm.sock  (pasta montada só leitura)
+agent ──HTTP──► 127.0.0.1:9931 inside the container   (llm-forward.py box)
+                     │ unix socket /run/agent-box/llm.sock  (folder mounted read-only)
                      ▼
-                 llm-forward.py host  (processo do run-in-box.sh, dura o container)
+                 llm-forward.py host  (run-in-box.sh process, lasts as long as the container)
                      │ TCP
                      ▼
-                 llama-server 127.0.0.1:9931 do host
+                 llama-server 127.0.0.1:9931 on the host
 ```
 
-- O encaminhador não interpreta HTTP: copia bytes, com uma thread por sentido. Por isso streaming (SSE), keep-alive, corpos grandes e várias conexões ao mesmo tempo funcionam.
-- O fim de envio de um lado vira `shutdown` do outro. Assim, um agente que desiste de uma requisição fecha a conexão com o llama-server, e o servidor cancela a geração.
-- Dentro do container, `LLM_BASE_URL` continua `http://127.0.0.1:<porta>`, então as configurações dos agentes não mudam. O mesmo vale para o `/metrics` que os `run.sh` leem.
-- O socket é `0600`, numa pasta `0700` em `$XDG_RUNTIME_DIR`, e some no fim. O container tem o mesmo UID, então conecta. Outro usuário do host não conecta.
-- Com o llama-server parado, o encaminhador aceita a conexão e a fecha em seguida. O cliente vê "conexão encerrada", e não "conexão recusada".
+- The forwarder does not interpret HTTP: it copies bytes, with one thread per direction. That is why streaming (SSE), keep-alive, large bodies and several simultaneous connections work.
+- End of sending on one side becomes a `shutdown` on the other. So an agent that gives up on a request closes the connection to llama-server, and the server cancels the generation.
+- Inside the container, `LLM_BASE_URL` stays `http://127.0.0.1:<port>`, so the agents' configurations do not change. The same goes for the `/metrics` that the `run.sh` scripts read.
+- The socket is `0600`, in a `0700` folder under `$XDG_RUNTIME_DIR`, and goes away at the end. The container has the same UID, so it connects. Another host user does not.
+- With llama-server stopped, the forwarder accepts the connection and closes it right after. The client sees "connection closed", not "connection refused".
 
-Alternativas descartadas:
+Discarded alternatives:
 
-| Opção | Problema |
+| Option | Problem |
 |---|---|
-| Rede bridge + `host-gateway` | O llama-server escuta só em 127.0.0.1. Seria preciso abri-lo na `docker0` e filtrar com iptables (sem `sudo`), e o container ainda veria o resto do host e a internet. |
-| `--network host` | O container teria toda a rede do host: o outro serviço local na 8080, a internet e o Windows. |
-| Rede `--internal` + container de proxy | Mais peças, e o proxy ainda precisaria de um caminho até o 127.0.0.1 do host. |
-| `socat` | Não instalado, e instalar exige `sudo`. |
+| Bridge network + `host-gateway` | llama-server listens only on 127.0.0.1. It would have to be opened on `docker0` and filtered with iptables (no `sudo`), and the container would still see the rest of the host and the internet. |
+| `--network host` | The container would get the host's whole network: the other local service on 8080, the internet and Windows. |
+| `--internal` network + proxy container | More pieces, and the proxy would still need a path to the host's 127.0.0.1. |
+| `socat` | Not installed, and installing it requires `sudo`. |
 
-O que passa pelo encaminhador é **qualquer** rota do llama-server, não só
-`/v1/*`. Por isso, na E5, manter desligados `--slot-save-path` e o `POST /props`
-(o padrão já é desligado). A chave da E5 (`LLM_API_KEY`) entra no container
-porque os agentes precisam enviá-la. Se ela não estiver no ambiente, o `run-in-box.sh`
-lê de `LLM_API_KEY_FILE` (padrão `~/.config/local-agentic/llm-api-key`) e a passa
-por nome (`-e LLM_API_KEY`), nunca na linha de comando. O arquivo em si não entra. Ela só vale para o llama-server, que o
-container já alcança. Ver "Pendências" para a alternativa de injetar a chave no
-lado do host.
+What goes through the forwarder is **any** llama-server route, not only
+`/v1/*`. That is why, in E5, `--slot-save-path` and `POST /props` must stay off
+(the default is already off). The E5 key (`LLM_API_KEY`) enters the container
+because the agents need to send it. If it is not in the environment, `run-in-box.sh`
+reads it from `LLM_API_KEY_FILE` (default `~/.config/local-agentic/llm-api-key`) and passes it
+by name (`-e LLM_API_KEY`), never on the command line. The file itself does not enter. The key is only valid for llama-server, which the
+container already reaches. See "Open items" for the alternative of injecting the key on
+the host side.
 
 ### Skills
 
-| Camada | Origem no host | No container |
+| Layer | Source on the host | In the container |
 |---|---|---|
-| Base | `$SKILLS_PREFIX/profiles/base` (`SKILLS_PREFIX` do `versions.env` da raiz; a variável de ambiente sobrepõe), materializado por `scripts/fetch-skills.sh` | `/opt/skills/base`, só leitura |
-| Perfis extras e pessoais | `--skills-dir <dir>` (repetível) ou `BOX_SKILLS_DIRS=dir1:dir2`; ex.: `$SKILLS_PREFIX/profiles/frontend` | `/opt/skills/extra-1`, `extra-2`..., só leitura |
-| Projeto | `.agents/skills`, `.claude/skills` do repositório | vêm com o workdir/projeto (leitura e escrita, como o resto dele) |
+| Base | `$SKILLS_PREFIX/profiles/base` (`SKILLS_PREFIX` from the root `versions.env`; the environment variable overrides it), materialized by `scripts/fetch-skills.sh` | `/opt/skills/base`, read-only |
+| Extra and personal profiles | `--skills-dir <dir>` (repeatable) or `BOX_SKILLS_DIRS=dir1:dir2`; e.g. `$SKILLS_PREFIX/profiles/frontend` | `/opt/skills/extra-1`, `extra-2`..., read-only |
+| Project | the repository's `.agents/skills`, `.claude/skills` | come with the workdir/project (read-write, like the rest of it) |
 
-- `AGENT_SKILLS_DIRS` lista as pastas montadas em `/opt/skills`, separadas por `:` (vazia se nenhuma). Os lançadores e `run.sh` dos agentes decidem como cada agente as carrega (ver `skills/README.md`).
-- Sem o perfil base no host, o wrapper avisa e segue sem ele.
-- `--no-skills` não monta nenhuma. O eval usa isso nos containers da captura do diff e das verificações.
-- Skills do projeto não são protegidas: o agente pode reescrevê-las, como qualquer arquivo do projeto, e o que ele escrever vale na próxima sessão naquele projeto.
+- `AGENT_SKILLS_DIRS` lists the folders mounted under `/opt/skills`, separated by `:` (empty if none). The agents' launchers and `run.sh` decide how each agent loads them (see `skills/README.md`).
+- Without the base profile on the host, the wrapper warns and continues without it.
+- `--no-skills` mounts none. The eval uses this in the diff-capture and check containers.
+- Project skills are not protected: the agent can rewrite them, like any project file, and what it writes applies in the next session on that project.
 
 ### Git
 
-- **Sem credenciais.** Não entram chaves SSH, agente SSH, `gh`, `~/.git-credentials`, `~/.gitconfig` nem `credential.helper` (o `/etc/gitconfig` da imagem zera os ajudantes). Sem rede, o `git push` falha de qualquer forma.
-- **Identidade.** No eval, a fixa do runner (`GIT_AUTHOR_*`). No `agent-shell.sh`, o nome e o e-mail globais do host.
-- **`.git` no `agent-shell.sh` (`--protect-git`).** O usuário vai rodar `git status` no host depois da sessão, e o `git` executa comandos de configuração: `core.fsmonitor`, filtros, hooks. Por isso:
-  - `.git` vira ponto de montagem, então não pode ser renomeado nem trocado;
-  - `.git/config`, `.git/hooks` e os `config` de `.git/modules` ficam só leitura;
-  - no fim, um `.git/commondir` ou `.git/config.worktree` criado na sessão é renomeado para `*.agent-box-quarentena-<data>`, porque faria o git ler a configuração de outro lugar;
-  - repositórios `.git` aninhados novos geram aviso, porque o `git status` entra em submódulos e roda a configuração deles.
-- Efeitos colaterais: dentro do container, `git config` local, `git remote add` e hooks novos falham. Projeto que é worktree (`.git` arquivo) não tem o git funcionando lá dentro, porque o gitdir real fica fora.
-- Para revisar no host sem executar nada do repositório:
+- **No credentials.** No SSH keys, SSH agent, `gh`, `~/.git-credentials`, `~/.gitconfig` or `credential.helper` enter (the image's `/etc/gitconfig` clears the helpers). Without a network, `git push` fails anyway.
+- **Identity.** In the eval, the runner's fixed one (`GIT_AUTHOR_*`). In `agent-shell.sh`, the host's global name and email.
+- **`.git` in `agent-shell.sh` (`--protect-git`).** The user will run `git status` on the host after the session, and `git` executes configuration commands: `core.fsmonitor`, filters, hooks. So:
+  - `.git` becomes a mount point, so it cannot be renamed or swapped;
+  - `.git/config`, `.git/hooks` and the `config` files under `.git/modules` are read-only;
+  - at the end, a `.git/commondir` or `.git/config.worktree` created during the session is renamed to `*.agent-box-quarantine-<date>`, because it would make git read its configuration from elsewhere;
+  - new nested `.git` repositories trigger a warning, because `git status` enters submodules and runs their configuration.
+- Side effects: inside the container, local `git config`, `git remote add` and new hooks fail. A project that is a worktree (`.git` file) does not have git working inside, because the real gitdir is outside.
+- To review on the host without executing anything from the repository:
 
   ```bash
   git -c core.fsmonitor=false -c core.hooksPath=/dev/null status --ignore-submodules=all
   git -c core.fsmonitor=false -c core.hooksPath=/dev/null diff --ignore-submodules=all
   ```
 
-- **No eval** não há `--protect-git`, para não mudar o comportamento medido. Em vez disso, o host não roda git no workdir depois do agente: a captura do diff roda num container, com o workdir só leitura, sem a pasta do resultado montada e com a config do agente neutralizada; o diff sai pela stdout. E todo o processamento de saída no host (`eval/lib/boxio.py`) não segue symlinks plantados pelo agente — ver `docs/verifications/E7.md`, item 7.
+- **In the eval** there is no `--protect-git`, so as not to change the measured behavior. Instead, the host does not run git in the workdir after the agent: the diff capture runs in a container, with the workdir read-only, without the result folder mounted and with the agent's config neutralized; the diff comes out through stdout. And all output processing on the host (`eval/lib/boxio.py`) does not follow symlinks planted by the agent — see `docs/verifications/E7.md`, item 7.
 
-### Codex e os sandboxes próprios dos agentes
+### Codex and the agents' own sandboxes
 
-- **O sandbox do Codex (bubblewrap + seccomp, ou o auxiliar embutido) não funciona dentro deste container.** Ele precisa criar user namespaces sem privilégio.
-  - O seccomp padrão do Docker bloqueia `unshare`/`clone` com `CLONE_NEWUSER` para quem não tem `CAP_SYS_ADMIN`.
-  - O `no-new-privileges` anula um `bwrap` setuid.
-- Para funcionar, seria preciso `seccomp=unconfined` (ou um perfil próprio) e talvez `CAP_SYS_ADMIN`. Isso abre a superfície do kernel que o container fecha, o que é pior que a camada extra do Codex.
-- Verificado: `unshare -Ur` falha nos testes de fuga, e `codex sandbox -- true` (0.165; não há subcomando `linux`) termina com `bwrap: No permissions to create a new namespace`.
-- **Decisão (igual à do `agents/codex-local/`):**
-  - no eval, o perfil `autonomous` já usa `sandbox_mode = "danger-full-access"` e `approval_policy = "never"`, e `CODEX_LOCAL_SANDBOX` fica vazio;
-  - no `agent-shell.sh`, o perfil `interactive` (que pede `workspace-write`) recebe `--sandbox danger-full-access`, e as aprovações `on-request` continuam;
-  - as regras `forbidden` e o hook `guard.py` continuam valendo nos dois casos.
-- O sandbox bubblewrap do Claude Code fica desligado (não está nas settings), pelo mesmo motivo. Qwen Code, Pi e OpenCode não têm sandbox próprio em uso aqui.
+- **Codex's sandbox (bubblewrap + seccomp, or the built-in helper) does not work inside this container.** It needs to create unprivileged user namespaces.
+  - Docker's default seccomp blocks `unshare`/`clone` with `CLONE_NEWUSER` for those without `CAP_SYS_ADMIN`.
+  - `no-new-privileges` neutralizes a setuid `bwrap`.
+- To make it work, `seccomp=unconfined` (or a custom profile) and maybe `CAP_SYS_ADMIN` would be needed. That opens the kernel surface the container closes, which is worse than Codex's extra layer.
+- Verified: `unshare -Ur` fails in the escape tests, and `codex sandbox -- true` (0.165; there is no `linux` subcommand) ends with `bwrap: No permissions to create a new namespace`.
+- **Decision (same as in `agents/codex-local/`):**
+  - in the eval, the `autonomous` profile already uses `sandbox_mode = "danger-full-access"` and `approval_policy = "never"`, and `CODEX_LOCAL_SANDBOX` stays empty;
+  - in `agent-shell.sh`, the `interactive` profile (which asks for `workspace-write`) gets `--sandbox danger-full-access`, and the `on-request` approvals remain;
+  - the `forbidden` rules and the `guard.py` hook still apply in both cases.
+- Claude Code's bubblewrap sandbox stays off (it is not in the settings), for the same reason. Qwen Code, Pi and OpenCode have no sandbox of their own in use here.
 
-## Modelo de ameaça
+## Threat model
 
-**Protege contra**, enquanto o agente roda:
+**Protects against**, while the agent runs:
 
-- **Escrever fora** do workdir, do log-dir, de `/tmp`/`/var/tmp` e da HOME temporária. Isso cobre o repositório, a HOME do host, a imagem, `agents/` e a guarda.
-- **Ler** a HOME do host, chaves, tokens e configurações de outros agentes (`~/.claude`, `~/.codex`). No eval, também os testes ocultos, as soluções e as outras execuções em `eval/`.
-- **Alterar as skills** base e pessoais (montadas só leitura).
-- **Usar a rede:** internet, DNS, o outro serviço local na 8080, outras portas do host, a ponte do Docker, o Windows (vsock e interop do WSL) e sockets abstratos do host.
-- **Ganhar privilégio:** root, `sudo`, setuid, capabilities, user namespaces, o socket do Docker e a GPU.
-- **Fazer `git push`** ou qualquer acesso remoto com as credenciais do usuário.
-- **Esgotar recursos** com fork bomb, memória ou CPU.
-- **Deixar processos para trás:** o container é removido no fim e no timeout.
-- **Plantar código que o host execute depois**, nos casos tratados:
-  - no eval, nada do workdir roda no host depois do agente;
-  - no `agent-shell.sh`, `.git/config` e hooks só leitura, mais a auditoria do `.git`.
+- **Writing outside** the workdir, the log dir, `/tmp`/`/var/tmp` and the temporary HOME. This covers the repository, the host HOME, the image, `agents/` and the guard.
+- **Reading** the host HOME, keys, tokens and other agents' configurations (`~/.claude`, `~/.codex`). In the eval, also the hidden tests, the solutions and the other runs in `eval/`.
+- **Changing the skills**, base and personal (mounted read-only).
+- **Using the network:** internet, DNS, the other local service on 8080, other host ports, the Docker bridge, Windows (vsock and WSL interop) and the host's abstract sockets.
+- **Gaining privilege:** root, `sudo`, setuid, capabilities, user namespaces, the Docker socket and the GPU.
+- **Running `git push`** or any remote access with the user's credentials.
+- **Exhausting resources** with a fork bomb, memory or CPU.
+- **Leaving processes behind:** the container is removed at the end and on timeout.
+- **Planting code that the host runs later**, in the cases covered:
+  - in the eval, nothing from the workdir runs on the host after the agent;
+  - in `agent-shell.sh`, `.git/config` and hooks are read-only, plus the `.git` audit.
 
-**Não protege contra**:
+**Does not protect against**:
 
-- **Estragos dentro do que foi montado.** O agente pode apagar ou reescrever o projeto inteiro, inclusive o histórico local em `.git`. Trabalhe numa cópia ou worktree, como o plano já prevê para o piloto, ou com o trabalho importante já enviado ao remoto.
-- **Código que o agente escreveu e que você executa depois, no host.** Exemplos:
-  - scripts do `package.json` (`npm install` roda `postinstall`);
-  - `Makefile` e testes;
+- **Damage inside what was mounted.** The agent can delete or rewrite the whole project, including the local history in `.git`. Work on a copy or worktree, as the plan already foresees for the pilot, or with the important work already pushed to the remote.
+- **Code the agent wrote and that you run later, on the host.** Examples:
+  - `package.json` scripts (`npm install` runs `postinstall`);
+  - `Makefile` and tests;
   - `.envrc` (direnv);
   - `.venv/bin/activate`;
-  - tarefas do VS Code;
-  - hooks que moram na árvore de trabalho (`.husky/`, `.pre-commit-config.yaml` com hooks `local`).
+  - VS Code tasks;
+  - hooks that live in the working tree (`.husky/`, `.pre-commit-config.yaml` with `local` hooks).
 
-  Revise o diff antes, ou rode no container (`agent-shell.sh shell`).
-- **Dados sensíveis dentro do projeto montado.** `.env` ou credenciais no remoto do `.git/config` (`https://token@...`) ficam visíveis ao agente. Sem rede, ele não as envia para fora, mas pode copiá-las para logs ou para o código.
-- **Abuso do llama-server.** O agente pode chamar qualquer rota, gerar texto à vontade e ocupar o slot único.
-- **Integridade do placar do eval:** as verificações rodam **sem a pasta do resultado montada**. O `check.sh` grava num tmpfs do container e devolve o resultado por um tar na stdout; o host grava o `checks.json` a partir do veredito do grader, não de um arquivo que o código do agente pudesse plantar. O grader (`eval/lib`), a tarefa (com `hidden/` e a solução) e o transcrito entram só leitura; o código do agente só roda nos subprocessos de teste, separados do grader. O processamento de saída no host não segue symlinks do agente (`eval/lib/boxio.py`). Resíduo conhecido: nos testes que o próprio agente escreve (T4/S3), o código dele roda no mesmo processo do pytest/jest e poderia forjar o relatório daquele processo; fechar isso exige isolar mais o runner. Correções do item 7 de `docs/verifications/E7.md`.
-- **Falhas do kernel, do runc ou do Docker** (escape de container). O container é rootful e sem `userns-remap`, mas o processo roda com o mesmo UID sem privilégios do usuário, sem capabilities e com seccomp. Uma falha dessas daria acesso ao usuário do host, não a root, salvo uma segunda falha de escalada.
-- **O wrapper morto com SIGKILL** antes da limpeza (por exemplo, o `-k 30` do timeout, se o SIGTERM não bastar). O container pode sobrar. Confira com `docker ps --filter label=local-agentic.agent-box` e remova com `docker rm -f`.
+  Review the diff first, or run in the container (`agent-shell.sh shell`).
+- **Sensitive data inside the mounted project.** `.env` or credentials in the `.git/config` remote (`https://token@...`) are visible to the agent. Without a network, it does not send them out, but it can copy them into logs or code.
+- **Abuse of llama-server.** The agent can call any route, generate text at will and occupy the single slot.
+- **Eval scoreboard integrity:** the checks run **without the result folder mounted**. `check.sh` writes to a tmpfs in the container and returns the result as a tar on stdout; the host writes `checks.json` from the grader's verdict, not from a file the agent's code could plant. The grader (`eval/lib`), the task (with `hidden/` and the solution) and the transcript are mounted read-only; the agent's code only runs in the test subprocesses, separate from the grader. Output processing on the host does not follow agent symlinks (`eval/lib/boxio.py`). Known residue: in the tests the agent writes itself (T4/S3), its code runs in the same process as pytest/jest and could forge that process's report; closing this requires isolating the runner further. Fixes for item 7 of `docs/verifications/E7.md`.
+- **Kernel, runc or Docker flaws** (container escape). The container is rootful and without `userns-remap`, but the process runs with the same unprivileged UID as the user, without capabilities and with seccomp. Such a flaw would give access to the host user, not to root, barring a second privilege-escalation flaw.
+- **The wrapper killed with SIGKILL** before cleanup (for example, the timeout's `-k 30`, if SIGTERM is not enough). The container may be left over. Check with `docker ps --filter label=local-agentic.agent-box` and remove with `docker rm -f`.
 
-## Limites e ajustes
+## Limits and settings
 
-| Variável | Padrão | Efeito |
+| Variable | Default | Effect |
 |---|---|---|
-| `BOX_IMAGE` | `agent-box:latest` | Imagem usada e construída |
-| `BOX_MEMORY` | `8g` | Memória (sem swap) |
-| `BOX_CPUS` | `8` | CPUs (cota). O llama-server usa o resto quando os dois disputam. |
-| `BOX_PIDS` | `2048` | Processos e threads |
-| `BOX_TMP_SIZE` / `BOX_HOME_SIZE` | `4g` / `1g` | Tamanho do `/tmp` e da HOME. É memória e conta no limite acima. |
-| `BOX_ALLOW_STALE` | `0` | `1` aceita uma imagem construída com outras versões dos agentes |
-| `BOX_SKILLS_DIRS` | vazio | Pastas de skills pessoais, separadas por `:` (o mesmo que `--skills-dir`) |
-| `SKILLS_PREFIX` | do `versions.env` da raiz | Onde está `profiles/base` |
-| `BOX_DRY_RUN` | `0` | `1` só mostra o `docker run` montado, sem conferir a imagem nem subir nada |
-| `BOX_CODEX_SANDBOX` | `danger-full-access` | Valor de `--sandbox` do Codex no `agent-shell.sh` |
-| `AGENT_BOX_STATE` | `~/.local/state/local-agentic/agent-box` | Estado das sessões interativas no container |
+| `BOX_IMAGE` | `agent-box:latest` | Image used and built |
+| `BOX_MEMORY` | `8g` | Memory (no swap) |
+| `BOX_CPUS` | `8` | CPUs (quota). llama-server uses the rest when the two compete. |
+| `BOX_PIDS` | `2048` | Processes and threads |
+| `BOX_TMP_SIZE` / `BOX_HOME_SIZE` | `4g` / `1g` | Size of `/tmp` and HOME. It is memory and counts toward the limit above. |
+| `BOX_ALLOW_STALE` | `0` | `1` accepts an image built with other agent versions |
+| `BOX_SKILLS_DIRS` | empty | Personal skills folders, separated by `:` (same as `--skills-dir`) |
+| `SKILLS_PREFIX` | from the root `versions.env` | Where `profiles/base` is |
+| `BOX_DRY_RUN` | `0` | `1` only prints the assembled `docker run`, without checking the image or starting anything |
+| `BOX_CODEX_SANDBOX` | `danger-full-access` | Value of Codex's `--sandbox` in `agent-shell.sh` |
+| `AGENT_BOX_STATE` | `~/.local/state/local-agentic/agent-box` | State of the interactive sessions in the container |
 
-O estado das sessões interativas fica separado do estado dos lançadores usados
-direto no host (`~/.local/state/local-agentic/agents`). O que um agente grava no
-container (config, sessões, MCP) nunca é lido por um agente rodando fora dele.
-Não aponte um para o outro.
+The state of the interactive sessions is kept separate from the state of the
+launchers used directly on the host (`~/.local/state/local-agentic/agents`). What an agent writes in the
+container (config, sessions, MCP) is never read by an agent running outside it.
+Do not point one at the other.
 
-## Imagem
+## Image
 
-- **Base:** `ubuntu:24.04@sha256:24737cef…3573c`, publicada em 25/10/2026. É Ubuntu, e não Debian slim, porque o Python 3.12 do sistema fica em `/usr/bin/python3.12`, o mesmo caminho do host. Assim, os `.venv` que o eval cria no host com `uv venv --python 3.12` funcionam dentro do container sem recriar nada.
-- **Node 24.22.2 (LTS):** tarball oficial conferido pelo sha256 do `SHASUMS256.txt`. O host está na 24.21.0, anterior à versão de segurança 24.22.1.
-- **uv 0.12.13:** tarball do GitHub conferido pelo sha256 publicado.
-- **Playwright 1.64.1 (Python):** venv em `/opt/playwright`, instalado de `playwright-requirements.txt` com `--require-hashes`; só o Chromium headless shell em `/opt/ms-playwright`, com as libs e fontes do sistema (`--with-deps`), cerca de +1,1 GB na imagem. O download do Chromium é conferido pelo próprio Playwright, não por um hash nosso. `python` chama esse venv; `python3` segue sendo o do sistema. Serve à skill `webapp-testing` (perfil `frontend`). Para regenerar: `echo playwright==<versão> | uv pip compile - --generate-hashes --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --no-header -o sandbox/playwright-requirements.txt`.
-- **Agentes:** `npm pack` de cada pacote, com o sha512 do arquivo comparado ao `*_INTEGRITY` de `agents/versions.env` antes do `npm install`.
-  - As dependências, inclusive os binários nativos das dependências opcionais (Codex, OpenCode, Claude Code), vêm do registro, e o npm confere cada uma contra o integrity publicado.
-  - Elas não estão fixadas por lockfile.
-  - Layout: `/opt/agents/<agente>/<versão>` com o link `current`, como em `agents/install.sh`. `AGENTS_PREFIX=/opt/agents`.
-- **apt:** os pacotes vêm do arquivo do Ubuntu no momento do build, sem versão fixada. Para reprodutibilidade total, dá para usar `snapshot.ubuntu.com` (ver "Pendências").
-- **`EXTRA_APT_PACKAGES`:** `sandbox/build.sh --build-arg EXTRA_APT_PACKAGES=build-essential` instala compiladores, se um projeto precisar. As tarefas do eval não precisam: pypika é Python puro, e o chrono usa jest e ts-jest.
+- **Base:** `ubuntu:24.04@sha256:24737cef…3573c`, published on 2026-10-25. It is Ubuntu, not Debian slim, because the system Python 3.12 lives at `/usr/bin/python3.12`, the same path as on the host. That way, the `.venv` directories the eval creates on the host with `uv venv --python 3.12` work inside the container without recreating anything.
+- **Node 24.22.2 (LTS):** official tarball checked against the sha256 in `SHASUMS256.txt`. The host is on 24.21.0, which predates the security release 24.22.1.
+- **uv 0.12.13:** GitHub tarball checked against the published sha256.
+- **Playwright 1.64.1 (Python):** venv in `/opt/playwright`, installed from `playwright-requirements.txt` with `--require-hashes`; only the headless Chromium shell in `/opt/ms-playwright`, with the system libs and fonts (`--with-deps`), about +1.1 GB on the image. The Chromium download is checked by Playwright itself, not by a hash of ours. `python` calls that venv; `python3` remains the system one. It serves the `webapp-testing` skill (`frontend` profile). To regenerate: `echo playwright==<version> | uv pip compile - --generate-hashes --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --no-header -o sandbox/playwright-requirements.txt`.
+- **Agents:** `npm pack` of each package, with the file's sha512 compared to `*_INTEGRITY` in `agents/versions.env` before `npm install`.
+  - The dependencies, including the native binaries of the optional dependencies (Codex, OpenCode, Claude Code), come from the registry, and npm checks each one against the published integrity.
+  - They are not pinned by a lockfile.
+  - Layout: `/opt/agents/<agent>/<version>` with the `current` link, as in `agents/install.sh`. `AGENTS_PREFIX=/opt/agents`.
+- **apt:** packages come from the Ubuntu archive at build time, without a pinned version. For full reproducibility, `snapshot.ubuntu.com` can be used (see "Open items").
+- **`EXTRA_APT_PACKAGES`:** `sandbox/build.sh --build-arg EXTRA_APT_PACKAGES=build-essential` installs compilers, if a project needs them. The eval tasks do not: pypika is pure Python, and chrono uses jest and ts-jest.
 
-## Pendências
+## Open items
 
-Comandos da verificação (repetir depois de mudar a imagem ou o wrapper):
+Verification commands (repeat after changing the image or the wrapper):
 
 ```bash
 sandbox/build.sh
@@ -249,18 +249,18 @@ EVAL_WRAPPER=sandbox/run-in-box.sh FAKE_ORACLE_MODE=sleep:60 EVAL_TIMEOUT_S=5 \
     EVAL_FORCE=1 eval/run.sh fake-oracle S3 e7-sandbox-timeout
 ```
 
-Para ver com os agentes de verdade, na E6:
+To check with the real agents, in E6:
 
-- se o OpenCode tenta instalar dependências de plugin pela rede ao iniciar e quanto isso atrasa;
-- se o Qwen Code (YOLO) tenta usar o próprio sandbox Docker/Podman;
-- se o Pi carrega `extensions/guard.ts` com `agents/` só leitura (o cache do jiti precisa ir para `/tmp`);
-- se algum agente tenta gravar fora da HOME temporária e do log-dir (a raiz é só leitura);
-- o Codex avisa que não cria os "PATH aliases" quando o `CODEX_HOME` fica em `/tmp`; no eval ele fica no log-dir, e o efeito no `apply_patch` deve ser conferido.
+- whether OpenCode tries to install plugin dependencies over the network at startup, and how much that delays it;
+- whether Qwen Code (YOLO) tries to use its own Docker/Podman sandbox;
+- whether Pi loads `extensions/guard.ts` with `agents/` read-only (the jiti cache has to go to `/tmp`);
+- whether any agent tries to write outside the temporary HOME and the log dir (the root is read-only);
+- Codex warns that it does not create the "PATH aliases" when `CODEX_HOME` is in `/tmp`; in the eval it is in the log dir, and the effect on `apply_patch` must be checked.
 
-Abertas:
+Open:
 
-- **Injetar a chave no host:** o encaminhador do host trocaria o `Authorization` de cada requisição pela chave da E5, e os agentes no container usariam uma chave falsa. Exige interpretar HTTP/1.1 (keep-alive, corpo chunked); hoje a cópia é de bytes.
-- **apt por snapshot** (`snapshot.ubuntu.com`) para a imagem ser reproduzível bit a bit.
-- **Lockfile npm** por agente, para fixar também as dependências transitivas.
-- **Imagem menor:** o OpenCode instala as variantes comum e `baseline` (205 MB cada; a `baseline` é para CPUs sem AVX2), e o Qwen Code traz o Bun (103 MB) como dependência opcional. Dá para remover no build, ao custo de diferir da instalação no host.
-- **Isolar mais o runner de testes** (T4/S3): hoje o código que o agente escreve roda no mesmo processo do pytest/jest e poderia forjar o relatório daquele processo. Rodar cada arquivo de teste num sub-sandbox sem `/tmp` compartilhado, ou validar o relatório contra IDs de teste esperados, fecharia o resíduo.
+- **Inject the key on the host:** the host forwarder would swap each request's `Authorization` for the E5 key, and the agents in the container would use a fake key. It requires interpreting HTTP/1.1 (keep-alive, chunked body); today the copy is byte-level.
+- **apt by snapshot** (`snapshot.ubuntu.com`) so the image is bit-for-bit reproducible.
+- **npm lockfile** per agent, to also pin the transitive dependencies.
+- **Smaller image:** OpenCode installs the regular and `baseline` variants (205 MB each; `baseline` is for CPUs without AVX2), and Qwen Code brings Bun (103 MB) as an optional dependency. They can be removed at build time, at the cost of differing from the host install.
+- **Isolate the test runner further** (T4/S3): today the code the agent writes runs in the same process as pytest/jest and could forge that process's report. Running each test file in a sub-sandbox without a shared `/tmp`, or validating the report against expected test IDs, would close the residue.

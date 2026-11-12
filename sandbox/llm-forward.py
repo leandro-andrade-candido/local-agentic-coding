@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Encaminhador de bytes entre TCP e socket unix, só com a biblioteca padrão.
+"""Byte forwarder between TCP and a unix socket, standard library only.
 
-Liga o container agent-box (sem rede: --network none) ao llama-server do host:
+Connects the agent-box container (no network: --network none) to the host's llama-server:
 
-  host  escuta num socket unix (diretório montado só leitura no container) e
-        conecta cada cliente ao llama-server em 127.0.0.1:<porta> do host.
-  box   escuta em 127.0.0.1:<porta> dentro do container e conecta cada cliente
-        ao socket unix.
+  host  listens on a unix socket (directory mounted read-only in the container) and
+        connects each client to llama-server at 127.0.0.1:<port> on the host.
+  box   listens on 127.0.0.1:<port> inside the container and connects each client
+        to the unix socket.
 
-Não interpreta HTTP: cada conexão vira dois fluxos de bytes (uma thread por
-sentido), então streaming (SSE), keep-alive, corpos grandes e várias conexões ao
-mesmo tempo funcionam. O destino do lado host é fixado por quem inicia o
-encaminhador (sandbox/run-in-box.sh); o container não tem como escolher outro
-destino nem outra porta.
+It does not interpret HTTP: each connection becomes two byte streams (one thread
+per direction), so streaming (SSE), keep-alive, large bodies and several
+simultaneous connections work. The host-side destination is fixed by whoever starts
+the forwarder (sandbox/run-in-box.sh); the container cannot choose another
+destination or another port.
 
-Fechamento: fim de envio de um lado (EOF) vira shutdown(SHUT_WR) do outro; erro
-em qualquer sentido fecha os dois. Assim, um cliente que desiste de uma
-requisição fecha a conexão com o llama-server, que cancela a geração.
+Closing: end of sending on one side (EOF) becomes shutdown(SHUT_WR) on the other; an
+error in either direction closes both. So a client that gives up on a request
+closes the connection to llama-server, which cancels the generation.
 
-Uso:
-  llm-forward.py host --socket <arquivo> --target 127.0.0.1:<porta> [--quiet]
-  llm-forward.py box  --listen 127.0.0.1:<porta> --socket <arquivo> [--background] [--quiet]
+Usage:
+  llm-forward.py host --socket <file> --target 127.0.0.1:<port> [--quiet]
+  llm-forward.py box  --listen 127.0.0.1:<port> --socket <file> [--background] [--quiet]
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def log(msg: str) -> None:
 def hostport(value: str) -> tuple[str, int]:
     host, sep, port = value.rpartition(":")
     if not sep or not port.isdigit():
-        raise argparse.ArgumentTypeError(f"esperado host:porta, recebido {value!r}")
+        raise argparse.ArgumentTypeError(f"expected host:port, got {value!r}")
     return host.strip("[]"), int(port)
 
 
@@ -53,7 +53,7 @@ def tune(sock: socket.socket) -> None:
 
 
 def pump(src: socket.socket, dst: socket.socket) -> bool:
-    """Copia src -> dst até EOF (True) ou erro (False)."""
+    """Copies src -> dst until EOF (True) or error (False)."""
     try:
         while True:
             data = src.recv(BUF)
@@ -83,7 +83,7 @@ def handle(client: socket.socket, connect, slots: threading.BoundedSemaphore) ->
         try:
             upstream = connect()
         except OSError as e:
-            log(f"destino indisponível: {e}")
+            log(f"destination unavailable: {e}")
             return
         tune(client)
         tune(upstream)
@@ -115,11 +115,11 @@ def serve(listener: socket.socket, connect) -> None:
         except InterruptedError:
             continue
         except OSError as e:
-            log(f"accept falhou: {e}")
+            log(f"accept failed: {e}")
             threading.Event().wait(0.2)
             continue
         if not slots.acquire(blocking=False):
-            log(f"mais de {MAX_CONNS} conexões simultâneas; recusando")
+            log(f"more than {MAX_CONNS} simultaneous connections; refusing")
             client.close()
             continue
         threading.Thread(target=handle, args=(client, connect, slots), daemon=True).start()
@@ -128,20 +128,20 @@ def serve(listener: socket.socket, connect) -> None:
 def mode_host(a: argparse.Namespace) -> None:
     host, port = a.target
     if host not in ("127.0.0.1", "localhost", "::1"):
-        sys.exit(f"llm-forward: destino precisa ser local (127.0.0.1), recebido {host}")
+        sys.exit(f"llm-forward: destination must be local (127.0.0.1), got {host}")
     tmp = a.socket + ".tmp"
     try:
         os.unlink(tmp)
     except FileNotFoundError:
         pass
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    old = os.umask(0o177)  # socket 0600: só o dono (o mesmo UID do container) conecta
+    old = os.umask(0o177)  # socket 0600: only the owner (the same UID as the container) connects
     try:
         listener.bind(tmp)
     finally:
         os.umask(old)
     listener.listen(128)
-    # O arquivo só aparece no nome final quando já aceita conexões.
+    # The file only appears under its final name once it accepts connections.
     os.rename(tmp, a.socket)
 
     def connect() -> socket.socket:
@@ -164,7 +164,7 @@ def mode_box(a: argparse.Namespace) -> None:
         return s
 
     if a.background:
-        # O pai sai depois do listen(): quem chamou já pode conectar.
+        # The parent exits after listen(): the caller can already connect.
         if os.fork():
             os._exit(0)
         os.setsid()

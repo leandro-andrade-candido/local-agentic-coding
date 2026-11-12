@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Testes de fuga do agent-box (E7).
+# Escape tests for agent-box (E7).
 #
-# Uso: sandbox/escape-tests.sh
+# Usage: sandbox/escape-tests.sh
 #
-# No host, o script:
-#   1. cria um workdir e um log-dir descartáveis e um canário FORA das montagens;
-#   2. sobe um servidor HTTP falso em 127.0.0.1 no lugar do llama-server (testa o
-#      encaminhador com SSE, conexões simultâneas, keep-alive e corpo grande, sem
-#      depender do modelo) e um ouvinte TCP no IP da ponte docker0;
-#   3. roda a bateria DENTRO de um container (run-in-box.sh ... -- escape-tests.sh --inside),
-#      com um perfil base de skills e uma pasta de skills pessoais falsos (só leitura);
-#   4. confere do lado do host o que o container não podia tocar;
-#   5. se o llama-server real responder em LLM_BASE_URL, faz GET /health por dentro;
-#   6. confere que o timeout do eval derruba o container.
-# Saída: 0 se tudo passou; 1 se algum teste falhou.
+# On the host, the script:
+#   1. creates a throwaway workdir and log dir, plus a canary OUTSIDE the mounts;
+#   2. starts a fake HTTP server on 127.0.0.1 in place of llama-server (tests the
+#      forwarder with SSE, concurrent connections, keep-alive and a large body,
+#      without depending on the model) and a TCP listener on the docker0 bridge IP;
+#   3. runs the battery INSIDE a container (run-in-box.sh ... -- escape-tests.sh --inside),
+#      with a base skills profile and a folder of fake personal skills (read-only);
+#   4. checks, on the host side, what the container must not have been able to touch;
+#   5. if the real llama-server answers at LLM_BASE_URL, does GET /health from inside;
+#   6. checks that the eval timeout takes the container down.
+# Exit: 0 if everything passed; 1 if any test failed.
 set -uo pipefail
 
 pass=0 fail=0
-ok() { printf 'PASSA  %s\n' "$1"; pass=$((pass + 1)); }
-bad() { printf 'FALHA  %s%s\n' "$1" "${2:+  [$2]}"; fail=$((fail + 1)); }
+ok() { printf 'PASS   %s\n' "$1"; pass=$((pass + 1)); }
+bad() { printf 'FAIL   %s%s\n' "$1" "${2:+  [$2]}"; fail=$((fail + 1)); }
 info() { printf 'INFO   %s\n' "$*"; }
 short() { tr '\n' ' ' <<<"$1" | cut -c1-200; }
 expect_ok() {
@@ -27,13 +27,13 @@ expect_ok() {
 }
 expect_fail() {
     local d="$1" out; shift
-    if out="$("$@" 2>&1)"; then bad "$d" "deveria falhar: $(short "$out")"; else ok "$d"; fi
+    if out="$("$@" 2>&1)"; then bad "$d" "should have failed: $(short "$out")"; else ok "$d"; fi
 }
-expect_empty() { # <descrição> <valor>
+expect_empty() { # <description> <value>
     if [ -z "$2" ]; then ok "$1"; else bad "$1" "$(short "$2")"; fi
 }
 
-# Cliente do encaminhador (roda dentro do container contra o servidor falso).
+# Forwarder client (runs inside the container against the fake server).
 FWD_CLIENT='
 import hashlib, http.client, json, os, sys, threading, time, urllib.parse
 u = urllib.parse.urlsplit(os.environ["LLM_BASE_URL"])
@@ -56,7 +56,7 @@ elif t == "sse":
             break
         if line.startswith(b"data:"):
             times.append(round(time.monotonic() - t0, 2))
-    # 5 eventos a cada 0,3 s: precisam chegar espaçados, não todos no fim.
+    # 5 events every 0.3 s: they must arrive spread out, not all at the end.
     assert len(times) == 5 and times[0] < 0.8 and times[-1] - times[0] >= 0.9, times
     print(times)
 elif t == "concurrent":
@@ -76,48 +76,48 @@ elif t == "bigbody":
 '
 
 # ===================================================================================
-# Dentro do container
+# Inside the container
 # ===================================================================================
 inside() {
     local W="$ET_WORKDIR" L="$ET_LOGDIR" d f v out
-    echo "== dentro do container: $(id), modo $ET_MODE"
+    echo "== inside the container: $(id), mode $ET_MODE"
 
     if [ "$ET_MODE" = real ]; then
         local auth=()
         [ -z "${LLM_API_KEY:-}" ] || auth=(-H "Authorization: Bearer $LLM_API_KEY")
-        expect_ok "llama-server real: GET /health pelo encaminhador" \
+        expect_ok "real llama-server: GET /health through the forwarder" \
             curl -fsS --max-time 15 "${auth[@]}" "$LLM_BASE_URL/health"
-        expect_ok "llama-server real: GET /v1/models pelo encaminhador" \
+        expect_ok "real llama-server: GET /v1/models through the forwarder" \
             curl -fsS --max-time 15 "${auth[@]}" "$LLM_BASE_URL/v1/models"
         return
     fi
 
-    echo "-- identidade e privilégios"
+    echo "-- identity and privileges"
     sf() { awk -v k="$1:" '$1 == k {print $2}' /proc/self/status; }
-    expect_ok "não é root (UID $(id -u))" test "$(id -u)" != 0
-    expect_ok "mesmo UID do dono no host ($ET_HOST_UID)" test "$(id -u)" = "$ET_HOST_UID"
-    expect_ok "sem capabilities efetivas (CapEff=0)" test "$(sf CapEff)" = 0000000000000000
-    expect_ok "sem capabilities permitidas (CapPrm=0)" test "$(sf CapPrm)" = 0000000000000000
-    expect_ok "conjunto limite vazio (CapBnd=0)" test "$(sf CapBnd)" = 0000000000000000
-    expect_ok "no-new-privileges ligado" test "$(sf NoNewPrivs)" = 1
-    expect_ok "seccomp em modo filtro" test "$(sf Seccomp)" = 2
-    expect_fail "sudo ausente" command -v sudo
-    expect_fail "su para root não funciona" timeout 5 su -c true root
-    expect_empty "nenhum binário setuid/setgid" "$(find / -xdev -type f -perm /6000 2>/dev/null | head -5)"
-    expect_fail "não cria user namespace (unshare -U)" unshare -U true
-    expect_fail "não vira root num user namespace (unshare -Ur)" unshare -Ur true
+    expect_ok "not root (UID $(id -u))" test "$(id -u)" != 0
+    expect_ok "same UID as the owner on the host ($ET_HOST_UID)" test "$(id -u)" = "$ET_HOST_UID"
+    expect_ok "no effective capabilities (CapEff=0)" test "$(sf CapEff)" = 0000000000000000
+    expect_ok "no permitted capabilities (CapPrm=0)" test "$(sf CapPrm)" = 0000000000000000
+    expect_ok "empty bounding set (CapBnd=0)" test "$(sf CapBnd)" = 0000000000000000
+    expect_ok "no-new-privileges on" test "$(sf NoNewPrivs)" = 1
+    expect_ok "seccomp in filter mode" test "$(sf Seccomp)" = 2
+    expect_fail "sudo absent" command -v sudo
+    expect_fail "su to root does not work" timeout 5 su -c true root
+    expect_empty "no setuid/setgid binary" "$(find / -xdev -type f -perm /6000 2>/dev/null | head -5)"
+    expect_fail "cannot create a user namespace (unshare -U)" unshare -U true
+    expect_fail "cannot become root in a user namespace (unshare -Ur)" unshare -Ur true
 
-    echo "-- sistema de arquivos"
+    echo "-- filesystem"
     try_write() { local x="$1/.agent-box-escape-$$"; (: >"$x") 2>/dev/null && rm -f "$x"; }
     for d in "$W" "$L" /tmp /var/tmp "$HOME"; do
-        expect_ok "grava em $d" try_write "$d"
+        expect_ok "writes to $d" try_write "$d"
     done
     for d in / /etc /usr /usr/local/bin /opt/agents /var /root /run /run/agent-box \
              "$ET_AGENTS_DIR" "$ET_AGENTS_DIR/lib" "$ET_REPO_ROOT" "$ET_HOST_HOME" "$(dirname "$W")"; do
-        expect_fail "não grava em $d" try_write "$d"
+        expect_fail "does not write to $d" try_write "$d"
     done
-    expect_fail "não altera agents/lib/guard.py" sh -c ": >> '$ET_AGENTS_DIR/lib/guard.py'"
-    expect_ok "lê agents/ (só leitura)" test -r "$ET_AGENTS_DIR/lib/guard.py"
+    expect_fail "does not modify agents/lib/guard.py" sh -c ": >> '$ET_AGENTS_DIR/lib/guard.py'"
+    expect_ok "reads agents/ (read-only)" test -r "$ET_AGENTS_DIR/lib/guard.py"
     out="$(python3 -I - "$W" "$L" /tmp /var/tmp "$HOME" <<'PY'
 import os, stat, sys
 allowed = [p.rstrip("/") for p in sys.argv[1:]] + ["/proc", "/sys", "/dev"]
@@ -137,93 +137,93 @@ for root, dirs, files in os.walk("/"):
 print("\n".join(found[:10]))
 PY
 )"
-    expect_empty "nada gravável fora de workdir, log-dir, /tmp, /var/tmp e HOME" "$out"
+    expect_empty "nothing writable outside workdir, log dir, /tmp, /var/tmp and HOME" "$out"
 
     for f in .ssh .gnupg .gitconfig .git-credentials .config/gh .claude .claude.json .codex \
              .docker .aws .npmrc .netrc .bashrc .bash_history; do
-        expect_fail "não vê ~/$f do host" test -e "$ET_HOST_HOME/$f"
+        expect_fail "does not see host ~/$f" test -e "$ET_HOST_HOME/$f"
     done
-    expect_empty "nenhum arquivo da HOME do host além de agents/ (e deste script)" \
+    expect_empty "no file from the host HOME other than agents/ (and this script)" \
         "$(find "$ET_HOST_HOME" -not -type d -not -path "$ET_AGENTS_DIR/*" -not -path "$ET_SELF" 2>/dev/null | head -5)"
-    expect_fail "não vê o canário fora das montagens" test -e "$ET_CANARY"
-    expect_fail "não vê eval/ (testes ocultos e soluções)" test -e "$ET_REPO_ROOT/eval"
-    expect_fail "não vê o resto do repositório" test -e "$ET_REPO_ROOT/DIAGNOSIS-AND-PLAN.md"
+    expect_fail "does not see the canary outside the mounts" test -e "$ET_CANARY"
+    expect_fail "does not see eval/ (hidden tests and solutions)" test -e "$ET_REPO_ROOT/eval"
+    expect_fail "does not see the rest of the repository" test -e "$ET_REPO_ROOT/DIAGNOSIS-AND-PLAN.md"
     for f in /mnt/c /mnt/wsl /mnt/wslg /tmp/.X11-unix /run/user /dev/dxg /init \
              /var/run/docker.sock /run/docker.sock; do
-        expect_fail "$f ausente" test -e "$f"
+        expect_fail "$f absent" test -e "$f"
     done
-    expect_empty "sem GPU (/dev/nvidia*)" "$(ls /dev/nvidia* 2>/dev/null)"
+    expect_empty "no GPU (/dev/nvidia*)" "$(ls /dev/nvidia* 2>/dev/null)"
     v="$(find / \( -path /proc -o -path /sys \) -prune -o -type s -print 2>/dev/null)"
-    if [ "$v" = /run/agent-box/llm.sock ]; then ok "o único socket unix visível é o do encaminhador"
-    else bad "o único socket unix visível é o do encaminhador" "$(short "$v")"; fi
-    expect_empty "nenhum socket unix abstrato (namespace de rede próprio)" \
+    if [ "$v" = /run/agent-box/llm.sock ]; then ok "the only visible unix socket is the forwarder's"
+    else bad "the only visible unix socket is the forwarder's" "$(short "$v")"; fi
+    expect_empty "no abstract unix socket (own network namespace)" \
         "$(awk 'NR > 1 && $8 ~ /^@/' /proc/net/unix)"
 
-    echo "-- skills (só leitura) e variáveis do wrapper"
-    expect_ok "AGENT_BOX=1 (definida pelo wrapper)" test "${AGENT_BOX:-}" = 1
-    expect_ok "AGENT_SKILLS_DIRS=/opt/skills/base:/opt/skills/extra-1 (${AGENT_SKILLS_DIRS:-vazia})" \
+    echo "-- skills (read-only) and wrapper variables"
+    expect_ok "AGENT_BOX=1 (set by the wrapper)" test "${AGENT_BOX:-}" = 1
+    expect_ok "AGENT_SKILLS_DIRS=/opt/skills/base:/opt/skills/extra-1 (${AGENT_SKILLS_DIRS:-empty})" \
         test "${AGENT_SKILLS_DIRS:-}" = /opt/skills/base:/opt/skills/extra-1
     local sd
     IFS=: read -r -a sd <<<"${AGENT_SKILLS_DIRS:-}"
     for d in "${sd[@]}"; do
         f="$(find "$d" -name SKILL.md 2>/dev/null | head -n1)"
-        expect_ok "lê $d" test -n "$f" -a -r "$f"
-        expect_fail "não grava em $d" try_write "$d"
-        expect_fail "não grava em $(dirname "${f:-$d/x}")" try_write "$(dirname "${f:-$d/x}")"
-        expect_fail "não altera ${f:-$d/SKILL.md}" sh -c ": >> '${f:-$d/SKILL.md}'"
+        expect_ok "reads $d" test -n "$f" -a -r "$f"
+        expect_fail "does not write to $d" try_write "$d"
+        expect_fail "does not write to $(dirname "${f:-$d/x}")" try_write "$(dirname "${f:-$d/x}")"
+        expect_fail "does not modify ${f:-$d/SKILL.md}" sh -c ": >> '${f:-$d/SKILL.md}'"
     done
 
-    echo "-- processos e ambiente"
+    echo "-- processes and environment"
     v="$(cat /proc/1/comm)"
-    expect_ok "PID 1 é o init do container ($v)" test "$v" = docker-init -o "$v" = tini
+    expect_ok "PID 1 is the container init ($v)" test "$v" = docker-init -o "$v" = tini
     v="$(find /proc -maxdepth 1 -name '[0-9]*' | wc -l)"
-    expect_ok "vê só os processos do container ($v)" test "$v" -lt 40
-    expect_empty "nenhum processo do host visível" \
+    expect_ok "sees only the container processes ($v)" test "$v" -lt 40
+    expect_empty "no host process visible" \
         "$(cat /proc/[0-9]*/comm 2>/dev/null | grep -xE 'llama-server|dockerd|containerd|systemd|sshd|code|node.exe' | head -3)"
-    expect_empty "nenhuma variável sensível do host" \
+    expect_empty "no sensitive host variable" \
         "$(env | cut -d= -f1 | grep -xE 'GITHUB_TOKEN|GH_TOKEN|SSH_AUTH_SOCK|ANTHROPIC_API_KEY|OPENAI_API_KEY|ET_CANARY_SECRET|DOCKER_HOST|WSL_INTEROP|WSL_DISTRO_NAME|WSLENV|DISPLAY|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR|AWS_[A-Z_]+')"
 
-    echo "-- git e credenciais"
-    for v in docker ssh gh; do expect_fail "sem o comando $v" command -v "$v"; done
-    expect_fail "sem ~/.git-credentials" test -e "$HOME/.git-credentials"
-    expect_empty "nenhum credential.helper" "$(git config --get-all credential.helper 2>/dev/null | grep -v '^$')"
+    echo "-- git and credentials"
+    for v in docker ssh gh; do expect_fail "no $v command" command -v "$v"; done
+    expect_fail "no ~/.git-credentials" test -e "$HOME/.git-credentials"
+    expect_empty "no credential.helper" "$(git config --get-all credential.helper 2>/dev/null | grep -v '^$')"
     git -C "$W" remote add origin https://github.com/kayak/pypika.git 2>/dev/null
     git -C "$W" remote add viassh git@github.com:kayak/pypika.git 2>/dev/null
-    expect_fail "git push por HTTPS falha" env GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$W" push origin HEAD:refs/heads/escape-test
-    expect_fail "git push por SSH falha" env GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$W" push viassh HEAD:refs/heads/escape-test
-    expect_fail "git ls-remote falha (sem rede)" env GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote https://github.com/kayak/pypika.git
+    expect_fail "git push over HTTPS fails" env GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$W" push origin HEAD:refs/heads/escape-test
+    expect_fail "git push over SSH fails" env GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$W" push viassh HEAD:refs/heads/escape-test
+    expect_fail "git ls-remote fails (no network)" env GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote https://github.com/kayak/pypika.git
 
-    echo "-- rede"
+    echo "-- network"
     v="$(ls /sys/class/net | tr '\n' ' ')"
-    expect_ok "só a interface lo ($v)" test "$v" = "lo "
-    expect_fail "DNS não resolve example.com" python3 -I -c "import socket; socket.getaddrinfo('example.com', 443)"
-    expect_fail "sem internet: curl https://example.com" curl -sS --max-time 10 -o /dev/null https://example.com
-    expect_fail "sem internet por IP: 1.1.1.1:443" python3 -I -c "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5)"
+    expect_ok "only the lo interface ($v)" test "$v" = "lo "
+    expect_fail "DNS does not resolve example.com" python3 -I -c "import socket; socket.getaddrinfo('example.com', 443)"
+    expect_fail "no internet: curl https://example.com" curl -sS --max-time 10 -o /dev/null https://example.com
+    expect_fail "no internet by IP: 1.1.1.1:443" python3 -I -c "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5)"
     for v in 127.0.0.1:8080 127.0.0.1:22 $ET_HOST_ADDRS; do
-        expect_fail "não alcança $v" python3 -I -c "import socket, sys; h, p = sys.argv[1].rsplit(':', 1); socket.create_connection((h, int(p)), timeout=3)" "$v"
+        expect_fail "cannot reach $v" python3 -I -c "import socket, sys; h, p = sys.argv[1].rsplit(':', 1); socket.create_connection((h, int(p)), timeout=3)" "$v"
     done
-    expect_fail "não cria socket vsock (canal do WSL com o Windows)" \
+    expect_fail "cannot create a vsock socket (WSL channel to Windows)" \
         python3 -I -c "import socket; socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)"
     printf 'MZ\x90\x00\x03\x00' >/tmp/escape.exe && chmod +x /tmp/escape.exe
-    expect_fail "não executa binário do Windows (interop do WSL)" /tmp/escape.exe
+    expect_fail "does not run a Windows binary (WSL interop)" /tmp/escape.exe
 
-    echo "-- encaminhador do llama-server (servidor falso no host)"
+    echo "-- llama-server forwarder (fake server on the host)"
     expect_ok "GET /health" python3 -I -c "$FWD_CLIENT" health
-    expect_ok "3 requisições na mesma conexão (keep-alive)" python3 -I -c "$FWD_CLIENT" keepalive
-    if out="$(python3 -I -c "$FWD_CLIENT" sse 2>&1)"; then ok "SSE chega evento a evento ($out s)"
-    else bad "SSE chega evento a evento" "$(short "$out")"; fi
-    if out="$(python3 -I -c "$FWD_CLIENT" concurrent 2>&1)"; then ok "4 conexões simultâneas de 1,5 s em $out"
-    else bad "4 conexões simultâneas" "$(short "$out")"; fi
-    expect_ok "POST de 4 MiB ida e volta" python3 -I -c "$FWD_CLIENT" bigbody
+    expect_ok "3 requests on the same connection (keep-alive)" python3 -I -c "$FWD_CLIENT" keepalive
+    if out="$(python3 -I -c "$FWD_CLIENT" sse 2>&1)"; then ok "SSE arrives event by event ($out s)"
+    else bad "SSE arrives event by event" "$(short "$out")"; fi
+    if out="$(python3 -I -c "$FWD_CLIENT" concurrent 2>&1)"; then ok "4 concurrent 1.5 s connections in $out"
+    else bad "4 concurrent connections" "$(short "$out")"; fi
+    expect_ok "4 MiB POST round trip" python3 -I -c "$FWD_CLIENT" bigbody
 
-    echo "-- limites"
-    expect_ok "memória limitada ($ET_MEMORY_BYTES bytes)" test "$(cat /sys/fs/cgroup/memory.max)" = "$ET_MEMORY_BYTES"
-    expect_ok "sem swap" test "$(cat /sys/fs/cgroup/memory.swap.max 2>/dev/null)" = 0
-    expect_ok "processos limitados ($ET_PIDS)" test "$(cat /sys/fs/cgroup/pids.max)" = "$ET_PIDS"
-    expect_ok "CPU limitada ($ET_CPUS)" test "$(cat /sys/fs/cgroup/cpu.max)" = "$((ET_CPUS * 100000)) 100000"
+    echo "-- limits"
+    expect_ok "memory limited ($ET_MEMORY_BYTES bytes)" test "$(cat /sys/fs/cgroup/memory.max)" = "$ET_MEMORY_BYTES"
+    expect_ok "no swap" test "$(cat /sys/fs/cgroup/memory.swap.max 2>/dev/null)" = 0
+    expect_ok "processes limited ($ET_PIDS)" test "$(cat /sys/fs/cgroup/pids.max)" = "$ET_PIDS"
+    expect_ok "CPU limited ($ET_CPUS)" test "$(cat /sys/fs/cgroup/cpu.max)" = "$((ET_CPUS * 100000)) 100000"
 
-    echo "-- imagem"
-    expect_ok "python3.12 em /usr/bin (o .venv do eval aponta para ele)" test -x /usr/bin/python3.12
+    echo "-- image"
+    expect_ok "python3.12 in /usr/bin (the eval .venv points to it)" test -x /usr/bin/python3.12
     for v in qwen-code:qwen pi:pi opencode:opencode claude-local:claude codex-local:codex; do
         f="/opt/agents/${v%%:*}/current/bin/${v#*:}"
         if out="$(HOME="$(mktemp -d)" timeout 60 "$f" --version 2>&1)"; then
@@ -237,19 +237,19 @@ PY
     f=/opt/agents/codex-local/current/bin/codex
     if [ -x "$f" ]; then
         out="$(CODEX_HOME="$(mktemp -d)" timeout 30 "$f" sandbox -- true 2>&1)"
-        info "sandbox próprio do Codex (codex sandbox -- true): saída $?: $(short "$out")"
+        info "Codex own sandbox (codex sandbox -- true): exit $?: $(short "$out")"
     fi
 }
 
 if [ "${1:-}" = --inside ]; then
     inside
-    echo "== container: $pass passaram, $fail falharam"
+    echo "== container: $pass passed, $fail failed"
     [ "$fail" = 0 ]
     exit
 fi
 
 # ===================================================================================
-# No host
+# On the host
 # ===================================================================================
 self="$(readlink -f "$0")"
 # shellcheck source=lib.sh
@@ -264,21 +264,21 @@ finish() {
 trap finish EXIT
 
 mkdir -p "$scratch/repo" "$scratch/logs" "$scratch/outside" \
-    "$scratch/skills-prefix/profiles/base/demo" "$scratch/skills-extra/pessoal"
-printf -- '---\nname: demo\ndescription: skill falsa do teste\n---\n' >"$scratch/skills-prefix/profiles/base/demo/SKILL.md"
-printf -- '---\nname: pessoal\ndescription: skill falsa do teste\n---\n' >"$scratch/skills-extra/pessoal/SKILL.md"
+    "$scratch/skills-prefix/profiles/base/demo" "$scratch/skills-extra/personal"
+printf -- '---\nname: demo\ndescription: fake skill for the test\n---\n' >"$scratch/skills-prefix/profiles/base/demo/SKILL.md"
+printf -- '---\nname: personal\ndescription: fake skill for the test\n---\n' >"$scratch/skills-extra/personal/SKILL.md"
 skills_sum() { find "$scratch/skills-prefix" "$scratch/skills-extra" -type f -exec sha256sum {} + | sort; }
 skills_before="$(skills_sum)"
 canary="$scratch/outside/canary.txt"
-echo "canário $(date +%s%N) $RANDOM" >"$canary"
+echo "canary $(date +%s%N) $RANDOM" >"$canary"
 canary_sum="$(sha256sum <"$canary")"
 git -C "$scratch/repo" init -q -b main
-echo teste >"$scratch/repo/README.md"
+echo test >"$scratch/repo/README.md"
 git -C "$scratch/repo" add README.md
 git -C "$scratch/repo" -c user.name=t -c user.email=t@localhost commit -qm init
 
-# Servidor falso no lugar do llama-server (127.0.0.1) e ouvinte TCP no IP da ponte
-# docker0 (o caminho clássico container -> host, que precisa estar fechado).
+# Fake server in place of llama-server (127.0.0.1) and a TCP listener on the docker0
+# bridge IP (the classic container -> host path, which must be closed).
 bridge_ip="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
 python3 -I - "$scratch" "${bridge_ip:-}" <<'PY' &
 import hashlib, json, os, socket, sys, threading, time
@@ -334,7 +334,7 @@ srv.serve_forever()
 PY
 dummy_pid=$!
 for _ in $(seq 50); do [ -s "$scratch/ports" ] && break; sleep 0.1; done
-read -r dummy_port bridge_port <"$scratch/ports" || { echo "servidor falso não subiu" >&2; exit 1; }
+read -r dummy_port bridge_port <"$scratch/ports" || { echo "fake server did not start" >&2; exit 1; }
 
 host_addrs=""
 for ip in $(hostname -I 2>/dev/null); do
@@ -347,9 +347,9 @@ ns="$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf 2>/dev/null)"
 mem_bytes=$((3 * 1024 * 1024 * 1024))
 before="$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)"
 
-echo "== agent-box: testes de fuga (scratch $scratch, servidor falso :$dummy_port)"
-GITHUB_TOKEN=canario ANTHROPIC_API_KEY=canario OPENAI_API_KEY=canario \
-ET_CANARY_SECRET=canario SSH_AUTH_SOCK="$scratch/ssh-agent.sock" \
+echo "== agent-box: escape tests (scratch $scratch, fake server :$dummy_port)"
+GITHUB_TOKEN=canary ANTHROPIC_API_KEY=canary OPENAI_API_KEY=canary \
+ET_CANARY_SECRET=canary SSH_AUTH_SOCK="$scratch/ssh-agent.sock" \
 AGENT_BOX=0 AGENT_SKILLS_DIRS=/home SKILLS_PREFIX="$scratch/skills-prefix" BOX_SKILLS_DIRS='' \
 LLM_BASE_URL="http://127.0.0.1:$dummy_port" BOX_MEMORY=3g BOX_PIDS=512 BOX_CPUS=2 \
 "$SANDBOX_DIR/run-in-box.sh" \
@@ -362,49 +362,49 @@ LLM_BASE_URL="http://127.0.0.1:$dummy_port" BOX_MEMORY=3g BOX_PIDS=512 BOX_CPUS=
     -- bash "$self" --inside
 inside_rc=$?
 
-echo "-- no host, depois do container"
-if [ "$(sha256sum <"$canary")" = "$canary_sum" ]; then ok "canário intacto"; else bad "canário intacto"; fi
-expect_ok "nada novo fora das montagens" test "$(ls -A "$scratch/outside")" = canary.txt
-expect_ok "skills intactas" test "$(skills_sum)" = "$skills_before"
-expect_empty "tudo que o container gravou é do usuário do host" \
+echo "-- on the host, after the container"
+if [ "$(sha256sum <"$canary")" = "$canary_sum" ]; then ok "canary intact"; else bad "canary intact"; fi
+expect_ok "nothing new outside the mounts" test "$(ls -A "$scratch/outside")" = canary.txt
+expect_ok "skills intact" test "$(skills_sum)" = "$skills_before"
+expect_empty "everything the container wrote belongs to the host user" \
     "$(find "$scratch/repo" "$scratch/logs" ! -uid "$(id -u)" 2>/dev/null | head -3)"
-expect_ok "container removido" test "$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)" = "$before"
-expect_empty "estado temporário do wrapper removido" \
+expect_ok "container removed" test "$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)" = "$before"
+expect_empty "wrapper temporary state removed" \
     "$(find "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}" -maxdepth 1 -name 'agent-box.*' -newer "$canary" 2>/dev/null)"
 
 real="${LLM_BASE_URL:-http://127.0.0.1:9931}"
 auth=()
 [ -z "${LLM_API_KEY:-}" ] || auth=(-H "Authorization: Bearer $LLM_API_KEY")
 if curl -fsS --max-time 3 -o /dev/null "${auth[@]}" "${real%/}/health" 2>/dev/null; then
-    echo "-- llama-server real em $real"
+    echo "-- real llama-server at $real"
     LLM_BASE_URL="$real" "$SANDBOX_DIR/run-in-box.sh" --no-skills --rw "$scratch/repo" --ro "$self" \
         --env ET_MODE=real --env "ET_WORKDIR=$scratch/repo" --env "ET_LOGDIR=$scratch/logs" \
         -- bash "$self" --inside
     [ $? = 0 ] || inside_rc=1
 else
-    info "llama-server real não respondeu em $real/health; teste com o servidor real pulado"
+    info "real llama-server did not answer at $real/health; test with the real server skipped"
 fi
 
-echo "-- item 7 (docs/verifications/E7.md): host não segue symlinks do agente"
-# R1: processamento de saída no host (boxio + result.py), do jeito que o eval/run.sh
-# faz depois do agente, contra um $out/agent-logs com symlinks plantados apontando
-# para arquivos do host. Prova leitura e sobrescrita arbitrárias BLOQUEADAS.
+echo "-- item 7 (docs/verifications/E7.md): host does not follow agent symlinks"
+# R1: output processing on the host (boxio + result.py), the way eval/run.sh does it
+# after the agent, against an $out/agent-logs with planted symlinks pointing at
+# host files. Proves arbitrary read and overwrite are BLOCKED.
 reg="$scratch/item7"; mkdir -p "$reg"
-vitima_r="$reg/vitima-leitura.txt"; printf 'SEGREDO_HOST_LEITURA\n' >"$vitima_r"
-vitima_w="$reg/vitima-escrita.sh"; printf 'conteudo-original-do-bashrc\n' >"$vitima_w"
+vitima_r="$reg/victim-read.txt"; printf 'SECRET_HOST_READ\n' >"$vitima_r"
+vitima_w="$reg/victim-write.sh"; printf 'original-bashrc-content\n' >"$vitima_w"
 vitima_w_sum="$(sha256sum <"$vitima_w")"
 out="$reg/out"; work="$reg/work"; mkdir -p "$out" "$work/agent-logs"
-# (a) leitura: agent-metrics.json como symlink -> arquivo do host (direto na agent-logs,
-#     que o agente controla) e, redundante, dentro de $out.
+# (a) read: agent-metrics.json as a symlink -> host file (directly in agent-logs,
+#     which the agent controls) and, redundantly, inside $out.
 ln -s "$vitima_r" "$work/agent-logs/agent-metrics.json"
-# (b) escrita: result.json e meta.json como symlink -> arquivo do host (o que um
-#     box_post/box_check comprometido plantaria em $out).
+# (b) write: result.json and meta.json as symlinks -> host file (what a compromised
+#     box_post/box_check would plant in $out).
 ln -s "$vitima_w" "$out/result.json"
 ln -s "$vitima_w" "$out/meta.json"
-ln -s "$vitima_r" "$out/agent-logs"   # symlink de diretório, para o caso dir-symlink
+ln -s "$vitima_r" "$out/agent-logs"   # directory symlink, for the dir-symlink case
 printf '{"checks":[],"status":"pass","pass":true}\n' >"$scratch/checks-src.json"
 LIB="$REPO_ROOT/eval/lib"
-# exatamente os passos do run.sh: copia de logs, varredura de symlinks, meta, result.
+# exactly the run.sh steps: log copy, symlink sweep, meta, result.
 python3 -I "$LIB/boxio.py" copy-logs "$work/agent-logs" "$out/agent-logs" 2>/dev/null || true
 python3 -I "$LIB/boxio.py" sanitize "$out" >/dev/null 2>&1 || true
 cp "$scratch/checks-src.json" "$out/checks.json"
@@ -413,25 +413,25 @@ import os, sys; sys.path.insert(0, os.environ["EVAL_LIB"]); import boxio
 boxio.write_json_atomic(sys.argv[1], {"run_id":"r","harness":"h","task_id":"S","setup_ok":True})
 PY
 python3 -I "$LIB/result.py" "$out" >/dev/null 2>&1 || true
-expect_ok "vítima de escrita intacta (sem sobrescrita via symlink)" test "$(sha256sum <"$vitima_w")" = "$vitima_w_sum"
-expect_ok "result.json é arquivo regular, não symlink" sh -c '[ -f "'"$out"'/result.json" ] && [ ! -L "'"$out"'/result.json" ]'
-expect_ok "meta.json é arquivo regular, não symlink" sh -c '[ -f "'"$out"'/meta.json" ] && [ ! -L "'"$out"'/meta.json" ]'
-if grep -q SEGREDO_HOST_LEITURA "$out/result.json" 2>/dev/null; then
-    bad "conteúdo do host NÃO vazou para result.json"
-else ok "conteúdo do host NÃO vazou para result.json"; fi
-expect_empty "nenhum symlink restante em \$out" "$(find "$out" -type l 2>/dev/null | head -3)"
-expect_ok "vítima de leitura intacta" test "$(cat "$vitima_r")" = SEGREDO_HOST_LEITURA
+expect_ok "write victim intact (no overwrite via symlink)" test "$(sha256sum <"$vitima_w")" = "$vitima_w_sum"
+expect_ok "result.json is a regular file, not a symlink" sh -c '[ -f "'"$out"'/result.json" ] && [ ! -L "'"$out"'/result.json" ]'
+expect_ok "meta.json is a regular file, not a symlink" sh -c '[ -f "'"$out"'/meta.json" ] && [ ! -L "'"$out"'/meta.json" ]'
+if grep -q SECRET_HOST_READ "$out/result.json" 2>/dev/null; then
+    bad "host content did NOT leak into result.json"
+else ok "host content did NOT leak into result.json"; fi
+expect_empty "no symlink left in \$out" "$(find "$out" -type l 2>/dev/null | head -3)"
+expect_ok "read victim intact" test "$(cat "$vitima_r")" = SECRET_HOST_READ
 
-# R2: a captura do diff (box_post) roda com o workdir só leitura e SEM $out montado;
-# nem o fsmonitor/filtro do .git/config do agente nem qualquer código alcança o host.
-echo "-- item 7: captura do diff (box_post) contida, com .git/config malicioso"
+# R2: the diff capture (box_post) runs with the workdir read-only and WITHOUT $out
+# mounted; neither the fsmonitor/filter in the agent's .git/config nor any code reaches the host.
+echo "-- item 7: diff capture (box_post) contained, with a malicious .git/config"
 mrepo="$scratch/malrepo"; mkdir -p "$mrepo"
 git -C "$mrepo" init -q -b main
 printf 'hook() { : ; }\n' >"$mrepo/a.txt"
 git -C "$mrepo" add a.txt
 git -C "$mrepo" -c user.name=t -c user.email=t@localhost commit -qm base
 base_ref="$(git -C "$mrepo" rev-parse HEAD)"
-canary_box="$reg/CANARIO-DO-BOX"   # caminho do host; não montado no box_post
+canary_box="$reg/CANARY-OF-THE-BOX"   # host path; not mounted in box_post
 evil="$mrepo/.git/evil.sh"
 cat >"$evil" <<EOF
 #!/bin/sh
@@ -439,12 +439,12 @@ echo PWNED > "$canary_box"
 true
 EOF
 chmod +x "$evil"
-# Vetor do item 6/7: fsmonitor roda no git add/status. A captura o desliga com
-# -c core.fsmonitor=false (precedência da linha de comando); e mesmo se rodasse,
-# o workdir é só leitura e $out não é montado, então não alcançaria o host.
+# Vector from item 6/7: fsmonitor runs on git add/status. The capture turns it off
+# with -c core.fsmonitor=false (command-line precedence); and even if it ran, the
+# workdir is read-only and $out is not mounted, so it would not reach the host.
 git -C "$mrepo" config core.fsmonitor "$evil"
 git -C "$mrepo" config core.hooksPath "$mrepo/.git/hooks-evil"
-printf 'mudanca do agente\n' >>"$mrepo/a.txt"
+printf 'agent change\n' >>"$mrepo/a.txt"
 post_tar="$reg/diff.tar"
 LLM_BASE_URL="http://127.0.0.1:1" "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills --ro "$mrepo" -- bash -c '
     set -e; wd="$1"; ref="$2"; base="$3"
@@ -459,53 +459,53 @@ LLM_BASE_URL="http://127.0.0.1:1" "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-ski
     git -C "$wd" $gf rev-list --count "$base..HEAD" >"$t/commits.txt" 2>/dev/null || echo 0 >"$t/commits.txt"
     tar -C "$t" -cf - agent.patch numstat.txt commits.txt' \
     _ "$mrepo" "$base_ref" "$base_ref" >"$post_tar" 2>/dev/null || true
-expect_fail "fsmonitor/filtro do agente NÃO escreveu no host" test -e "$canary_box"
+expect_fail "agent fsmonitor/filter did NOT write to the host" test -e "$canary_box"
 ns="$(python3 -I "$LIB/boxio.py" extract-diff "$post_tar" "$reg" | tail -n +2)"
-expect_ok "o diff ainda foi capturado apesar do .git/config hostil" sh -c 'grep -q "mudanca do agente" "'"$reg"'/agent.patch"'
+expect_ok "the diff was still captured despite the hostile .git/config" sh -c 'grep -q "agent change" "'"$reg"'/agent.patch"'
 
-# R3: integridade do placar. box_check roda código do agente (os testes ocultos importam
-# o código dele), mas $out NÃO é montado: o agente não consegue forjar o checks.json do
-# host; o veredito vem do grader (processo separado, montado só leitura) via stdout.
-echo "-- item 7: box_check não pode forjar o veredito nem alterar o grader"
+# R3: scoreboard integrity. box_check runs agent code (the hidden tests import its
+# code), but $out is NOT mounted: the agent cannot forge the host's checks.json; the
+# verdict comes from the grader (separate process, mounted read-only) via stdout.
+echo "-- item 7: box_check cannot forge the verdict or modify the grader"
 bc="$reg/boxcheck"; mkdir -p "$bc/wd" "$bc/out"
-canary_bc="$bc/CANARIO-BOXCHECK"
+canary_bc="$bc/CANARY-BOXCHECK"
 out_host="$bc/out"
 "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills --rw "$bc/wd" --ro "$REPO_ROOT/eval/lib" -- bash -c '
     set -u
     oh="$1"; grader="$2"; canary="$3"
-    # (a) código do agente tenta forjar o checks.json do host, plantar symlink e sair:
-    mkdir -p "$oh" 2>/dev/null && echo FORJADO_PASS >"$oh/checks.json" 2>/dev/null || true
+    # (a) agent code tries to forge the host checks.json, plant a symlink and leave:
+    mkdir -p "$oh" 2>/dev/null && echo FORGED_PASS >"$oh/checks.json" 2>/dev/null || true
     ln -s /etc/passwd "$oh/result.json" 2>/dev/null || true
     echo PWNED >"$canary" 2>/dev/null || true
-    # (b) tenta alterar o grader (montado só leitura) antes de ele rodar:
+    # (b) tries to modify the grader (mounted read-only) before it runs:
     echo "AGENT_WUZ_HERE=1" >>"$grader/check.py" 2>/dev/null || true
-    # o grader (processo separado) emite o veredito REAL num tmpfs, pela stdout:
+    # the grader (separate process) emits the REAL verdict in a tmpfs, via stdout:
     od="$(mktemp -d)"
     printf "%s\n" "{\"task_id\":\"X\",\"status\":\"fail\",\"pass\":false,\"checks\":[]}" >"$od/checks.json"
     : >"$od/check.log"; : >"$od/check.stdout"; : >"$od/check.stderr"; echo 1 >"$od/check.rc"
     tar -C "$od" -cf - checks.json check.log check.stdout check.stderr check.rc' \
     _ "$out_host" "$REPO_ROOT/eval/lib" "$canary_bc" 9>&- >"$bc/checks.tar" 2>/dev/null || true
 python3 -I "$LIB/boxio.py" extract-checks "$bc/checks.tar" "$out_host" >/dev/null 2>&1 || true
-expect_fail "box_check não escreveu o canário no host" test -e "$canary_bc"
-expect_ok "grader (check.py) intacto (montado só leitura)" sh -c '! grep -q AGENT_WUZ_HERE "'"$REPO_ROOT"'/eval/lib/check.py"'
-if grep -q FORJADO_PASS "$out_host/checks.json" 2>/dev/null; then
-    bad "checks.json forjado pelo agente NÃO foi persistido"
-else ok "checks.json forjado pelo agente NÃO foi persistido"; fi
-expect_ok "veredito persistido é o do grader (fail)" \
+expect_fail "box_check did not write the canary on the host" test -e "$canary_bc"
+expect_ok "grader (check.py) intact (mounted read-only)" sh -c '! grep -q AGENT_WUZ_HERE "'"$REPO_ROOT"'/eval/lib/check.py"'
+if grep -q FORGED_PASS "$out_host/checks.json" 2>/dev/null; then
+    bad "checks.json forged by the agent was NOT persisted"
+else ok "checks.json forged by the agent was NOT persisted"; fi
+expect_ok "persisted verdict is the grader's (fail)" \
     sh -c 'python3 -I -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get(\"status\")==\"fail\" else 1)" "'"$out_host"'/checks.json"'
-expect_ok "result.json do host não virou symlink" sh -c '[ ! -L "'"$out_host"'/result.json" ]'
+expect_ok "host result.json did not become a symlink" sh -c '[ ! -L "'"$out_host"'/result.json" ]'
 
-echo "-- timeout do eval derruba o container"
+echo "-- eval timeout takes the container down"
 t0=$SECONDS
 timeout -k 5 3 "$SANDBOX_DIR/run-in-box.sh" --no-llm --no-skills -- sleep 120 >/dev/null 2>&1
 rc=$?
-expect_ok "timeout devolve 124 (saída $rc, $((SECONDS - t0)) s)" test "$rc" = 124
+expect_ok "timeout returns 124 (exit $rc, $((SECONDS - t0)) s)" test "$rc" = 124
 for _ in $(seq 20); do
     [ "$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)" = "$before" ] && break
     sleep 0.5
 done
-expect_ok "nenhum container sobrando depois do timeout" \
+expect_ok "no container left after the timeout" \
     test "$(docker ps -aq --filter "label=$BOX_LABEL" | wc -l)" = "$before"
 
-echo "== host: $pass passaram, $fail falharam; container: $([ "$inside_rc" = 0 ] && echo ok || echo FALHOU)"
+echo "== host: $pass passed, $fail failed; container: $([ "$inside_rc" = 0 ] && echo ok || echo FAILED)"
 [ "$fail" = 0 ] && [ "$inside_rc" = 0 ]
