@@ -12,6 +12,16 @@ Ambiente de desenvolvimento com agentes de IA rodando localmente, com modelos e 
 
 O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estão em [DIAGNOSIS-AND-PLAN.md](DIAGNOSIS-AND-PLAN.md). O restante da documentação (plano, registros de etapas e relatórios de verificação) está em inglês.
 
+## Uso em campo
+
+Antes da comparação formal, usei o ambiente num projeto real e privado de cliente: monorepo com API NestJS, PWA em Angular e migração de dados de um ERP legado. Foi um uso informal, fora do piloto controlado previsto na E8. Os números vêm dos logs das sessões e do histórico do git.
+
+- **Modelo local (Codex CLI + Qwen3.6-35B-A3B), cerca de dois dias:** construiu a primeira versão de ponta a ponta, com umas 1.570 chamadas de ferramenta e ~6.000 linhas de código, sem custo de API. Cerca de **53%** do código-fonte da versão que hoje está em homologação ainda vem dele.
+- **Onde falhou:** declarou o marco concluído com **7 de 8 suítes de teste falhando**, e deixou passar uma migração que associava itens de pedido aos pedidos errados, um bypass de autenticação não restrito ao desenvolvimento e SQL montado por concatenação.
+- **Modelo de ponta num plano básico, cerca de um dia:** achou e corrigiu esses problemas e levou os testes de nenhum rodando para **163 passando**.
+
+**Conclusão:** o modelo local carregou a maior parte do volume, mas não dava para confiar no julgamento dele sobre o próprio trabalho. O que tornou o resultado utilizável foi o arranjo híbrido com verificação independente entre os dois, o mesmo princípio que este repositório aplica a si mesmo.
+
 ## Etapas
 
 | Etapa | Descrição | Estado |

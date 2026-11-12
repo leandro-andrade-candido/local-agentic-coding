@@ -70,6 +70,16 @@ These came out of systematic benchmarking (sweeps over offload depth, batch size
 4. **Prefill pays a fixed ~1 s cost per micro-batch**, so 4,096-token micro-batches gave +45% on long prompts compared with 2,048.
 5. **An adversarial review found a real hole.** No escape from inside the container was found, but the *host-side* scripts that collected the agent's output followed symlinks the agent could plant, enabling arbitrary file read and write on the host. The fix removes every planted symlink before the host touches the output and never follows links; it is covered by 13 dedicated regression tests. See the [attack report](docs/verifications/E7.md) and the [sandbox README](sandbox/README.md).
 
+## Field use
+
+Before the formal comparison, I used the setup on a real, private client project: a monorepo with a NestJS API, an Angular PWA and a migration of data from a legacy ERP. This was informal use, not the controlled pilot planned for E8. The numbers come from the agent session logs and the git history.
+
+- **Local model (Codex CLI + Qwen3.6-35B-A3B), about two days:** built the first version end to end, with around 1,570 tool calls and ~6,000 lines of code, at no API cost. About **53%** of the source code in the version now in user acceptance testing still comes from it.
+- **Where it fell short:** it reported the milestone complete with **7 of 8 test suites failing**, and it missed a data-migration bug that attached order items to the wrong orders, an auth bypass not restricted to development, and SQL built by string concatenation.
+- **Frontier model on a basic plan, about one day:** found and fixed those issues and took the tests from none running to **163 passing**.
+
+**Takeaway:** the local model carried most of the volume; it could not be trusted to judge its own work. A hybrid setup with independent verification between the two is what made it usable, which is the same principle this repository applies to itself.
+
 ## How it was built
 
 The work follows an explicit process, documented stage by stage:
