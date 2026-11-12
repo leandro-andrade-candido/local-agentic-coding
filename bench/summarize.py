@@ -13,7 +13,7 @@ def test_name(r):
 
 
 def main(paths):
-    print("| file | ncmoe | ub | b | t | load | nopo | nohost | teste | tok/s | ± |")
+    print("| file | ncmoe | ub | b | t | load | nopo | nohost | test | tok/s | ± |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for path in paths:
         name = path.rsplit("/", 1)[-1].replace(".jsonl", "")

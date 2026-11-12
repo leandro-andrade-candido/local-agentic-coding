@@ -197,7 +197,7 @@ Without them, the agents send the dummy key (401) and the `/metrics` snapshots v
 
 1. A real `scripts/llm install` and `scripts/llm start`: time until ready and `wait-ready` seeing `$MAINPID` inside `ExecStartPost`.
 2. `scripts/llm health` all `ok`, in particular `/props` with the defaults from the final line and the log without `failed to fit params`.
-3. `scripts/llm test`: first real run, with no `RUNTIME`/`TRUNCADO`, with the JSON in `logs/`.
+3. `scripts/llm test`: first real run, with no `RUNTIME`/`TRUNCADO` (now printed as TRUNCATED), with the JSON in `logs/`.
 4. Automatic restart: `kill -9` on the `MainPID` → back in ~10 s (`systemctl --user show -p NRestarts llama-server`).
 5. Clean stop: `scripts/llm stop` in under 90 s, no SIGKILL in the journal, free VRAM back to ~7,910 MiB (`scripts/llm preflight`).
 6. Preflight inside the unit: `nvidia-smi.exe` (WSL interop) answers from systemd. In the journal, the warning that the Windows `nvidia-smi.exe` did not respond must not appear.

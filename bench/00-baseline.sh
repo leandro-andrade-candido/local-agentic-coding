@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Step 1 (and final step): PCIe state (replays), GPU and memory.
-# Usage: bench/00-baseline.sh <label>   e.g. antes | depois   (before | after)
+# Usage: bench/00-baseline.sh <label>   e.g. before | after
 source "$(dirname "$0")/lib.sh"
-label="${1:-antes}"
+label="${1:-before}"
 out="$RAW/00-baseline-$label.txt"
 {
   snapshot

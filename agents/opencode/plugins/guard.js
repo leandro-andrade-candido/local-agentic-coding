@@ -1,5 +1,5 @@
 // OpenCode 1.x plugin: passes every command of the bash tool through
-// agents/lib/guard.py (blocklist shared by the four agents).
+// agents/lib/guard.py (blocklist shared by the five agents).
 // Throwing an error in tool.execute.before cancels the call and returns the
 // message to the model. A guard failure blocks the command (fail closed).
 // Variables: AGENT_GUARD (path to guard.py), AGENT_PROFILE, AGENT_WORKDIR.

@@ -2,7 +2,7 @@
  * Permissions for the local Pi (Pi has no permission system of its own).
  *
  * - bash: every command goes through agents/lib/guard.py (blocklist shared by
- *   the four agents). In the interactive profile, commands that are not simple
+ *   the five agents). In the interactive profile, commands that are not simple
  *   reads ask for confirmation.
  * - write/edit outside the project: ask (interactive) or are blocked
  *   (autonomous, and whenever there is no UI).

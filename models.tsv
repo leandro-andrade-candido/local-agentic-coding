@@ -1,4 +1,4 @@
 # alias	hf_repo	revision	file	bytes	sha256	role
-qwen3.5-4b	unsloth/Qwen3.5-4B-GGUF	e87f176479d0855a907a41277aca2f8ee7a09523	Qwen3.5-4B-UD-Q4_K_XL.gguf	2912109728	b252c5610a42ca82d20fe2a12813e9d069eed89292907e26c783eeb0bc961bc7	teste de fumaça (E3) e auxiliar
-qwen3.6-35b	unsloth/Qwen3.6-35B-A3B-GGUF	a483e9e6cbd595906af30beda3187c2663a1118c	Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf	22360456160	707a55a8a4397ecde44de0c499d3e68c1ad1d240d1da65826b4949d1043f4450	principal (E4)
-qwen3.6-35b-q6	unsloth/Qwen3.6-35B-A3B-GGUF	a483e9e6cbd595906af30beda3187c2663a1118c	Qwen3.6-35B-A3B-UD-Q6_K.gguf	29308320736	4fe53b148b46f9b88830e2a3055c5b15c3a4d1e3ddc9a1384a108d8b9d59f043	principal em Q6 (teste manual)
+qwen3.5-4b	unsloth/Qwen3.5-4B-GGUF	e87f176479d0855a907a41277aca2f8ee7a09523	Qwen3.5-4B-UD-Q4_K_XL.gguf	2912109728	b252c5610a42ca82d20fe2a12813e9d069eed89292907e26c783eeb0bc961bc7	smoke test (E3) and helper
+qwen3.6-35b	unsloth/Qwen3.6-35B-A3B-GGUF	a483e9e6cbd595906af30beda3187c2663a1118c	Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf	22360456160	707a55a8a4397ecde44de0c499d3e68c1ad1d240d1da65826b4949d1043f4450	main (E4)
+qwen3.6-35b-q6	unsloth/Qwen3.6-35B-A3B-GGUF	a483e9e6cbd595906af30beda3187c2663a1118c	Qwen3.6-35B-A3B-UD-Q6_K.gguf	29308320736	4fe53b148b46f9b88830e2a3055c5b15c3a4d1e3ddc9a1384a108d8b9d59f043	main, Q6 (manual test)

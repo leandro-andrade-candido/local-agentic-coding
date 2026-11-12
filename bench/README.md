@@ -36,7 +36,7 @@ All commands run from the repository root. Total time: ~1.5 h of machine time.
 
 ```bash
 # 1. Initial state (repeat at the end: the PCIe replays must stay at 0)
-bench/00-baseline.sh antes
+bench/00-baseline.sh before
 
 # 2. What --fit chooses for 131072 context, per micro-batch
 for ub in 512 1024 2048 4096; do bench/01-fit.sh ub$ub -ub $ub -b 4096 -lv 4; done
@@ -78,7 +78,7 @@ DEEP_FILES=/usr/lib/python3.12/argparse.py,/usr/lib/python3.12/typing.py,/usr/li
   bench/04-final.sh deep FINAL-128k-ncmoe38
 
 # 10. Final state
-bench/00-baseline.sh depois
+bench/00-baseline.sh after
 
 # Summary of all llama-bench runs
 python3 -I bench/summarize.py bench/raw/02-*.jsonl

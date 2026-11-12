@@ -98,17 +98,17 @@ claude-local … claude -p --output-format stream-json --verbose --model modelo-
 - `grep` over the generated files found no real HOME paths nor the fake keys I injected (`sk-real…`, `sk-ant…`):
 
 ```
-$ grep -rnE '~/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.agents)|sk-real|sk-ant' log-*   # caminhos anonimizados para publicação; no original era o caminho absoluto da HOME
-(nenhuma)
+$ grep -rnE '~/(\.claude|\.codex|\.qwen|\.gemini|\.pi|\.config|\.agents)|sk-real|sk-ant' log-*   # paths anonymized for publication; the original had the absolute HOME path
+(none)
 ```
 
 - The disposable HOME remained empty after the 5 dry-runs (`find $S/dry/home` showed only the root).
 - I repeated the dry-runs with the **real HOME** and compared the modification date of the paths that do not change by themselves:
 
 ```
-antes == depois:
+before == after:
 ~/.codex 1793217734 · ~/.gemini 1793118412 · ~/.agents 1789384635
-~/.qwen, ~/.config/opencode, ~/.local/share/opencode, ~/.pi, ~/.local/opt/agents: ausentes antes e depois
+~/.qwen, ~/.config/opencode, ~/.local/share/opencode, ~/.pi, ~/.local/opt/agents: absent before and after
 ```
 
 `~/.claude` and `~/.claude.json` change all the time because of the orchestrator's own session. So their date is no proof, neither here nor in E6: the proof has to come from the container or from a disposable HOME.

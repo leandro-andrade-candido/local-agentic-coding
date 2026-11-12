@@ -53,7 +53,7 @@ def fmt(v, digits=0, suffix=""):
     if v is None:
         return "-"
     if digits == 0:
-        return f"{v:,.0f}{suffix}".replace(",", ".")
+        return f"{v:,.0f}{suffix}"
     return f"{v:.{digits}f}{suffix}"
 
 
