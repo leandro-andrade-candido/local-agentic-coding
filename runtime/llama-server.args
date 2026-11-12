@@ -1,5 +1,5 @@
 # Perfil do llama-server para Qwen3.6-35B-A3B-UD-Q4_K_XL nesta máquina (E4, 29/10/2026).
-# Medições e justificativas: bench/RESULTADOS-E4.md.
+# Medições e justificativas: bench/RESULTS-E4.md.
 #
 # Formato: uma flag por linha (flag e valor separados por espaço, sem aspas e sem
 # espaços dentro do valor), cada uma com um comentário logo acima. Linhas que começam
@@ -47,7 +47,7 @@
 # Até 48 checkpoints de contexto por slot (63 MiB cada, ~3 GiB de RAM no máximo).
 -ctxcp 48
 # Espaço mínimo de 2048 tokens entre checkpoints (padrão 8192). Mantido do plano; nos testes os checkpoints
-# ficaram no fim de cada prompt e o efeito deste valor não foi isolado (RESULTADOS-E4.md, questão 9).
+# ficaram no fim de cada prompt e o efeito deste valor não foi isolado (RESULTS-E4.md, questão 9).
 -cms 2048
 # Cache de prompts na RAM até 12 GiB: guarda a conversa principal quando entra outra (subagente, título) e a restaura.
 --cache-ram 12288

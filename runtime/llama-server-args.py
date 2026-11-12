@@ -72,7 +72,7 @@ POLICY_ONLY = ("--host", "--port", "--api-key-file", "--cors-origins", "--cors-m
                "--ui", "--ssl-key-file", "--ssl-cert-file", "--api-prefix")
 
 # Obrigatórias na linha final (perfil ou política), com a grafia exigida quando é
-# booleana. As de amostragem e -n vêm de docs/etapas/E5-requisitos.md: sem elas o
+# booleana. As de amostragem e -n vêm de docs/stages/E5-requirements.md: sem elas o
 # Codex, que não envia nada, cairia nos padrões do llama.cpp (temperatura 0.8, min-p 0.05).
 REQUIRED = {"--host": None, "--port": None, "--api-key-file": None, "--cors-origins": None,
             "--cors-credentials": "--no-cors-credentials", "--agent": "--no-agent",

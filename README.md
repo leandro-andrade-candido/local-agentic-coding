@@ -30,7 +30,7 @@ The independent re-run reproduced these within about ±5%.
 - **Server hardening:** API key required on every endpoint except `/health`, localhost only, admin endpoints disabled, 13 automated health checks.
 - **Reproducible:** runtime, model files (by revision **and** SHA-256), agents (sha512 of each tarball) and the container base image (digest) are all pinned.
 
-Full benchmark report: [`bench/RESULTADOS-E4.md`](bench/RESULTADOS-E4.md) (Portuguese).
+Full benchmark report: [`bench/RESULTS-E4.md`](bench/RESULTS-E4.md) (Portuguese).
 
 ## Architecture
 
@@ -68,15 +68,15 @@ These came out of systematic benchmarking (sweeps over offload depth, batch size
 2. **The expert cache made things worse.** `--moe-cache-mib 1024` cut generation speed by 22%: the CPU computes faster than PCIe can deliver the weights.
 3. **More threads were slower.** 16 threads gave 18–19% slower generation than 8 threads.
 4. **Prefill pays a fixed ~1 s cost per micro-batch**, so 4,096-token micro-batches gave +45% on long prompts compared with 2,048.
-5. **An adversarial review found a real hole.** No escape from inside the container was found, but the *host-side* scripts that collected the agent's output followed symlinks the agent could plant, enabling arbitrary file read and write on the host. The fix removes every planted symlink before the host touches the output and never follows links; it is covered by 13 dedicated regression tests. See the [attack report](docs/verificacoes/E7.md) and the [sandbox README](sandbox/README.md).
+5. **An adversarial review found a real hole.** No escape from inside the container was found, but the *host-side* scripts that collected the agent's output followed symlinks the agent could plant, enabling arbitrary file read and write on the host. The fix removes every planted symlink before the host touches the output and never follows links; it is covered by 13 dedicated regression tests. See the [attack report](docs/verifications/E7.md) and the [sandbox README](sandbox/README.md).
 
 ## How it was built
 
 The work follows an explicit process, documented stage by stage:
 
-- **Diagnosis before installation.** Hardware audit, research on models, runtimes and agents, alternatives with trade-offs, and an approved plan before anything was installed ([`DIAGNOSTICO-E-PLANO.md`](DIAGNOSTICO-E-PLANO.md)).
+- **Diagnosis before installation.** Hardware audit, research on models, runtimes and agents, alternatives with trade-offs, and an approved plan before anything was installed ([`DIAGNOSIS-AND-PLAN.md`](DIAGNOSIS-AND-PLAN.md)).
 - **Evidence labels.** Every claim is tagged *measured*, *verified at the primary source*, *reported by a cited source*, *estimated* or *unverified*.
-- **Independent verification.** Stages E1–E4 and E7 were checked by a separate AI reviewer agent that re-ran the measurements and tried to break the claims; reports are in [`docs/verificacoes/`](docs/verificacoes/).
+- **Independent verification.** Stages E1–E4 and E7 were checked by a separate AI reviewer agent that re-ran the measurements and tried to break the claims; reports are in [`docs/verifications/`](docs/verifications/).
 - **AI-assisted, human-directed.** I built it by directing AI coding agents and reviewing their output. The evaluation suite here measures whether local agents can do that same kind of work.
 
 ## Status and roadmap
@@ -109,7 +109,7 @@ sandbox/escape-tests.sh               # should report everything passing
 sandbox/agent-shell.sh codex-local ~/path/to/project   # or qwen-code, pi, opencode, claude-local
 ```
 
-The operational guide (Portuguese) is [`GUIA-DE-USO.md`](GUIA-DE-USO.md).
+The operational guide (Portuguese) is [`USAGE-GUIDE.pt-BR.md`](USAGE-GUIDE.pt-BR.md).
 
 ## Repository layout
 

@@ -1,6 +1,6 @@
 # Política do llama-server (E5): segurança e padrões de uso, 29/10/2026.
 # Dono: E5. O desempenho fica no perfil da E4 (runtime/llama-server.args), que
-# este arquivo não repete. Requisitos: docs/etapas/E5-requisitos.md.
+# este arquivo não repete. Requisitos: docs/stages/E5-requirements.md.
 #
 # Formato: igual ao do perfil (uma flag por linha; flag e valor separados por um
 # espaço, sem aspas e sem espaço no valor; comentário logo acima). O wrapper

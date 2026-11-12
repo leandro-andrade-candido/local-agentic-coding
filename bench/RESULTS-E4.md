@@ -1,6 +1,6 @@
 # E4: benchmark do Qwen3.6-35B-A3B e perfil do llama-server
 
-> **Verificação independente (29/10, 12:11–12:31):** as 7 afirmações passaram ([`docs/verificacoes/E4.md`](../docs/verificacoes/E4.md)). Algumas magnitudes aqui ficaram maiores que as remedidas, sem mudar nenhuma conclusão:
+> **Verificação independente (29/10, 12:11–12:31):** as 7 afirmações passaram ([`docs/verifications/E4.md`](../docs/verifications/E4.md)). Algumas magnitudes aqui ficaram maiores que as remedidas, sem mudar nenhuma conclusão:
 > - `MIN_BATCH=1024`: ~2,2× em pp128.
 > - `-t 16` contra `-t 8`: −18 a 19% na geração.
 > - `--moe-cache-mib 1024`: −22% na geração.

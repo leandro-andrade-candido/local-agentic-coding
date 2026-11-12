@@ -147,7 +147,7 @@ PY
         "$(find "$ET_HOST_HOME" -not -type d -not -path "$ET_AGENTS_DIR/*" -not -path "$ET_SELF" 2>/dev/null | head -5)"
     expect_fail "não vê o canário fora das montagens" test -e "$ET_CANARY"
     expect_fail "não vê eval/ (testes ocultos e soluções)" test -e "$ET_REPO_ROOT/eval"
-    expect_fail "não vê o resto do repositório" test -e "$ET_REPO_ROOT/DIAGNOSTICO-E-PLANO.md"
+    expect_fail "não vê o resto do repositório" test -e "$ET_REPO_ROOT/DIAGNOSIS-AND-PLAN.md"
     for f in /mnt/c /mnt/wsl /mnt/wslg /tmp/.X11-unix /run/user /dev/dxg /init \
              /var/run/docker.sock /run/docker.sock; do
         expect_fail "$f ausente" test -e "$f"
@@ -385,7 +385,7 @@ else
     info "llama-server real não respondeu em $real/health; teste com o servidor real pulado"
 fi
 
-echo "-- item 7 (docs/verificacoes/E7.md): host não segue symlinks do agente"
+echo "-- item 7 (docs/verifications/E7.md): host não segue symlinks do agente"
 # R1: processamento de saída no host (boxio + result.py), do jeito que o eval/run.sh
 # faz depois do agente, contra um $out/agent-logs com symlinks plantados apontando
 # para arquivos do host. Prova leitura e sobrescrita arbitrárias BLOQUEADAS.

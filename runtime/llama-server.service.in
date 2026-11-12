@@ -15,7 +15,7 @@
 
 [Unit]
 Description=llama-server local (modelo dos agentes de código, só em 127.0.0.1)
-Documentation=file://@@REPO@@/docs/etapas/E5-preparacao.md
+Documentation=file://@@REPO@@/docs/stages/E5-preparation.md
 # Até 5 inícios em 30 min; depois fica em "failed" até `scripts/llm start`
 # (que roda reset-failed). Evita laço com a GPU ou o modelo com problema.
 StartLimitIntervalSec=30min

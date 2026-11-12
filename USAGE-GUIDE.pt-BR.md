@@ -32,7 +32,7 @@ scripts/llm model --reset            # volta ao padrão (Q4, qwen3.6-35b)
 - **Onde fica a escolha:** `~/.config/local-agentic/model`, fora do git. O serviço também lê esse arquivo. `LLM_SERVER_MODEL=<alias>` tem prioridade, mas só no início à mão.
 - **Q6 em relação ao Q4:** em tese um pouco melhor, com relatos de chamadas de ferramenta mais estáveis. Estimativa sem medição: geração 10–25% mais lenta (~24–28 tok/s com 20 mil tokens) e leitura do prompt ~900–1.100 tok/s. Usa ~7 GB a mais de RAM fixada.
 - **RAM:** modelo (~28 GiB) + `--cache-ram` (12 GiB) + ~4 GiB ficam perto do limite de ~50 GB do WSL, e o pré-voo pode avisar. Se houver swap, reduza `--cache-ram` para `8192` no perfil e ajuste o valor esperado (`scripts/llm health` compara com o servidor).
-- **Para medir como na E4 (servidor parado):** `scripts/llm stop`, depois `MODEL=~/models/Qwen3.6-35B-A3B-UD-Q6_K.gguf bench/04-final.sh agent Q6-agent` e o mesmo com `tg Q6-tg`; compare com `bench/RESULTADOS-E4.md`. Para a qualidade, rode a mesma tarefa (por exemplo S1–S3) com o mesmo agente nas duas versões.
+- **Para medir como na E4 (servidor parado):** `scripts/llm stop`, depois `MODEL=~/models/Qwen3.6-35B-A3B-UD-Q6_K.gguf bench/04-final.sh agent Q6-agent` e o mesmo com `tg Q6-tg`; compare com `bench/RESULTS-E4.md`. Para a qualidade, rode a mesma tarefa (por exemplo S1–S3) com o mesmo agente nas duas versões.
 
 ## 2. Usar um agente num projeto (interativo, isolado)
 
@@ -96,7 +96,7 @@ O push você faz fora do container.
 | Resumo | `python3 -I eval/summarize.py eval/runs/e6-r1` | tabela por agente e tarefa |
 | Nota de T1, T5, T6 | `python3 -I eval/grade.py <result.json> --score N --by NOME` | tarefas avaliadas por rubrica |
 
-O protocolo da comparação está em [docs/etapas/E6-protocolo.md](docs/etapas/E6-protocolo.md), com as rodadas R1–R3 e os critérios de eliminação. O do piloto está em [docs/piloto/PROTOCOLO.md](docs/piloto/PROTOCOLO.md).
+O protocolo da comparação está em [docs/stages/E6-protocol.md](docs/stages/E6-protocol.md), com as rodadas R1–R3 e os critérios de eliminação. O do piloto está em [docs/pilot/PROTOCOL.md](docs/pilot/PROTOCOL.md).
 
 ## 4. Problema conhecido: raciocínio em espiral
 

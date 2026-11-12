@@ -2,7 +2,7 @@
 
 Configuração dos cinco agentes que a etapa E6 compara, todos apontados para o
 llama-server local (Qwen3.6-35B-A3B, alias `qwen3.6-35b`, porta 9931). Desde
-29/10 é uma disputa única na Meta 1 (ver seção 11 do `DIAGNOSTICO-E-PLANO.md`):
+29/10 é uma disputa única na Meta 1 (ver seção 11 do `DIAGNOSIS-AND-PLAN.md`):
 Qwen Code, Codex CLI, Pi e OpenCode (abertos) e Claude Code (fechado, gratuito).
 Na E6, Claude Code local e Codex local rodam primeiro. A E7 (agent-box) vem antes
 da E6: o perfil autonomous só roda dentro do container.
@@ -10,7 +10,7 @@ da E6: o perfil autonomous só roda dentro do container.
 Nada foi instalado nesta etapa. Versões, docs e código conferidos em 29/10/2026
 no npm, no GitHub (tags das versões fixadas), em code.claude.com/docs e em
 developers.openai.com/codex.
-Selos como no `DIAGNOSTICO-E-PLANO.md`: **[verificado]** = conferido na fonte
+Selos como no `DIAGNOSIS-AND-PLAN.md`: **[verificado]** = conferido na fonte
 primária; **não verificado** = depende de teste na E6.
 
 ## Comparação

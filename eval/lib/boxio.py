@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Leitura e escrita seguras das saídas do agente (E7, correção do item 7 da
-verificação adversarial em docs/verificacoes/E7.md).
+verificação adversarial em docs/verifications/E7.md).
 
 Com EVAL_WRAPPER, o agente roda num container, mas o eval/run.sh ainda processa
 NO HOST o que o agente produziu: o diff, a pasta agent-logs e o agent-metrics.json.

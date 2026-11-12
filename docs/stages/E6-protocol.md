@@ -43,4 +43,4 @@ O aquecimento antes do retrato de métricas já é automático.
 
 ## Saída
 
-`docs/etapas/E6.md`: tabela por agente e rodada, com o tamanho do primeiro pedido, a taxa de sucesso, os tempos, o uso de cache e os erros; os eliminados e o motivo; a decisão; e os 1 ou 2 agentes que seguem para a E8. A verificação independente da E6 refaz uma amostra das execuções.
+`docs/stages/E6.md`: tabela por agente e rodada, com o tamanho do primeiro pedido, a taxa de sucesso, os tempos, o uso de cache e os erros; os eliminados e o motivo; a decisão; e os 1 ou 2 agentes que seguem para a E8. A verificação independente da E6 refaz uma amostra das execuções.

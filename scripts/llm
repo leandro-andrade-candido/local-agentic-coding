@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# llm: o llama-server local como serviço do usuário (E5). Ver docs/etapas/E5-preparacao.md.
+# llm: o llama-server local como serviço do usuário (E5). Ver docs/stages/E5-preparation.md.
 #
 # Uso: scripts/llm <comando>
 #   key                  cria a chave (~/.config/local-agentic/llm-api-key, modo 0600) se não

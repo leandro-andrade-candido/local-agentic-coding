@@ -1,6 +1,6 @@
 # E5: preparação do serviço do llama-server
 
-Preparado em 29/10/2026, enquanto a E4 e a verificação dela usavam a porta 9931 e a GPU. Nada foi instalado nem iniciado: só a chave foi criada e o `--dry-run` e o pré-voo foram executados. Requisitos atendidos: [`E5-requisitos.md`](E5-requisitos.md), mais o pedido da E7 de manter desligadas as rotas perigosas.
+Preparado em 29/10/2026, enquanto a E4 e a verificação dela usavam a porta 9931 e a GPU. Nada foi instalado nem iniciado: só a chave foi criada e o `--dry-run` e o pré-voo foram executados. Requisitos atendidos: [`E5-requirements.md`](E5-requirements.md), mais o pedido da E7 de manter desligadas as rotas perigosas.
 
 ## Divisão de responsabilidades
 

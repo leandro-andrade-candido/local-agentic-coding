@@ -2,14 +2,14 @@
 
 Calibração do `llama-server` para o Qwen3.6-35B-A3B nesta máquina: onde ficam os experts, micro-lote, modo de carga, threads, turnos curtos, profundidade de contexto, cache de experts e simulação de turnos de agente.
 
-Resultados, perfil escolhido e justificativas: [`RESULTADOS-E4.md`](RESULTADOS-E4.md). Perfil final: [`../runtime/llama-server.args`](../runtime/llama-server.args) e [`../runtime/llama-server.env`](../runtime/llama-server.env).
+Resultados, perfil escolhido e justificativas: [`RESULTS-E4.md`](RESULTS-E4.md). Perfil final: [`../runtime/llama-server.args`](../runtime/llama-server.args) e [`../runtime/llama-server.env`](../runtime/llama-server.env).
 
 ## Pré-requisitos
 
 - llama.cpp instalado pela E2 (`$LLAMA_CPP_PREFIX/current`, lido de `versions.env`).
 - Modelo `~/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (`MODELS_DIR` em `versions.env`).
 - `jq`, `curl` e `python3` (só biblioteca padrão).
-- **GPU dedicada durante as medições.** Antes de começar, confira no Windows (`/mnt/c/Windows/System32/nvidia-smi.exe`) que nenhum outro processo usa a NVIDIA: nem jogo, nem NVIDIA Broadcast. Nesta E4, um jogo e o Broadcast entraram no meio das medições (ver `RESULTADOS-E4.md`).
+- **GPU dedicada durante as medições.** Antes de começar, confira no Windows (`/mnt/c/Windows/System32/nvidia-smi.exe`) que nenhum outro processo usa a NVIDIA: nem jogo, nem NVIDIA Broadcast. Nesta E4, um jogo e o Broadcast entraram no meio das medições (ver `RESULTS-E4.md`).
 - Feche apps pesados no Windows. Medições em série, uma por vez: são uma GPU e um modelo.
 
 ## Arquivos

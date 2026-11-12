@@ -22,7 +22,7 @@ SCHEMA_VERSION = 1
 
 def load(path: str, default=None, max_bytes: int = 16 << 20):
     # Sem seguir symlink: estes arquivos ficam em $out/ e agent-logs/, onde o
-    # agente pôde plantar symlinks para arquivos do host (docs/verificacoes/E7.md).
+    # agente pôde plantar symlinks para arquivos do host (docs/verifications/E7.md).
     return boxio.read_json_nofollow(path, max_bytes=max_bytes, default=default)
 
 
