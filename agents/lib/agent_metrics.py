@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Lê o events.jsonl de uma execução e grava <log-dir>/agent-metrics.json.
+"""Read the events.jsonl of a run and write <log-dir>/agent-metrics.json.
 
-Uso: agent_metrics.py <agente> <log-dir>
-Agentes: qwen-code, pi, opencode, claude-local, codex-local.
+Usage: agent_metrics.py <agent> <log-dir>
+Agents: qwen-code, pi, opencode, claude-local, codex-local.
 
-Campos (null quando o agente não fornece o dado; ver agents/README.md):
-  turns              respostas do modelo no laço do agente
-  requests           requisições ao modelo vistas pelo cliente (só as do laço principal)
-  tool_calls         chamadas de ferramenta
-  tool_call_errors   resultados marcados como erro pelo agente (alias: tool_errors)
-  loops_detected     sequências de 3+ chamadas iguais seguidas, mesma ferramenta e
-                     mesmos argumentos (alias: loops_suspected)
-  tokens_in/out      tokens do ponto de vista do cliente, cache incluído
-                     (também em client_tokens: {"input", "output"})
-  raw_tool_call_text textos/raciocínios com "<tool_call>" ou "<function=" crus
-                     (sintoma de chamada de ferramenta não reconhecida)
-  guard_blocks       linhas de guard.log (comandos bloqueados pela guarda comum)
-Nunca falha: erro de leitura vira campo "error" no JSON.
+Fields (null when the agent does not provide the data; see agents/README.md):
+  turns              model responses in the agent loop
+  requests           requests to the model seen by the client (main loop only)
+  tool_calls         tool calls
+  tool_call_errors   results marked as errors by the agent (alias: tool_errors)
+  loops_detected     runs of 3+ identical consecutive calls, same tool and
+                     same arguments (alias: loops_suspected)
+  tokens_in/out      tokens from the client's point of view, cache included
+                     (also in client_tokens: {"input", "output"})
+  raw_tool_call_text texts/reasoning with raw "<tool_call>" or "<function="
+                     (symptom of an unrecognized tool call)
+  guard_blocks       lines of guard.log (commands blocked by the common guard)
+Never fails: a read error becomes an "error" field in the JSON.
 """
 import json
 import os
@@ -65,7 +65,7 @@ def raw_hits(text):
 
 
 def anthropic_like(events, usage_includes_cache):
-    """Claude Code e Qwen Code (stream-json no formato do SDK do Claude)."""
+    """Claude Code and Qwen Code (stream-json in the Claude SDK format)."""
     calls, errors, raw, ids, tin, tout = [], 0, 0, set(), 0, 0
     per_msg = {}
     result = None
@@ -191,8 +191,8 @@ def codex(events):
                 seen_usage = True
                 tin += int(u.get("input_tokens") or 0)
                 tout += int(u.get("output_tokens") or 0)
-    # O exec --json não emite um evento por resposta do modelo: turns e requests
-    # ficam null (turn.completed é o turno do usuário, um por prompt).
+    # exec --json does not emit one event per model response: turns and requests
+    # stay null (turn.completed is the user turn, one per prompt).
     return {"turns": None, "requests": None, "user_turns": turns or None, "tool_calls": len(calls),
             "tool_call_errors": errors, "loops_detected": count_loops(calls),
             "tokens_in": tin if seen_usage else None, "tokens_out": tout if seen_usage else None,
@@ -210,7 +210,7 @@ PARSERS = {
 
 def main():
     if len(sys.argv) != 3 or sys.argv[1] not in PARSERS:
-        sys.exit(f"uso: {sys.argv[0]} <{'|'.join(PARSERS)}> <log-dir>")
+        sys.exit(f"usage: {sys.argv[0]} <{'|'.join(PARSERS)}> <log-dir>")
     harness, log_dir = sys.argv[1], sys.argv[2]
     out = {"harness": harness, "source": "events.jsonl"}
     try:
@@ -220,7 +220,7 @@ def main():
         out["loops_suspected"] = m["loops_detected"]
         out["client_tokens"] = (None if m["tokens_in"] is None and m["tokens_out"] is None
                                 else {"input": m["tokens_in"], "output": m["tokens_out"]})
-    except Exception as exc:  # noqa: BLE001 - métricas nunca derrubam a execução
+    except Exception as exc:  # noqa: BLE001 - metrics never bring the run down
         out["error"] = f"{type(exc).__name__}: {exc}"
     try:
         with open(os.path.join(log_dir, "guard.log"), encoding="utf-8") as fh:

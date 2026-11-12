@@ -1,6 +1,6 @@
-# Perfil interativo do Codex local ($CODEX_HOME/interactive.config.toml, --profile interactive).
-# Pede aprovação quando o modelo quer sair do sandbox; o sandbox (bubblewrap +
-# seccomp no Linux) deixa escrever só no workspace e em /tmp, sem rede.
+# Interactive profile of the local Codex ($CODEX_HOME/interactive.config.toml, --profile interactive).
+# Asks for approval when the model wants to leave the sandbox; the sandbox (bubblewrap +
+# seccomp on Linux) only allows writing to the workspace and /tmp, without network.
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 

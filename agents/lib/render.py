@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Gera um arquivo de configuração a partir de modelos.
+"""Generate a configuration file from templates.
 
-Uso: render.py SAIDA MODELO [MODELO...]
+Usage: render.py OUTPUT TEMPLATE [TEMPLATE...]
 
-JSON (SAIDA não termina em .toml nem .rules):
-- Os modelos são mesclados em ordem: objetos se mesclam recursivamente; listas
-  e valores simples do modelo posterior substituem os anteriores. Assim um
-  perfil (interactive/autonomous) sobrepõe a base.
-- "@@NOME@@" dentro de qualquer string (inclusive chaves) vira o valor da
-  variável de ambiente NOME. Uma string que seja exatamente "@@INT:NOME@@"
-  vira número inteiro. Variável ausente é erro.
-- Chaves que começam com "//" são comentários e são removidas da saída.
+JSON (OUTPUT does not end in .toml or .rules):
+- The templates are merged in order: objects merge recursively; lists and
+  plain values from the later template replace the earlier ones. So a profile
+  (interactive/autonomous) overrides the base.
+- "@@NAME@@" inside any string (keys included) becomes the value of the
+  environment variable NAME. A string that is exactly "@@INT:NAME@@" becomes
+  an integer. A missing variable is an error.
+- Keys that start with "//" are comments and are removed from the output.
 
-Texto (SAIDA .toml ou .rules): os modelos são concatenados e "@@NOME@@" é
-trocado pelo valor com escape de string TOML/Starlark (\\ e "); "@@INT:NOME@@"
-exige um inteiro. Os modelos devem pôr os marcadores dentro de aspas duplas.
+Text (OUTPUT .toml or .rules): the templates are concatenated and "@@NAME@@" is
+replaced by the value with TOML/Starlark string escaping (\\ and "); "@@INT:NAME@@"
+requires an integer. Templates must put the markers inside double quotes.
 """
 import json
 import os
@@ -29,14 +29,14 @@ INT_TEXT = re.compile(r"@@INT:([A-Z][A-Z0-9_]*)@@")
 def env(name: str) -> str:
     value = os.environ.get(name)
     if value is None:
-        sys.exit(f"render.py: variável de ambiente {name} não definida")
+        sys.exit(f"render.py: environment variable {name} is not set")
     return value
 
 
 def env_int(name: str) -> int:
     value = env(name)
     if not re.fullmatch(r"-?[0-9]+", value):
-        sys.exit(f"render.py: {name}={value!r} não é inteiro")
+        sys.exit(f"render.py: {name}={value!r} is not an integer")
     return int(value)
 
 

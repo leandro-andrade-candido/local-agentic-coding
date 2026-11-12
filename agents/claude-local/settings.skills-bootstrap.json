@@ -1,5 +1,5 @@
 {
-  "//": "Só entra quando há a skill using-superpowers em AGENT_SKILLS_DIRS: o mesmo bootstrap do hook SessionStart do plugin oficial do Superpowers (hooks/session-start).",
+  "//": "Only included when the using-superpowers skill is in AGENT_SKILLS_DIRS: the same bootstrap as the official Superpowers plugin's SessionStart hook (hooks/session-start).",
   "hooks": {
     "SessionStart": [
       {

@@ -1,8 +1,8 @@
-# Regras de execução (execpolicy, Starlark) do Codex local, nos dois perfis.
-# Copiadas para $CODEX_HOME/rules/local.rules. "forbidden" bloqueia sem perguntar;
-# vale a decisão mais restritiva entre as regras que casam. Casam por prefixo do
-# argv; scripts "bash -lc" simples são separados em comandos. Formas como
-# `git -C x push` ficam para o hook agents/lib/guard.py.
+# Execution rules (execpolicy, Starlark) of the local Codex, in both profiles.
+# Copied to $CODEX_HOME/rules/local.rules. "forbidden" blocks without asking;
+# the most restrictive decision among the matching rules wins. They match by argv
+# prefix; simple "bash -lc" scripts are split into commands. Forms such as
+# `git -C x push` are left to the agents/lib/guard.py hook.
 
 prefix_rule(
     pattern = ["git", "push"],

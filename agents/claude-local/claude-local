@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Claude Code interativo com o modelo local, com config isolada (CLAUDE_CONFIG_DIR).
-# Não toca no Claude Code do dia a dia (~/.claude, ~/.claude.json, login da conta).
-# Uso: cd <projeto> && <repo>/agents/claude-local/claude-local [opções do claude]
-# Perfil: AGENT_PROFILE=interactive (padrão) ou autonomous.
-# Por padrão usa o binário fixado em $AGENTS_PREFIX; para usar o já instalado:
+# Interactive Claude Code with the local model, with isolated config (CLAUDE_CONFIG_DIR).
+# Does not touch the everyday Claude Code (~/.claude, ~/.claude.json, account login).
+# Usage: cd <project> && <repo>/agents/claude-local/claude-local [claude options]
+# Profile: AGENT_PROFILE=interactive (default) or autonomous.
+# By default it uses the binary pinned in $AGENTS_PREFIX; to use the installed one:
 #   AGENT_BIN="$(command -v claude)" claude-local
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"

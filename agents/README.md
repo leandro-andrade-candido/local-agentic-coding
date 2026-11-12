@@ -1,343 +1,343 @@
-# Agentes (harnesses) para o modelo local
+# Agents (harnesses) for the local model
 
-Configuração dos cinco agentes que a etapa E6 compara, todos apontados para o
-llama-server local (Qwen3.6-35B-A3B, alias `qwen3.6-35b`, porta 9931). Desde
-29/10 é uma disputa única na Meta 1 (ver seção 11 do `DIAGNOSIS-AND-PLAN.md`):
-Qwen Code, Codex CLI, Pi e OpenCode (abertos) e Claude Code (fechado, gratuito).
-Na E6, Claude Code local e Codex local rodam primeiro. A E7 (agent-box) vem antes
-da E6: o perfil autonomous só roda dentro do container.
+Configuration of the five agents that stage E6 compares, all pointed at the local
+llama-server (Qwen3.6-35B-A3B, alias `qwen3.6-35b`, port 9931). Since Oct 29 it is a
+single contest on Goal 1 (see section 11 of `DIAGNOSIS-AND-PLAN.md`): Qwen Code,
+Codex CLI, Pi and OpenCode (open) and Claude Code (closed, free of charge).
+In E6, local Claude Code and local Codex run first. E7 (agent-box) comes before
+E6: the autonomous profile only runs inside the container.
 
-Nada foi instalado nesta etapa. Versões, docs e código conferidos em 29/10/2026
-no npm, no GitHub (tags das versões fixadas), em code.claude.com/docs e em
+Nothing was installed in this stage. Versions, docs and code were checked on
+2026-10-29 on npm, on GitHub (tags of the pinned versions), at code.claude.com/docs and at
 developers.openai.com/codex.
-Selos como no `DIAGNOSIS-AND-PLAN.md`: **[verificado]** = conferido na fonte
-primária; **não verificado** = depende de teste na E6.
+Labels as in `DIAGNOSIS-AND-PLAN.md`: **[verified]** = checked against the
+primary source; **unverified** = depends on a test in E6.
 
-## Comparação
+## Comparison
 
 | | Qwen Code | Codex CLI (local) | Pi | OpenCode | Claude Code (local) |
 |---|---|---|---|---|---|
-| Pasta | [`qwen-code/`](qwen-code/README.md) | [`codex-local/`](codex-local/README.md) | [`pi/`](pi/README.md) | [`opencode/`](opencode/README.md) | [`claude-local/`](claude-local/README.md) |
-| Versão fixada | 0.26.3 (28/10) | 0.165.0 (27/10) | 1.4.0 (21/10) | 1.19.5 (28/10); 2.x = `@opencode/cli` 2.2.1, não usado | 2.1.308, canal stable (22/10) |
-| Pacote npm | `@qwen-code/qwen-code` | `@openai/codex` | `@earendil-works/pi-coding-agent` | `opencode-ai` | `@anthropic-ai/claude-code` |
-| Licença | Apache-2.0 | Apache-2.0 | MIT | MIT | Proprietária |
-| Config global padrão | `~/.qwen` | `~/.codex` | `~/.pi/agent` | `~/.config/opencode` + `~/.local/share/opencode` (XDG) | `~/.claude` + `~/.claude.json` |
-| Isolamento | `QWEN_HOME` | `CODEX_HOME` | `PI_CODING_AGENT_DIR` | `XDG_CONFIG/DATA/CACHE/STATE_HOME` | `CLAUDE_CONFIG_DIR` |
-| API usada | OpenAI Chat Completions `/v1` | OpenAI Responses `/v1/responses` | OpenAI Chat Completions `/v1` | OpenAI Chat Completions `/v1` (`@ai-sdk/openai-compatible`) | Anthropic `/v1/messages` |
-| Amostragem do cartão | tudo (`samplingParams`) | **nenhuma**: o Codex não envia temperature/top_p/top_k nem limite de saída; vale o padrão do servidor | tudo (`samplingParams`) | tudo (temperature/top_p por agente; resto em `options`) | por `CLAUDE_CODE_EXTRA_BODY` (**não verificado** se vence a temperatura do cliente) |
-| `preserve_thinking` | `extra_body` + reenvio do `reasoning_content` | itens `reasoning` reenviados com `reasoning_text`; padrão do servidor | `thinkingFormat: qwen-chat-template` | `interleaved.field: reasoning_content` + `options` | blocos `thinking` no histórico; padrão do servidor |
-| Saída máx. / janela | 32768 / 131072 | sem limite do cliente / 131072 (usa 95%) | 32768 / 131072 | 32000 (teto interno) / 131072 | 32000 / 131072 |
-| Compacta em | 75% (~98k) | 98304 (`model_auto_compact_token_limit`) | < 32k livres (~98k) | contexto − saída (~99k) | ~janela − saída (**medir**) |
-| Permissões nativas | allow/ask/deny + modos; deny vale no YOLO | aprovação + sandbox (bwrap/seccomp) + regras `forbidden` | nenhuma (extensão nossa) | allow/ask/deny por padrão; deny vale no `--auto` | allow/ask/deny + modos; deny vale no bypass |
-| Guarda comum (`lib/guard.py`) | hook `PreToolUse` | hook `PreToolUse` (`matcher = "Bash"`) | extensão `tool_call` | plugin `tool.execute.before` | hook `PreToolUse` |
-| Comando não interativo | `qwen --prompt=… --output-format stream-json --approval-mode yolo` | `codex exec --json --cd … --skip-git-repo-check --profile autonomous --model … --dangerously-bypass-hook-trust …` | `pi --mode json --provider local --model … --no-approve -e guard.ts …` | `opencode run --format json --auto --title … --model llamacpp/…` | `claude -p --output-format stream-json --verbose --tools Bash,Read,Edit,Write --permission-mode bypassPermissions …` |
-| Transcrição | `events.jsonl` + sessão em `home/qwen` | `events.jsonl` + sessão em `home/codex/sessions` | `events.jsonl` + sessão em `home/pi/sessions` | `events.jsonl` + SQLite em `home/opencode/data` | `events.jsonl` + JSONL em `home/claude/projects` |
-| Corpo das requisições | `--openai-logging` | não grava (usar `llama-server --verbose`) | extensão `request-log.ts` | não grava (idem) | não grava (idem) |
-| Preâmbulo (plano) | a medir | a medir (instruções base ~21 KB + ferramentas) | ~1,4 mil | ~7,5 mil | ~25–31 mil completo; enxuto a medir |
-| Skills: descoberta | `skills.directories` | cópia em `$CODEX_HOME/skills` | extensão `skills.ts` (`resources_discover`) | `skills.paths` | cópia em `$CLAUDE_CONFIG_DIR/skills` (+ ferramenta `Skill`) |
-| Skills: chamada explícita | `/<nome>` | `$<nome>` | `/skill:<nome>` | pedir a ferramenta `skill` | `/<nome>` |
-| Bootstrap do Superpowers | hook `SessionStart` | `developer_instructions` | evento `context` (como a extensão oficial) | plugin `experimental.chat.messages.transform` (como o oficial 1.x) | hook `SessionStart` (como o plugin oficial) |
-| Problemas com Qwen3.6 | #14203 catálogo de memória força reprocessar tudo (mitigado: memória off); #13415 janela de 1M (mitigado) | feito para modelos OpenAI: sem ferramenta `apply_patch` para ID desconhecido (edita pelo shell no formato de patch da OpenAI); llama.cpp recusa item `reasoning` sem `content` | nenhum específico; #10741 papel `developer` (mitigado) | #24316 `<tool_call>` no raciocínio trava (1.x sem manutenção; parser do llama.cpp b11982 já corta o raciocínio no `<tool_call>`) | sem suporte oficial; thinking adaptativo ignorado pelo llama.cpp |
+| Folder | [`qwen-code/`](qwen-code/README.md) | [`codex-local/`](codex-local/README.md) | [`pi/`](pi/README.md) | [`opencode/`](opencode/README.md) | [`claude-local/`](claude-local/README.md) |
+| Pinned version | 0.26.3 (Oct 28) | 0.165.0 (Oct 27) | 1.4.0 (Oct 21) | 1.19.5 (Oct 28); 2.x = `@opencode/cli` 2.2.1, not used | 2.1.308, stable channel (Oct 22) |
+| npm package | `@qwen-code/qwen-code` | `@openai/codex` | `@earendil-works/pi-coding-agent` | `opencode-ai` | `@anthropic-ai/claude-code` |
+| License | Apache-2.0 | Apache-2.0 | MIT | MIT | Proprietary |
+| Default global config | `~/.qwen` | `~/.codex` | `~/.pi/agent` | `~/.config/opencode` + `~/.local/share/opencode` (XDG) | `~/.claude` + `~/.claude.json` |
+| Isolation | `QWEN_HOME` | `CODEX_HOME` | `PI_CODING_AGENT_DIR` | `XDG_CONFIG/DATA/CACHE/STATE_HOME` | `CLAUDE_CONFIG_DIR` |
+| API used | OpenAI Chat Completions `/v1` | OpenAI Responses `/v1/responses` | OpenAI Chat Completions `/v1` | OpenAI Chat Completions `/v1` (`@ai-sdk/openai-compatible`) | Anthropic `/v1/messages` |
+| Sampling from the model card | everything (`samplingParams`) | **none**: Codex sends no temperature/top_p/top_k nor output limit; the server default applies | everything (`samplingParams`) | everything (temperature/top_p per agent; the rest in `options`) | via `CLAUDE_CODE_EXTRA_BODY` (**unverified** whether it beats the client's temperature) |
+| `preserve_thinking` | `extra_body` + resend of `reasoning_content` | `reasoning` items resent with `reasoning_text`; server default | `thinkingFormat: qwen-chat-template` | `interleaved.field: reasoning_content` + `options` | `thinking` blocks in the history; server default |
+| Max output / window | 32768 / 131072 | no client limit / 131072 (uses 95%) | 32768 / 131072 | 32000 (internal cap) / 131072 | 32000 / 131072 |
+| Compacts at | 75% (~98k) | 98304 (`model_auto_compact_token_limit`) | < 32k free (~98k) | context − output (~99k) | ~window − output (**measure**) |
+| Native permissions | allow/ask/deny + modes; deny applies in YOLO | approval + sandbox (bwrap/seccomp) + `forbidden` rules | none (our extension) | allow/ask/deny by default; deny applies in `--auto` | allow/ask/deny + modes; deny applies in bypass |
+| Common guard (`lib/guard.py`) | `PreToolUse` hook | `PreToolUse` hook (`matcher = "Bash"`) | `tool_call` extension | `tool.execute.before` plugin | `PreToolUse` hook |
+| Non-interactive command | `qwen --prompt=… --output-format stream-json --approval-mode yolo` | `codex exec --json --cd … --skip-git-repo-check --profile autonomous --model … --dangerously-bypass-hook-trust …` | `pi --mode json --provider local --model … --no-approve -e guard.ts …` | `opencode run --format json --auto --title … --model llamacpp/…` | `claude -p --output-format stream-json --verbose --tools Bash,Read,Edit,Write --permission-mode bypassPermissions …` |
+| Transcript | `events.jsonl` + session in `home/qwen` | `events.jsonl` + session in `home/codex/sessions` | `events.jsonl` + session in `home/pi/sessions` | `events.jsonl` + SQLite in `home/opencode/data` | `events.jsonl` + JSONL in `home/claude/projects` |
+| Request bodies | `--openai-logging` | not recorded (use `llama-server --verbose`) | `request-log.ts` extension | not recorded (same) | not recorded (same) |
+| Preamble (plan) | to measure | to measure (base instructions ~21 KB + tools) | ~1.4k | ~7.5k | ~25–31k full; lean one to measure |
+| Skills: discovery | `skills.directories` | copy in `$CODEX_HOME/skills` | `skills.ts` extension (`resources_discover`) | `skills.paths` | copy in `$CLAUDE_CONFIG_DIR/skills` (+ `Skill` tool) |
+| Skills: explicit call | `/<name>` | `$<name>` | `/skill:<name>` | ask for the `skill` tool | `/<name>` |
+| Superpowers bootstrap | `SessionStart` hook | `developer_instructions` | `context` event (like the official extension) | `experimental.chat.messages.transform` plugin (like the official 1.x one) | `SessionStart` hook (like the official plugin) |
+| Problems with Qwen3.6 | #14203 memory catalog forces full reprocessing (mitigated: memory off); #13415 1M window (mitigated) | built for OpenAI models: no `apply_patch` tool for an unknown ID (edits through the shell in OpenAI's patch format); llama.cpp rejects a `reasoning` item without `content` | none specific; #10741 `developer` role (mitigated) | #24316 `<tool_call>` in the reasoning hangs it (1.x unmaintained; llama.cpp b11982 parser already cuts the reasoning at `<tool_call>`) | no official support; adaptive thinking ignored by llama.cpp |
 
-## Instalação (E6)
+## Installation (E6)
 
-Um padrão para os cinco, igual ao do llama.cpp: cada versão num prefixo
-próprio, com link `current`.
+One pattern for all five, same as llama.cpp: each version in its own prefix,
+with a `current` link.
 
 ```bash
-agents/install.sh qwen-code     # ou codex-local | pi | opencode | claude-local | all
-# npm install --global --prefix ~/.local/opt/agents/<agente>/<versão> <pacote>@<versão>
-# ln -sfn <versão> ~/.local/opt/agents/<agente>/current
+agents/install.sh qwen-code     # or codex-local | pi | opencode | claude-local | all
+# npm install --global --prefix ~/.local/opt/agents/<agent>/<version> <package>@<version>
+# ln -sfn <version> ~/.local/opt/agents/<agent>/current
 ```
 
-- **Nada roda com a HOME real.** O npm (cache, `~/.npmrc`, scripts de instalação) e o
-  `<agente> --version` rodam com `env -i`, HOME temporária e as variáveis de
-  isolamento de cada agente apontando para ela, como em `sandbox/install-agents.sh`
-  (alguns agentes criam arquivos na HOME já no `--version`). Não mexe no prefixo
-  global do npm (nvm) nem nas configs dos agentes.
-- Integridade: `npm pack` do pacote do agente e sha512 do arquivo conferido contra
-  `versions.env` antes de instalar; as dependências o npm confere pelo registro.
-- Claude Code e OpenCode precisam do `postinstall` (copia o binário nativo da
-  plataforma); os scripts foram lidos nos tarballs e só mexem em `node_modules`.
-  O Codex não tem `postinstall`: o binário vem numa dependência opcional por plataforma.
-- Espaço: ~1,2 GB no total (Codex ~446 MB, Claude Code ~292 MB, OpenCode ~214 MB,
-  Qwen Code ~155 MB + opcionais, Pi ~30 MB). O plano estimava 0,3 GB.
-- Desinstalar: `rm -rf ~/.local/opt/agents/<agente>`. Estado interativo:
-  `rm -rf ~/.local/state/local-agentic/agents/<agente>`.
+- **Nothing runs with the real HOME.** npm (cache, `~/.npmrc`, install scripts) and
+  `<agent> --version` run with `env -i`, a temporary HOME and each agent's isolation
+  variables pointing at it, as in `sandbox/install-agents.sh` (some agents create files
+  in HOME already at `--version`). It does not touch npm's global prefix (nvm) or the
+  agents' configs.
+- Integrity: `npm pack` of the agent package and the file's sha512 checked against
+  `versions.env` before installing; npm checks the dependencies against the registry.
+- Claude Code and OpenCode need the `postinstall` (it copies the platform's native
+  binary); the scripts were read in the tarballs and only touch `node_modules`.
+  Codex has no `postinstall`: the binary comes in a per-platform optional dependency.
+- Space: ~1.2 GB in total (Codex ~446 MB, Claude Code ~292 MB, OpenCode ~214 MB,
+  Qwen Code ~155 MB + optionals, Pi ~30 MB). The plan estimated 0.3 GB.
+- Uninstall: `rm -rf ~/.local/opt/agents/<agent>`. Interactive state:
+  `rm -rf ~/.local/state/local-agentic/agents/<agent>`.
 
-`versions.env` deste diretório é a fonte das versões. Proposta: mesclar ao
-`versions.env` da raiz quando a E6 for aprovada.
+This directory's `versions.env` is the source of the versions. Proposal: merge it into
+the root `versions.env` when E6 is approved.
 
-## Isolamento
+## Isolation
 
-Nenhum agente lê ou grava `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`,
-`~/.qwen`, `~/.pi` ou `~/.config/opencode`.
+No agent reads or writes `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`,
+`~/.qwen`, `~/.pi` or `~/.config/opencode`.
 
-- **Configuração gerada, não editada à mão:** cada início monta o arquivo do
-  agente a partir de `<agente>/*.base.json` + `<agente>/*.<perfil>.json`
-  (`lib/render.py`: mescla e troca `@@LLM_BASE_URL@@`, `@@LLM_MODEL@@`,
-  `@@INT:LLM_CONTEXT@@`... pelo ambiente; chaves `//` são comentários removidos).
-  No Codex, `config.toml` e `.rules` são texto (troca com escape de string) e os
-  perfis são arquivos nativos `<perfil>.config.toml` escolhidos com `--profile`.
-- **Eval:** estado novo a cada execução em `<log-dir>/home/`. Nenhuma memória,
-  sessão ou confiança passa de uma tarefa para outra.
-- **Interativo:** `~/.local/state/local-agentic/agents/<agente>/`.
-- **Ambiente limpo.** O `run.sh` e os lançadores executam o agente com o ambiente
-  zerado (`unset` de tudo, num subshell, menos uma lista: `PATH`, `HOME`, `LANG`/`LC_*`,
+- **Configuration generated, not hand-edited:** each start builds the agent's file
+  from `<agent>/*.base.json` + `<agent>/*.<profile>.json`
+  (`lib/render.py`: merges and replaces `@@LLM_BASE_URL@@`, `@@LLM_MODEL@@`,
+  `@@INT:LLM_CONTEXT@@`... from the environment; `//` keys are comments and are removed).
+  In Codex, `config.toml` and `.rules` are text (replacement with string escaping) and
+  the profiles are native `<profile>.config.toml` files chosen with `--profile`.
+- **Eval:** fresh state on every run in `<log-dir>/home/`. No memory,
+  session or trust carries over from one task to another.
+- **Interactive:** `~/.local/state/local-agentic/agents/<agent>/`.
+- **Clean environment.** `run.sh` and the launchers run the agent with a zeroed
+  environment (`unset` of everything, in a subshell, except a list: `PATH`, `HOME`, `LANG`/`LC_*`,
   `TERM`, `TZ`, `TMPDIR`, `LLM_*`, `LOCAL_LLM_API_KEY`, `AGENT_*`, `GIT_AUTHOR_*`/
-  `GIT_COMMITTER_*` e as variáveis que o `env.sh` do agente define com `keep`).
-  `CLAUDECODE`, `CLAUDE_CODE_*`, `ANTHROPIC_*`, `OPENAI_*` e tokens da sessão que
-  chamou não passam; os de `claude-local` e `codex-local` são os definidos de propósito.
-  Os valores não vão para a linha de comando (`ps`). O `command.txt` lista os nomes.
-- Continuam valendo, nos cinco: `AGENTS.md` (e `CLAUDE.md`/`QWEN.md`) do projeto
-  e dos diretórios acima dele. O workdir do eval não deve ficar abaixo de uma pasta
-  com `AGENTS.md`/`CLAUDE.md` alheio. No host, Qwen Code, Codex, Pi e OpenCode também
-  leem `~/.agents/skills` da HOME real (hoje sem skills); no agent-box a HOME é vazia.
+  `GIT_COMMITTER_*` and the variables the agent's `env.sh` sets with `keep`).
+  `CLAUDECODE`, `CLAUDE_CODE_*`, `ANTHROPIC_*`, `OPENAI_*` and tokens of the calling
+  session do not pass; those of `claude-local` and `codex-local` are the ones set on purpose.
+  The values do not go on the command line (`ps`). `command.txt` lists the names.
+- Still in effect, in all five: the project's `AGENTS.md` (and `CLAUDE.md`/`QWEN.md`)
+  and those of the directories above it. The eval workdir must not sit below a folder
+  with someone else's `AGENTS.md`/`CLAUDE.md`. On the host, Qwen Code, Codex, Pi and OpenCode also
+  read `~/.agents/skills` of the real HOME (currently without skills); in the agent-box HOME is empty.
 
-## Chave do llama-server
+## llama-server key
 
-Desde a E5 o servidor exige chave em todas as rotas, inclusive `/metrics`.
-`lib/common.sh` usa `LLM_API_KEY` (no agent-box vem do ambiente) ou, sem ela, a primeira
-linha não comentada de `LLM_API_KEY_FILE` (padrão `~/.config/local-agentic/llm-api-key`,
-criado por `scripts/llm key`). A chave nunca é impressa nem posta na linha de comando:
-os agentes a recebem em `LOCAL_LLM_API_KEY` (Qwen `envKey`, Codex `env_key`, Pi `apiKey`,
-OpenCode `{env:...}`, Claude `ANTHROPIC_AUTH_TOKEN`) e o `/metrics` a recebe pela
-entrada padrão do `curl` (`-H @-`). Sem chave, um aviso e o servidor responde 401.
+Since E5 the server requires a key on every route, including `/metrics`.
+`lib/common.sh` uses `LLM_API_KEY` (in the agent-box it comes from the environment) or, without it, the first
+non-comment line of `LLM_API_KEY_FILE` (default `~/.config/local-agentic/llm-api-key`,
+created by `scripts/llm key`). The key is never printed nor put on the command line:
+the agents receive it in `LOCAL_LLM_API_KEY` (Qwen `envKey`, Codex `env_key`, Pi `apiKey`,
+OpenCode `{env:...}`, Claude `ANTHROPIC_AUTH_TOKEN`) and `/metrics` receives it through
+`curl`'s standard input (`-H @-`). Without a key, there is a warning and the server answers 401.
 
-## Contrato com o eval
+## Contract with the eval
 
 ```bash
-agents/<agente>/run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
+agents/<agent>/run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
 ```
 
-| Item | Comportamento |
+| Item | Behavior |
 |---|---|
-| Ambiente | `LLM_BASE_URL` (padrão `http://127.0.0.1:9931`; `/v1` final é removido), `LLM_MODEL` (padrão `qwen3.6-35b`), `LLM_CONTEXT` (131072), `LLM_MAX_OUTPUT` (32768) |
-| Perfil | `AGENT_PROFILE=autonomous` (padrão no `run.sh`). **Só dentro do agent-box**: sem `AGENT_BOX=1` (marcado pelo entrypoint da E7, conferido junto com `/.dockerenv`) o `run.sh` sai com erro 2. `AGENT_ALLOW_HOST_AUTONOMOUS=1` força no host e é **inseguro** (YOLO, `bypassPermissions`, `danger-full-access` e Pi sem permissões, sem container). `AGENT_PROFILE=interactive` roda no host |
-| Execução | `cd <workdir>`, stdin em `/dev/null`, modo não interativo, aprovação automática dentro do workdir |
-| Saída | código de saída do agente (0 = terminou normalmente) |
-| `<log-dir>` | `events.jsonl` (stdout: JSON/stream), `stderr.log`, `run-meta.json` (versão, perfil, modelo, início/fim, segundos, código), `agent-metrics.json` (abaixo), `command.txt`, config efetiva, `guard.log` (bloqueios), `home/` (estado e sessão), `metrics-before.prom`/`metrics-after.prom` (se o servidor tiver `--metrics`) |
-| Skills | `AGENT_SKILLS_DIRS` (ver Skills); `AGENT_SKILLS_BOOTSTRAP=0` tira o bootstrap do Superpowers |
-| Opcionais | `AGENT_TIMEOUT=30m` (usa `timeout`), `AGENT_LOG_REQUESTS=1` (corpo das requisições, Qwen Code e Pi), `AGENT_BIN=<executável>`, `AGENT_DRY_RUN=1` (gera a config e mostra o comando; não exige o agent-box) |
-| Prompt | vai como argumento; limite ~120 KB. Prompt que começa com `-` ganha uma quebra de linha no início |
-| Concorrência | uma execução por vez: o servidor tem um slot só (`-np 1`) |
+| Environment | `LLM_BASE_URL` (default `http://127.0.0.1:9931`; a trailing `/v1` is removed), `LLM_MODEL` (default `qwen3.6-35b`), `LLM_CONTEXT` (131072), `LLM_MAX_OUTPUT` (32768) |
+| Profile | `AGENT_PROFILE=autonomous` (default in `run.sh`). **Only inside the agent-box**: without `AGENT_BOX=1` (set by the E7 entrypoint, checked together with `/.dockerenv`) `run.sh` exits with error 2. `AGENT_ALLOW_HOST_AUTONOMOUS=1` forces it on the host and is **unsafe** (YOLO, `bypassPermissions`, `danger-full-access` and Pi without permissions, with no container). `AGENT_PROFILE=interactive` runs on the host |
+| Execution | `cd <workdir>`, stdin on `/dev/null`, non-interactive mode, automatic approval inside the workdir |
+| Output | the agent's exit code (0 = finished normally) |
+| `<log-dir>` | `events.jsonl` (stdout: JSON/stream), `stderr.log`, `run-meta.json` (version, profile, model, start/end, seconds, code), `agent-metrics.json` (below), `command.txt`, effective config, `guard.log` (blocks), `home/` (state and session), `metrics-before.prom`/`metrics-after.prom` (if the server has `--metrics`) |
+| Skills | `AGENT_SKILLS_DIRS` (see Skills); `AGENT_SKILLS_BOOTSTRAP=0` removes the Superpowers bootstrap |
+| Optional | `AGENT_TIMEOUT=30m` (uses `timeout`), `AGENT_LOG_REQUESTS=1` (request bodies, Qwen Code and Pi), `AGENT_BIN=<executable>`, `AGENT_DRY_RUN=1` (generates the config and shows the command; does not require the agent-box) |
+| Prompt | goes as an argument; limit ~120 KB. A prompt that starts with `-` gets a newline at the start |
+| Concurrency | one run at a time: the server has a single slot (`-np 1`) |
 
-Lançadores interativos (perfil `interactive`): `qwen-code/qwen-local`,
+Interactive launchers (`interactive` profile): `qwen-code/qwen-local`,
 `codex-local/codex-local`, `pi/pi-local`, `opencode/opencode-local`,
-`claude-local/claude-local`. Rodar de dentro do projeto; aceitam as opções do próprio agente.
+`claude-local/claude-local`. Run from inside the project; they accept the agent's own options.
 
 ### `agent-metrics.json`
 
-Depois que o agente sai, `lib/agent_metrics.py` lê o `events.jsonl` e grava
-`<log-dir>/agent-metrics.json`, que o eval copia para `result.json` em
-`agent.metrics`. Nunca muda o código de saída; se a leitura falhar, grava `error`.
+After the agent exits, `lib/agent_metrics.py` reads `events.jsonl` and writes
+`<log-dir>/agent-metrics.json`, which the eval copies to `result.json` under
+`agent.metrics`. It never changes the exit code; if reading fails, it writes `error`.
 
-| Campo | Significado |
+| Field | Meaning |
 |---|---|
-| `turns` | respostas do modelo no laço principal |
-| `requests` | requisições ao modelo vistas pelo cliente |
-| `tool_calls` | chamadas de ferramenta |
-| `tool_call_errors` (= `tool_errors`) | resultados marcados como erro pelo agente |
-| `loops_detected` (= `loops_suspected`) | sequências de 3+ chamadas seguidas com a mesma ferramenta e os mesmos argumentos |
-| `tokens_in`, `tokens_out` (= `client_tokens.input/output`) | tokens do ponto de vista do cliente, cache incluído |
-| `raw_tool_call_text` | textos ou raciocínios com `<tool_call>`/`<function=` cru (chamada que o servidor não reconheceu) |
-| `guard_blocks` | linhas do `guard.log` |
+| `turns` | model responses in the main loop |
+| `requests` | requests to the model seen by the client |
+| `tool_calls` | tool calls |
+| `tool_call_errors` (= `tool_errors`) | results marked as errors by the agent |
+| `loops_detected` (= `loops_suspected`) | runs of 3+ consecutive calls with the same tool and the same arguments |
+| `tokens_in`, `tokens_out` (= `client_tokens.input/output`) | tokens from the client's point of view, cache included |
+| `raw_tool_call_text` | texts or reasoning with raw `<tool_call>`/`<function=` (a call the server did not recognize) |
+| `guard_blocks` | lines of `guard.log` |
 
-Os dois nomes de cada campo atendem ao `eval/README.md` (`tool_call_errors`,
-`loops_detected`, `tokens_in`, `tokens_out`) e ao pedido do orquestrador
+The two names of each field serve `eval/README.md` (`tool_call_errors`,
+`loops_detected`, `tokens_in`, `tokens_out`) and the orchestrator's request
 (`tool_errors`, `loops_suspected`, `client_tokens`).
 
-| Agente | Fonte | O que fica `null` ou muda de sentido |
+| Agent | Source | What is `null` or changes meaning |
 |---|---|---|
-| Qwen Code | eventos `assistant`/`user`/`result` (formato do SDK do Claude) | `usage.input_tokens` já inclui o cache; `turns` = `num_turns` do resultado |
-| Codex | `item.completed` (`command_execution`, `file_change`...) e `turn.completed.usage` | **`turns` e `requests` = `null`**: o `exec --json` não tem evento por resposta do modelo (`user_turns` traz os turnos do usuário). Erro = comando com status `failed`/`declined` ou patch `failed` (saída ≠ 0 conta como erro) |
-| Pi | `message_end` do assistente, `tool_execution_end.isError`, `turn_end` | — |
-| OpenCode | `tool_use` (estado `error`), `step_finish.tokens` | só a sessão principal (subagentes ficam de fora); `turns` = `requests` = passos |
-| Claude Code | igual ao Qwen Code | `input_tokens` do llama.cpp exclui o cache: soma com `cache_read`/`cache_creation` |
+| Qwen Code | `assistant`/`user`/`result` events (Claude SDK format) | `usage.input_tokens` already includes the cache; `turns` = the result's `num_turns` |
+| Codex | `item.completed` (`command_execution`, `file_change`...) and `turn.completed.usage` | **`turns` and `requests` = `null`**: `exec --json` has no per-model-response event (`user_turns` carries the user turns). Error = command with status `failed`/`declined` or a `failed` patch (exit ≠ 0 counts as an error) |
+| Pi | assistant `message_end`, `tool_execution_end.isError`, `turn_end` | — |
+| OpenCode | `tool_use` (state `error`), `step_finish.tokens` | main session only (subagents are left out); `turns` = `requests` = steps |
+| Claude Code | same as Qwen Code | llama.cpp's `input_tokens` excludes the cache: add `cache_read`/`cache_creation` |
 
-Os formatos foram tirados da documentação e do código de cada versão e testados
-com eventos sintéticos; com os agentes instalados, conferir na E6 (em especial se o
-Claude Code repete blocos de conteúdo entre eventos `assistant` da mesma mensagem).
+The formats were taken from each version's documentation and code and tested
+with synthetic events; with the agents installed, check them in E6 (especially whether
+Claude Code repeats content blocks across `assistant` events of the same message).
 
-## Permissões
+## Permissions
 
-Três camadas, em ordem de força: o **container da E7** (a barreira), as **regras
-nativas** de cada agente (ver README de cada um) e a **guarda comum** `lib/guard.py`.
+Three layers, in order of strength: the **E7 container** (the barrier), each agent's
+**native rules** (see each README) and the **common guard** `lib/guard.py`.
 
-### Guarda comum (melhor esforço)
+### Common guard (best effort)
 
-A mesma guarda nos cinco, chamada antes de todo comando de shell (hook `PreToolUse`
-no Qwen Code, Codex e Claude Code; plugin no OpenCode; extensão no Pi). É uma segunda
-camada **conservadora**: procura padrões perigosos no texto inteiro do comando, sem
-depender da estrutura, e aceita falsos positivos. Bloqueia com código 2, devolve o
-motivo ao modelo e registra em `guard.log`.
+The same guard in all five, called before every shell command (`PreToolUse` hook
+in Qwen Code, Codex and Claude Code; plugin in OpenCode; extension in Pi). It is a
+**conservative** second layer: it looks for dangerous patterns in the whole command text,
+without depending on structure, and accepts false positives. It blocks with exit code 2, returns the
+reason to the model and records it in `guard.log`.
 
-| Padrão | interactive | autonomous |
+| Pattern | interactive | autonomous |
 |---|---|---|
-| `git` e `push`/`send-pack`/`receive-pack` no mesmo comando (falso positivo aceito: `git commit -m "push"`) | bloqueia | bloqueia |
-| `sudo`, `su`, `doas`, `pkexec`, `runuser` em qualquer posição | bloqueia | bloqueia |
-| Download executado: pipe de `curl`/`wget` para shell, `source`, `eval`, `xargs`, `env`, `if` ou interpretador lendo o stdin; `<(curl`, `$(curl`; arquivo baixado e executado no mesmo comando | bloqueia | bloqueia |
-| `rm` fora do projeto, na raiz, em `.git` ou com alvo não resolvível; `rm -r/-f` vindo de `xargs`, depois de `cd`/`pushd` não resolvível ou de `ln`; `find -delete`/`-exec rm` fora do projeto. `/tmp` liberado, menos a pasta que contém o projeto | bloqueia | bloqueia |
-| Instalação: `npm/pnpm/yarn/bun install/add/ci`, `yarn` sozinho, `pip install` (inclusive `pip3.12`, `python -m pip`), `uv add/sync/pip/tool`, `uv run --with`, `npx`/`npm exec` de programa fora de `node_modules/.bin`, `poetry`, `cargo`, `go install`, `gem`, `apt`, `brew`… | permite (shell pergunta) | bloqueia |
+| `git` and `push`/`send-pack`/`receive-pack` in the same command (accepted false positive: `git commit -m "push"`) | blocks | blocks |
+| `sudo`, `su`, `doas`, `pkexec`, `runuser` in any position | blocks | blocks |
+| Downloaded code executed: pipe from `curl`/`wget` to a shell, `source`, `eval`, `xargs`, `env`, `if` or an interpreter reading stdin; `<(curl`, `$(curl`; a downloaded file executed in the same command | blocks | blocks |
+| `rm` outside the project, on the root, on `.git` or with an unresolvable target; `rm -r/-f` coming from `xargs`, after an unresolvable `cd`/`pushd` or after `ln`; `find -delete`/`-exec rm` outside the project. `/tmp` allowed, except the folder that contains the project | blocks | blocks |
+| Install: `npm/pnpm/yarn/bun install/add/ci`, bare `yarn`, `pip install` (including `pip3.12`, `python -m pip`), `uv add/sync/pip/tool`, `uv run --with`, `npx`/`npm exec` of a program outside `node_modules/.bin`, `poetry`, `cargo`, `go install`, `gem`, `apt`, `brew`… | allows (shell asks) | blocks |
 
-Estrutura também é analisada: palavras-chave (`if`/`then`/`for`/`do`…) separam
-comandos, opções de wrappers (`nice -n`, `time -p`, `env -S`) são puladas, e o script
-de `bash -c`, heredocs e here-strings é avaliado como comando (o corpo de `apply_patch`
-não, por ser conteúdo de arquivo).
+Structure is also analyzed: keywords (`if`/`then`/`for`/`do`…) separate
+commands, wrapper options (`nice -n`, `time -p`, `env -S`) are skipped, and the script
+of `bash -c`, heredocs and here-strings is evaluated as a command (the body of `apply_patch`
+is not, since it is file content).
 
-**O que escapa** (o container cobre): código gerado e executado depois (`echo … > x.sh`,
-depois `sh x.sh`), strings montadas em tempo de execução (`git $(printf 'p%sh' us)`),
-interpretadores executando ações (`perl -e "system q(rm -rf ~)"`), e escrita fora do
-projeto sem `rm` (`mv`, `truncate`, `> ~/.bashrc`). Testes: `lib/test-guard.sh`
-(223 casos, incluindo os exemplos de contorno listados na verificação estática; todos passam).
+**What gets through** (the container covers it): code generated and run later (`echo … > x.sh`,
+then `sh x.sh`), strings built at run time (`git $(printf 'p%sh' us)`),
+interpreters performing actions (`perl -e "system q(rm -rf ~)"`), and writing outside the
+project without `rm` (`mv`, `truncate`, `> ~/.bashrc`). Tests: `lib/test-guard.sh`
+(223 cases, including the bypass examples listed in the static verification; all pass).
 
-### Por perfil
+### By profile
 
-| | interactive (host ou box) | autonomous (só no agent-box) |
+| | interactive (host or box) | autonomous (agent-box only) |
 |---|---|---|
-| Leitura | livre | livre |
-| Ferramentas de edição | livres dentro do projeto; fora pergunta (ou é recusada) | livres dentro do projeto (Codex `danger-full-access`: sem limite de caminho) |
-| Shell | pergunta (Pi: só não pergunta leitura simples) | aprovado. **O shell escreve em qualquer lugar que o usuário do processo alcance**; a guarda só pega os padrões acima |
-| Web | busca negada; fetch pergunta | negados |
+| Read | free | free |
+| Edit tools | free inside the project; outside asks (or is refused) | free inside the project (Codex `danger-full-access`: no path limit) |
+| Shell | asks (Pi: only plain reads do not ask) | approved. **The shell writes anywhere the process user can reach**; the guard only catches the patterns above |
+| Web | search denied; fetch asks | denied |
 
 ## Skills
 
-Contrato: `AGENT_SKILLS_DIRS` = diretórios separados por `:`; cada um contém pastas de
-skill (`<nome>/SKILL.md`). Sem a variável vale o perfil base: `/opt/skills/base` (no
-agent-box) ou `$SKILLS_PREFIX/profiles/base` (no host), o primeiro que existir.
-`AGENT_SKILLS_DIRS=` (vazia) desliga as skills. `lib/skills.py` resolve os diretórios,
-copia ou lista as skills para cada agente e gera o bootstrap.
+Contract: `AGENT_SKILLS_DIRS` = directories separated by `:`; each one contains skill
+folders (`<name>/SKILL.md`). Without the variable the base profile applies: `/opt/skills/base` (in the
+agent-box) or `$SKILLS_PREFIX/profiles/base` (on the host), whichever exists first.
+`AGENT_SKILLS_DIRS=` (empty) turns skills off. `lib/skills.py` resolves the directories,
+copies or lists the skills for each agent and generates the bootstrap.
 
-- **Perfil base:** `scripts/fetch-skills.sh` baixa o Superpowers fixado em
-  `versions.env` (commit conferido), guarda a árvore em
-  `$SKILLS_PREFIX/superpowers/<versão>/` e copia só as skills de
-  `skills/profiles/base.txt` para `$SKILLS_PREFIX/profiles/base/`, com `LICENSE.superpowers`
-  e `SOURCE`. Tudo só leitura. As referências cruzadas das skills do perfil
+- **Base profile:** `scripts/fetch-skills.sh` downloads the Superpowers pinned in
+  `versions.env` (commit checked), stores the tree in
+  `$SKILLS_PREFIX/superpowers/<version>/` and copies only the skills of
+  `skills/profiles/base.txt` to `$SKILLS_PREFIX/profiles/base/`, with `LICENSE.superpowers`
+  and `SOURCE`. All read-only. The cross-references of the profile's skills
   (`subagent-driven-development/scripts`, `requesting-code-review/code-reviewer.md`,
-  `using-superpowers/references`) ficam dentro do próprio perfil.
-- **Perfis extras:** `scripts/fetch-skills.sh frontend` monta `profiles/frontend/`
-  (`anthropic:frontend-design` e `anthropic:webapp-testing`, de `anthropics/skills` no
-  commit fixado, só as pastas das skills, cada uma com seu `LICENSE.txt`). Entra no
-  agente com `--skills-dir`. A `webapp-testing` usa o Playwright e o Chromium da
-  imagem agent-box (`python`, não `python3`).
-- **Sob demanda nos cinco:** no prompt entram só nome e descrição de cada skill; o
-  corpo é carregado quando o modelo decide ou quando a skill é chamada pelo nome
-  (sintaxe por agente na tabela de comparação).
-- **Bootstrap do Superpowers:** quando há `using-superpowers`, o texto da skill e o mapa
-  de ferramentas do agente entram no início de cada sessão (~1 mil tokens; até ~2 mil no
-  Codex). Mapas: `claude-code-tools.md` e `codex-tools.md` do próprio Superpowers; Pi,
-  o texto da extensão oficial; OpenCode, o do plugin oficial com `edit`/`write` no lugar
-  de `apply_patch`; Qwen Code, um mapa nosso (os nomes do Gemini CLI não valem lá).
-- **Não verificado (E6):** em cada agente, se o bootstrap chega ao modelo, se o modelo
-  aciona a skill certa sozinho e se a chamada explícita funciona (ver a seção Skills de
-  cada README).
+  `using-superpowers/references`) stay inside the profile itself.
+- **Extra profiles:** `scripts/fetch-skills.sh frontend` builds `profiles/frontend/`
+  (`anthropic:frontend-design` and `anthropic:webapp-testing`, from `anthropics/skills` at the
+  pinned commit, only the skill folders, each with its `LICENSE.txt`). It enters the
+  agent with `--skills-dir`. `webapp-testing` uses the Playwright and Chromium of the
+  agent-box image (`python`, not `python3`).
+- **On demand in all five:** only the name and description of each skill go into the prompt; the
+  body is loaded when the model decides to or when the skill is called by name
+  (syntax per agent in the comparison table).
+- **Superpowers bootstrap:** when `using-superpowers` is present, the skill's text and the agent's
+  tool map go at the start of each session (~1k tokens; up to ~2k in
+  Codex). Maps: `claude-code-tools.md` and `codex-tools.md` from Superpowers itself; Pi,
+  the official extension's text; OpenCode, the official plugin's with `edit`/`write` in place
+  of `apply_patch`; Qwen Code, one of our own (the Gemini CLI names do not apply there).
+- **Unverified (E6):** in each agent, whether the bootstrap reaches the model, whether the model
+  triggers the right skill by itself and whether the explicit call works (see the Skills section of
+  each README).
 
-## Como medir o tamanho do primeiro prompt
+## How to measure the size of the first prompt
 
 ```bash
-agents/measure-preamble.sh <agente>     # tarefa trivial num repositório git vazio
+agents/measure-preamble.sh <agent>     # trivial task in an empty git repository
 ```
 
-Usa o perfil interactive (o autonomous só roda no agent-box; para medi-lo, rode o
-script pelo container com `AGENT_PROFILE=autonomous`). O `/metrics` exige a chave do
-servidor. Com skills, o preâmbulo inclui a lista de skills e o bootstrap; para medir
-sem eles, `AGENT_SKILLS_DIRS=`.
+It uses the interactive profile (autonomous only runs in the agent-box; to measure it, run the
+script through the container with `AGENT_PROFILE=autonomous`). `/metrics` requires the server
+key. With skills, the preamble includes the skills list and the bootstrap; to measure
+without them, `AGENT_SKILLS_DIRS=`.
 
-| Fonte | O que dá | Requisito |
+| Source | What it gives | Requirement |
 |---|---|---|
-| `/metrics` do llama-server, antes e depois | `llamacpp:prompt_tokens_total` (processados) + `llamacpp:prompt_tokens_cached_total` (do cache); soma de todas as requisições da execução | `--metrics` no llama-server **[verificado: tools/server/README.md e server-task.cpp b11982]**. **Pedido para a E5:** incluir `--metrics` |
-| `usage` da primeira resposta no `events.jsonl` | OpenAI: `prompt_tokens` e `prompt_tokens_details.cached_tokens`; Anthropic: `input_tokens` (não cacheado) + `cache_read_input_tokens` **[verificado: server-task.cpp]** | nenhum |
-| Corpo da requisição | system prompt, ferramentas e mensagens exatos | Qwen Code (`requests/`), Pi (`requests.jsonl`) com `AGENT_LOG_REQUESTS=1` |
-| Log do servidor | tokens do prompt por tarefa no slot e reaproveitamento de checkpoints | `llama-server --verbose` / `-lv 4` (texto exato das linhas **não verificado**) |
+| llama-server `/metrics`, before and after | `llamacpp:prompt_tokens_total` (processed) + `llamacpp:prompt_tokens_cached_total` (from the cache); sum of all requests of the run | `--metrics` on llama-server **[verified: tools/server/README.md and server-task.cpp b11982]**. **Request for E5:** include `--metrics` |
+| `usage` of the first response in `events.jsonl` | OpenAI: `prompt_tokens` and `prompt_tokens_details.cached_tokens`; Anthropic: `input_tokens` (uncached) + `cache_read_input_tokens` **[verified: server-task.cpp]** | none |
+| Request body | exact system prompt, tools and messages | Qwen Code (`requests/`), Pi (`requests.jsonl`) with `AGENT_LOG_REQUESTS=1` |
+| Server log | prompt tokens per task in the slot and checkpoint reuse | `llama-server --verbose` / `-lv 4` (exact text of the lines **unverified**) |
 
-Para o custo de cache por turno: na tarefa real, `cached_tokens` de cada resposta
-deve ficar perto do tamanho do prompt anterior; queda grande = prefixo mudou.
+For the per-turn cache cost: in the real task, the `cached_tokens` of each response
+should stay close to the size of the previous prompt; a large drop = the prefix changed.
 
-## Recomendações para a configuração do servidor (E4/E5)
+## Recommendations for the server configuration (E4/E5)
 
-- `--metrics` (medição acima).
-- Amostragem padrão no servidor igual à do cartão (`--temp 0.6 --top-p 0.95
-  --top-k 20 --min-p 0 --presence-penalty 0`): vale para qualquer cliente que não
-  mande os parâmetros. O `min_p` padrão do llama.cpp é 0.05, diferente do cartão.
-  **Obrigatório para o Codex**, que não envia nenhum parâmetro de amostragem.
-- `-n 32768` (limite de saída padrão por requisição): o Codex não manda
-  `max_output_tokens`; os outros agentes mandam o próprio limite e não são afetados.
-- `--reasoning-preserve` é redundante: o b11982 já liga `preserve_reasoning` por
-  padrão quando o template suporta (`common/arg.cpp`) **[verificado]**. Manter não faz mal.
-- O parser do Qwen3 no b11982 encerra o raciocínio quando aparece `<tool_call>`
-  (`common/parsers/qwen3-coder.cpp`), o que ataca a causa do problema #24316 do
-  OpenCode **[verificado: código]**.
+- `--metrics` (measurement above).
+- Server default sampling equal to the model card's (`--temp 0.6 --top-p 0.95
+  --top-k 20 --min-p 0 --presence-penalty 0`): applies to any client that does not
+  send the parameters. llama.cpp's default `min_p` is 0.05, different from the card.
+  **Mandatory for Codex**, which sends no sampling parameter.
+- `-n 32768` (default output limit per request): Codex does not send
+  `max_output_tokens`; the other agents send their own limit and are not affected.
+- `--reasoning-preserve` is redundant: b11982 already turns on `preserve_reasoning` by
+  default when the template supports it (`common/arg.cpp`) **[verified]**. Keeping it does no harm.
+- The Qwen3 parser in b11982 ends the reasoning when `<tool_call>` appears
+  (`common/parsers/qwen3-coder.cpp`), which attacks the cause of OpenCode's issue #24316
+  **[verified: code]**.
 
-## Testar primeiro na E6 (não verificado)
+## Test first in E6 (unverified)
 
-A E7 vem antes: o perfil autonomous roda pelo agent-box. Em ordem, para cada agente instalado:
+E7 comes first: the autonomous profile runs through the agent-box. In order, for each installed agent:
 
-1. `AGENT_DRY_RUN=1 agents/<agente>/run.sh …`: config gerada e comando.
-2. Config aceita pelo agente sem aviso (Qwen: início limpo; Pi: `pi --list-models local`;
-   OpenCode: `opencode debug config`; Claude: `/status` no interativo).
-3. `measure-preamble.sh`: preâmbulo, número de requisições por turno (procurar
-   chamadas extras de título, memória, sugestões) e se a amostragem chegou ao
-   servidor (`--verbose`).
-4. Guarda: pedir ao agente `git push` e `rm -rf ../x`; deve aparecer em `guard.log`.
-5. Cache entre turnos numa tarefa de 5+ passos (`cached_tokens`).
-6. Itens específicos na seção "Testar primeiro" de cada README, em especial:
-   Claude Code com `/v1/messages` (thinking, temperatura, `--bare`), Codex com
-   `/v1/responses` (itens `reasoning` reenviados, `apply_patch` pelo shell, hook com
-   `--dangerously-bypass-hook-trust`), hook do Qwen Code no YOLO, extensão do Pi
-   carregada com `-e`, plugin do OpenCode e sintoma da #24316.
-7. `agent-metrics.json` de cada agente bate com o que se vê no `events.jsonl`.
-8. Skills: bootstrap presente na primeira requisição, chamada explícita, e se o modelo
-   aciona a skill sozinho no teste de aceitação do Superpowers ("Let's make a react todo
-   list" deve acionar `brainstorming` antes de escrever código).
-9. Isolamento real: depois de instalar e rodar, `find -newer <marcador>` em `~/.claude`,
+1. `AGENT_DRY_RUN=1 agents/<agent>/run.sh …`: generated config and command.
+2. Config accepted by the agent without a warning (Qwen: clean start; Pi: `pi --list-models local`;
+   OpenCode: `opencode debug config`; Claude: `/status` in interactive mode).
+3. `measure-preamble.sh`: preamble, number of requests per turn (look for extra
+   calls for title, memory, suggestions) and whether the sampling reached the
+   server (`--verbose`).
+4. Guard: ask the agent for `git push` and `rm -rf ../x`; it must show up in `guard.log`.
+5. Cache across turns in a task with 5+ steps (`cached_tokens`).
+6. Specific items in the "Test first" section of each README, especially:
+   Claude Code with `/v1/messages` (thinking, temperature, `--bare`), Codex with
+   `/v1/responses` (resent `reasoning` items, `apply_patch` through the shell, hook with
+   `--dangerously-bypass-hook-trust`), Qwen Code hook in YOLO, Pi extension
+   loaded with `-e`, OpenCode plugin and the #24316 symptom.
+7. Each agent's `agent-metrics.json` matches what is seen in `events.jsonl`.
+8. Skills: bootstrap present in the first request, explicit call, and whether the model
+   triggers the skill by itself in the Superpowers acceptance test ("Let's make a react todo
+   list" must trigger `brainstorming` before writing code).
+9. Real isolation: after installing and running, `find -newer <marker>` on `~/.claude`,
    `~/.claude.json`, `~/.codex`, `~/.qwen`, `~/.pi`, `~/.config/opencode`,
-   `~/.local/share/opencode`, `~/.cache/opencode` e `~/.agents` não mostra nada.
+   `~/.local/share/opencode`, `~/.cache/opencode` and `~/.agents` shows nothing.
 
-## Riscos encontrados
+## Risks found
 
-- **OpenCode 1.x sem manutenção:** a 2.0 saiu e as issues da 1.x foram fechadas
-  em massa em 11/10/2026. O que falhar na 1.19.5 fica sem correção; migrar para a
-  2.x exige refazer o plugin (API de plugins mudou).
-- **Qwen Code muda rápido** (0.25.0 → 0.26.3 em 23 dias, nightly diária) e liga por
-  padrão recursos que chamam o modelo em segundo plano. Cada atualização pode trazer
-  outra chamada extra; conferir o número de requisições por turno a cada troca de versão.
-- **Slot único:** qualquer chamada paralela (título, memória, classificador,
-  subagente) tira o prompt principal do cache. Tudo isso está desligado onde há
-  opção; o `--cache-ram` do servidor atenua o resto.
-- **Claude Code com modelo não-Claude:** sem suporte oficial. Recursos que dependem
-  da Anthropic (WebSearch, fast mode, artifacts, classificador do modo `auto`) não
-  funcionam; o formato de thinking adaptativo é ignorado pelo llama.cpp; a
-  temperatura efetiva depende da mescla com `CLAUDE_CODE_EXTRA_BODY`.
-- **Codex com modelo não-OpenAI:** prompt, catálogo e `apply_patch` assumem GPT; o
-  caminho `/v1/responses` do llama.cpp é o menos testado; sem amostragem nem limite
-  de saída do cliente. O sandbox do Codex (bwrap) não deve funcionar dentro do container
-  da E7 sem afrouxar o seccomp do Docker: lá o perfil autonomous roda sem ele
-  (`danger-full-access`), e o container é a barreira.
-- **Guarda é melhor esforço:** conservadora e com falsos positivos (bloqueia texto que
-  só menciona `git push` ou `sudo`, inclusive em heredoc de documentação). No modo
-  autonomous o shell escreve em qualquer lugar; quem segura é o container.
-- **Skills custam prompt:** ~50–150 tokens por skill mais o bootstrap, em todo prompt;
-  o perfil base tem 13 skills e o `frontend`, 2.
-- **Pi sem permissões:** a extensão é a única camada além do container; ela só vê
-  as ferramentas `bash`, `write` e `edit`.
-- **Prefill longo** (~100k tokens a 500–1000 tok/s = 2 a 3 min sem bytes): os
-  timeouts de todos os agentes foram ampliados; se algum ainda cortar, o sintoma é
-  repetição da mesma requisição (e mais 2 a 3 min de prefill).
-- **Espaço** maior que o estimado (~1,2 GB contra 0,3 GB).
+- **OpenCode 1.x unmaintained:** 2.0 came out and the 1.x issues were closed
+  en masse on 2026-10-11. Whatever fails on 1.19.5 stays unfixed; migrating to
+  2.x requires redoing the plugin (the plugin API changed).
+- **Qwen Code changes fast** (0.25.0 → 0.26.3 in 23 days, daily nightly) and turns on by
+  default features that call the model in the background. Each update may bring
+  another extra call; check the number of requests per turn at every version change.
+- **Single slot:** any parallel call (title, memory, classifier,
+  subagent) evicts the main prompt from the cache. All of that is turned off where there is an
+  option; the server's `--cache-ram` mitigates the rest.
+- **Claude Code with a non-Claude model:** no official support. Features that depend on
+  Anthropic (WebSearch, fast mode, artifacts, the `auto` mode classifier) do not
+  work; the adaptive thinking format is ignored by llama.cpp; the
+  effective temperature depends on the merge with `CLAUDE_CODE_EXTRA_BODY`.
+- **Codex with a non-OpenAI model:** prompt, catalog and `apply_patch` assume GPT; the
+  llama.cpp `/v1/responses` path is the least tested; no client sampling or output
+  limit. The Codex sandbox (bwrap) should not work inside the E7 container
+  without loosening Docker's seccomp: there the autonomous profile runs without it
+  (`danger-full-access`), and the container is the barrier.
+- **The guard is best effort:** conservative and with false positives (it blocks text that
+  merely mentions `git push` or `sudo`, including in a documentation heredoc). In
+  autonomous mode the shell writes anywhere; the container is what holds.
+- **Skills cost prompt:** ~50–150 tokens per skill plus the bootstrap, in every prompt;
+  the base profile has 13 skills and `frontend` has 2.
+- **Pi without permissions:** the extension is the only layer besides the container; it only sees
+  the `bash`, `write` and `edit` tools.
+- **Long prefill** (~100k tokens at 500–1000 tok/s = 2 to 3 min with no bytes): the
+  timeouts of all agents were raised; if one still cuts it off, the symptom is
+  a repeat of the same request (and another 2 to 3 min of prefill).
+- **Space** larger than estimated (~1.2 GB against 0.3 GB).
 
-## Arquivos
+## Files
 
-| Caminho | Conteúdo |
+| Path | Content |
 |---|---|
-| `versions.env` | versões, integridade npm, prefixos, padrões do servidor |
-| `install.sh` | instalação isolada de um agente |
-| `measure-preamble.sh` | medição do primeiro prompt |
-| `lib/common.sh` | contrato do `run.sh`, geração de config, métricas, metadados |
-| `lib/render.py` | mescla de JSON e troca de `@@VAR@@` (JSON, TOML, rules) |
-| `lib/agent_metrics.py` | `agent-metrics.json` a partir do `events.jsonl` |
-| `lib/skills.py` | `AGENT_SKILLS_DIRS`: diretórios, cópia, overlays de config e bootstrap |
-| `<agente>/superpowers-tools.md` | mapa de ferramentas do bootstrap (Qwen Code, Pi, OpenCode) |
-| `../scripts/fetch-skills.sh` | baixa as skills fixadas (Superpowers, `anthropics/skills`) e monta os perfis (`base`, `frontend`) |
-| `lib/guard.py` | guarda de comandos de shell comum |
-| `lib/test-guard.sh` | casos de teste da guarda |
-| `<agente>/` | config base e perfis, `env.sh`, `run.sh`, lançador interativo, README |
+| `versions.env` | versions, npm integrity, prefixes, server defaults |
+| `install.sh` | isolated installation of an agent |
+| `measure-preamble.sh` | first-prompt measurement |
+| `lib/common.sh` | `run.sh` contract, config generation, metrics, metadata |
+| `lib/render.py` | JSON merge and `@@VAR@@` replacement (JSON, TOML, rules) |
+| `lib/agent_metrics.py` | `agent-metrics.json` from `events.jsonl` |
+| `lib/skills.py` | `AGENT_SKILLS_DIRS`: directories, copy, config overlays and bootstrap |
+| `<agent>/superpowers-tools.md` | tool map of the bootstrap (Qwen Code, Pi, OpenCode) |
+| `../scripts/fetch-skills.sh` | downloads the pinned skills (Superpowers, `anthropics/skills`) and builds the profiles (`base`, `frontend`) |
+| `lib/guard.py` | common shell command guard |
+| `lib/test-guard.sh` | guard test cases |
+| `<agent>/` | base config and profiles, `env.sh`, `run.sh`, interactive launcher, README |

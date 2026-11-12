@@ -1,14 +1,14 @@
 /**
- * Permissões do Pi local (o Pi não tem sistema de permissões próprio).
+ * Permissions for the local Pi (Pi has no permission system of its own).
  *
- * - bash: todo comando passa por agents/lib/guard.py (lista de bloqueio comum
- *   aos quatro agentes). No perfil interactive, comandos que não sejam leitura
- *   simples pedem confirmação.
- * - write/edit fora do projeto: perguntam (interactive) ou são bloqueados
- *   (autonomous, e sempre que não houver interface).
+ * - bash: every command goes through agents/lib/guard.py (blocklist shared by
+ *   the four agents). In the interactive profile, commands that are not simple
+ *   reads ask for confirmation.
+ * - write/edit outside the project: ask (interactive) or are blocked
+ *   (autonomous, and whenever there is no UI).
  *
- * Variáveis: AGENT_PROFILE, AGENT_GUARD (caminho do guard.py), AGENT_WORKDIR.
- * Carregada com `pi -e <este arquivo>` por run.sh e pi-local.
+ * Variables: AGENT_PROFILE, AGENT_GUARD (path to guard.py), AGENT_WORKDIR.
+ * Loaded with `pi -e <this file>` by run.sh and pi-local.
  */
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
@@ -59,7 +59,7 @@ export default function (pi: ExtensionAPI) {
       const denied = runGuard(command, ctx.cwd);
       if (denied) return { block: true, reason: denied };
       if (interactive && !isSimpleReadOnly(command)) {
-        const ok = await ctx.ui.confirm("Executar comando?", command);
+        const ok = await ctx.ui.confirm("Run command?", command);
         if (!ok) return { block: true, reason: "Blocked by the user" };
       }
       return undefined;
@@ -70,7 +70,7 @@ export default function (pi: ExtensionAPI) {
       const target = path.resolve(ctx.cwd, p);
       if (isInside(target, root)) return undefined;
       if (interactive) {
-        const ok = await ctx.ui.confirm("Alterar arquivo fora do projeto?", target);
+        const ok = await ctx.ui.confirm("Modify file outside the project?", target);
         if (ok) return undefined;
       }
       return { block: true, reason: `Blocked by local policy: writing outside the project (${target})` };

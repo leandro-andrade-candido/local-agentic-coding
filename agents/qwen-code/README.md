@@ -1,195 +1,195 @@
 # Qwen Code (local)
 
-Concorrente da Meta 1 (disputa única desde 29/10). Fork do Gemini CLI mantido pela equipe do Qwen, com
-provedores OpenAI-compatíveis, hooks no formato do Claude Code, regras de
-permissão e modo headless.
+Goal 1 contender (single contest since Oct 29). A fork of Gemini CLI maintained by the Qwen team, with
+OpenAI-compatible providers, hooks in the Claude Code format, permission
+rules and a headless mode.
 
-| Item | Valor |
+| Item | Value |
 |---|---|
-| Versão fixada | **0.26.3** (`@qwen-code/qwen-code`, tag `latest` no npm, publicada em 28/10/2026) **[verificado: npm]** |
-| Outras linhas | `preview` 0.26.3-preview.0 e `nightly` diária; não usar |
-| Licença | Apache-2.0 (arquivo `LICENSE` do repositório; o `package.json` publicado não traz o campo) **[verificado]** |
-| Requisito | Node ≥ 22 (aqui: 24.21) |
-| Tamanho | ~155 MB descompactado, mais dependências opcionais (bun, node-pty, sharp) |
-| Executável | `qwen` |
+| Pinned version | **0.26.3** (`@qwen-code/qwen-code`, npm `latest` tag, published 2026-10-28) **[verified: npm]** |
+| Other lines | `preview` 0.26.3-preview.0 and daily `nightly`; do not use |
+| License | Apache-2.0 (the repository's `LICENSE` file; the published `package.json` does not carry the field) **[verified]** |
+| Requirement | Node ≥ 22 (here: 24.21) |
+| Size | ~155 MB unpacked, plus optional dependencies (bun, node-pty, sharp) |
+| Executable | `qwen` |
 
-## Instalação
+## Installation
 
 ```bash
 agents/install.sh qwen-code
 # = npm install --global --prefix ~/.local/opt/agents/qwen-code/0.26.3 @qwen-code/qwen-code@0.26.3
-#   e link ~/.local/opt/agents/qwen-code/current -> 0.26.3
+#   and link ~/.local/opt/agents/qwen-code/current -> 0.26.3
 ```
 
-Nada vai para o prefixo global do npm (nvm). A atualização automática fica
-desligada na config (`general.enableAutoUpdate: false`), senão o Qwen Code
-tentaria `npm install -g` no prefixo global.
+Nothing goes into npm's global prefix (nvm). Automatic update is turned
+off in the config (`general.enableAutoUpdate: false`), otherwise Qwen Code would
+try `npm install -g` in the global prefix.
 
-## Isolamento da configuração
+## Configuration isolation
 
-- `QWEN_HOME` muda o diretório global (padrão `~/.qwen`): settings, credenciais,
-  memória, skills, sessões e logs **[verificado: docs/users/configuration/settings.md, tabela de variáveis]**.
-  `QWEN_RUNTIME_DIR` (sessões, logs) segue o `QWEN_HOME` quando não definido.
-- Interativo: `QWEN_HOME=~/.local/state/local-agentic/agents/qwen-code/qwen`.
-  Eval: `QWEN_HOME=<log-dir>/home/qwen`, novo a cada execução.
-- O `settings.json` é **regerado a cada início** a partir de `settings.base.json` +
-  `settings.<perfil>.json` (`agents/lib/render.py`). Mudanças feitas por `/settings`
-  ou `/model` duram só até a próxima vez; edite os modelos no repositório.
-- Continuam valendo, por desenho do Qwen Code: `.qwen/settings.json`, `QWEN.md` e
-  `AGENTS.md` do projeto, e `~/.env` (lido depois de `$QWEN_HOME/.env`, sem sobrepor
-  variáveis já definidas). Hoje não existe `~/.env` nem `~/.qwen` nesta máquina.
+- `QWEN_HOME` changes the global directory (default `~/.qwen`): settings, credentials,
+  memory, skills, sessions and logs **[verified: docs/users/configuration/settings.md, variables table]**.
+  `QWEN_RUNTIME_DIR` (sessions, logs) follows `QWEN_HOME` when not set.
+- Interactive: `QWEN_HOME=~/.local/state/local-agentic/agents/qwen-code/qwen`.
+  Eval: `QWEN_HOME=<log-dir>/home/qwen`, new on every run.
+- `settings.json` is **regenerated at every start** from `settings.base.json` +
+  `settings.<profile>.json` (`agents/lib/render.py`). Changes made through `/settings`
+  or `/model` last only until the next time; edit the models in the repository.
+- Still in effect, by Qwen Code's design: `.qwen/settings.json`, `QWEN.md` and
+  `AGENTS.md` of the project, and `~/.env` (read after `$QWEN_HOME/.env`, without overriding
+  variables already set). Currently neither `~/.env` nor `~/.qwen` exists on this machine.
 
-## Arquivos
+## Files
 
-| Arquivo | Função |
+| File | Role |
 |---|---|
-| `settings.base.json` | Provedor local, amostragem, janela, compactação, telemetria, ferramentas e hook |
-| `settings.interactive.json` | Permissões do uso diário |
-| `settings.autonomous.json` | Permissões do eval (YOLO + lista de bloqueio) |
-| `env.sh` | Variáveis de ambiente e geração do `settings.json` |
-| `run.sh` | Contrato do eval |
-| `qwen-local` | Lançador interativo (`cd projeto && .../qwen-local`) |
+| `settings.base.json` | Local provider, sampling, window, compaction, telemetry, tools and hook |
+| `settings.interactive.json` | Everyday-use permissions |
+| `settings.autonomous.json` | Eval permissions (YOLO + blocklist) |
+| `env.sh` | Environment variables and `settings.json` generation |
+| `run.sh` | Eval contract |
+| `qwen-local` | Interactive launcher (`cd project && .../qwen-local`) |
 
-## Modelo e servidor
+## Model and server
 
-| Ajuste | Valor | Onde |
+| Setting | Value | Where |
 |---|---|---|
-| Endpoint | `$LLM_BASE_URL/v1`, provedor `openai` (Chat Completions) | `modelProviders.openai[0]` |
-| Chave | a do llama-server, por `envKey: LOCAL_LLM_API_KEY` (ver chave em `agents/README.md`) | idem |
-| Amostragem | temperature 0.6, top_p 0.95, top_k 20, min_p 0, presence_penalty 0 | `generationConfig.samplingParams` |
-| Saída máxima | 32768 (`max_tokens` explícito; desliga a escalada automática para 64k) | idem |
+| Endpoint | `$LLM_BASE_URL/v1`, `openai` provider (Chat Completions) | `modelProviders.openai[0]` |
+| Key | the llama-server's, via `envKey: LOCAL_LLM_API_KEY` (see the key in `agents/README.md`) | same |
+| Sampling | temperature 0.6, top_p 0.95, top_k 20, min_p 0, presence_penalty 0 | `generationConfig.samplingParams` |
+| Max output | 32768 (explicit `max_tokens`; turns off the automatic escalation to 64k) | same |
 | Thinking | `chat_template_kwargs.preserve_thinking: true` | `generationConfig.extra_body` |
-| Janela | 131072 | `generationConfig.contextWindowSize` |
-| Compactação | a 75% da janela (~98k) | `context.autoCompactThreshold: 0.75` |
-| Timeouts | sem limite por requisição; 15 min sem bytes no stream; sem limite de vida do stream | `timeout: 0`, `streamIdleTimeoutMs`, `QWEN_STREAM_MAX_LIFETIME_MS=0` |
+| Window | 131072 | `generationConfig.contextWindowSize` |
+| Compaction | at 75% of the window (~98k) | `context.autoCompactThreshold: 0.75` |
+| Timeouts | no per-request limit; 15 min without bytes on the stream; no stream lifetime limit | `timeout: 0`, `streamIdleTimeoutMs`, `QWEN_STREAM_MAX_LIFETIME_MS=0` |
 
-Todas as chaves acima constam de `docs/users/configuration/settings.md` e
-`model-providers.md` da tag v0.26.3 **[verificado]**. Detalhes conferidos no código:
+All the keys above appear in `docs/users/configuration/settings.md` and
+`model-providers.md` of tag v0.26.3 **[verified]**. Details checked in the code:
 
-- Com `samplingParams` definido, as chaves vão como estão para o servidor e o
-  Qwen Code não injeta o próprio campo de raciocínio **[verificado: doc model-providers]**.
-- Para IDs que começam com `qwen` fora da DashScope, o perfil de raciocínio é
-  `qwen-chat-template` e o histórico reenvia o `reasoning_content` de cada turno
-  (copiado também para o campo `reasoning`) **[verificado: provider/default.ts]**.
-  Isso é o que o `preserve_thinking` precisa.
-- Sem `contextWindowSize`, um ID `qwen3.6-*` cai na regra de 1M tokens e a
-  compactação nunca acontece (issue #13415, aberta) **[verificado]**.
+- With `samplingParams` set, the keys go to the server as they are and
+  Qwen Code does not inject its own reasoning field **[verified: model-providers doc]**.
+- For IDs that start with `qwen` outside DashScope, the reasoning profile is
+  `qwen-chat-template` and the history resends each turn's `reasoning_content`
+  (also copied to the `reasoning` field) **[verified: provider/default.ts]**.
+  That is what `preserve_thinking` needs.
+- Without `contextWindowSize`, a `qwen3.6-*` ID falls under the 1M-token rule and
+  compaction never happens (issue #13415, open) **[verified]**.
 
-## Telemetria, rede e chamadas extras
+## Telemetry, network and extra calls
 
-| O quê | Como |
+| What | How |
 |---|---|
-| Estatísticas de uso e telemetria | `privacy.usageStatisticsEnabled: false`, `telemetry.enabled: false`, `QWEN_USAGE_STATISTICS_ENABLED=0`, `QWEN_TELEMETRY_ENABLED=0` |
-| Catálogo models.dev (download diário) | `QWEN_CODE_MODELS_DEV=off`, `QWEN_CODE_MODELS_DEV_REFRESH=off` |
-| Atualização automática | `general.enableAutoUpdate: false` |
-| Busca na web, geração de imagem, artifacts, cron, autofix de PR | `tools.disabled` (o perfil autonomous também desliga `web_fetch`, `ask_user_question` e o modo plano) |
-| Memória automática, "dream", auto-skill | `memory.*: false` (ver problema 1 abaixo) |
-| Sugestões de continuação, feedback, resumo de ferramentas, recap | `ui.enableFollowupSuggestions`, `ui.enableUserFeedback`, `experimental.emitToolUseSummaries`, `general.showSessionRecap`: `false` |
-| Título automático | só roda com `fastModel` (não configurado); também `QWEN_DISABLE_AUTO_TITLE=1` **[não verificado: citado só no doc de design]** |
-| Mensagens entre sessões | `agents.crossSessionMessaging: false` |
-| Co-autoria em commits e notas git | `general.gitCoAuthor.commit/pr: false` |
+| Usage statistics and telemetry | `privacy.usageStatisticsEnabled: false`, `telemetry.enabled: false`, `QWEN_USAGE_STATISTICS_ENABLED=0`, `QWEN_TELEMETRY_ENABLED=0` |
+| models.dev catalog (daily download) | `QWEN_CODE_MODELS_DEV=off`, `QWEN_CODE_MODELS_DEV_REFRESH=off` |
+| Automatic update | `general.enableAutoUpdate: false` |
+| Web search, image generation, artifacts, cron, PR autofix | `tools.disabled` (the autonomous profile also turns off `web_fetch`, `ask_user_question` and plan mode) |
+| Automatic memory, "dream", auto-skill | `memory.*: false` (see problem 1 below) |
+| Follow-up suggestions, feedback, tool summaries, recap | `ui.enableFollowupSuggestions`, `ui.enableUserFeedback`, `experimental.emitToolUseSummaries`, `general.showSessionRecap`: `false` |
+| Automatic title | only runs with `fastModel` (not configured); also `QWEN_DISABLE_AUTO_TITLE=1` **[unverified: cited only in the design doc]** |
+| Messages between sessions | `agents.crossSessionMessaging: false` |
+| Co-authorship in commits and git notes | `general.gitCoAuthor.commit/pr: false` |
 
-Com um slot só no servidor, cada chamada em segundo plano tira o prompt
-principal do cache. Por isso todas as chamadas extras ficam desligadas.
+With a single slot on the server, each background call evicts the main
+prompt from the cache. That is why all extra calls are turned off.
 
-## Permissões
+## Permissions
 
-O Qwen Code decide nesta ordem: `deny` > `ask` > `allow` > modo de aprovação.
-Regras `Bash(...)` sem `*` casam por prefixo de palavra (`Bash(git push)` pega
-`git push origin main`). Comandos compostos são separados antes da checagem.
+Qwen Code decides in this order: `deny` > `ask` > `allow` > approval mode.
+`Bash(...)` rules without `*` match by word prefix (`Bash(git push)` catches
+`git push origin main`). Compound commands are split before the check.
 
 | | interactive (`qwen-local`) | autonomous (`run.sh`) |
 |---|---|---|
-| Modo | `default`: edição e shell perguntam | `yolo` (`--approval-mode yolo`) |
-| Leitura | `allow: Read` (leitura, grep, glob, ls) | livre |
-| Edição | `allow: Edit(/**)`, só dentro do projeto (`/` = raiz do projeto). As ferramentas de edição recusam caminhos fora do workspace | livre dentro do workspace |
-| Shell | pergunta | livre |
-| Bloqueado (regra) | `git push`, `sudo`, `su`, `doas`, `pkexec` | os mesmos + `npm/pnpm/yarn/bun install/add/ci`, `pip install`, `uv add`, `apt`, `brew` |
-| Bloqueado (hook, melhor esforço) | `lib/guard.py`: padrões de `git push`, `sudo`, `curl \| sh`, `rm` fora do projeto | o mesmo + instalações pela rede |
+| Mode | `default`: edit and shell ask | `yolo` (`--approval-mode yolo`) |
+| Read | `allow: Read` (read, grep, glob, ls) | free |
+| Edit | `allow: Edit(/**)`, only inside the project (`/` = project root). The edit tools refuse paths outside the workspace | free inside the workspace |
+| Shell | asks | free |
+| Blocked (rule) | `git push`, `sudo`, `su`, `doas`, `pkexec` | the same + `npm/pnpm/yarn/bun install/add/ci`, `pip install`, `uv add`, `apt`, `brew` |
+| Blocked (hook, best effort) | `lib/guard.py`: patterns of `git push`, `sudo`, `curl \| sh`, `rm` outside the project | the same + network installs |
 
-No YOLO, `deny` continua bloqueando (`permissionFlow.ts`: `deny` é checado antes
-do modo) **[verificado: código]**; `ask` e `allow` não fazem efeito. O hook roda em
-`PreToolUse` com `matcher: ^run_shell_command$`; código de saída 2 bloqueia e o
-motivo vai para o modelo **[verificado: docs/users/features/hooks.md]**.
-Não usamos o modo `auto`: ele chama um classificador LLM a cada ação, o que
-custa uma requisição extra no slot único.
+In YOLO, `deny` still blocks (`permissionFlow.ts`: `deny` is checked before
+the mode) **[verified: code]**; `ask` and `allow` have no effect. The hook runs on
+`PreToolUse` with `matcher: ^run_shell_command$`; exit code 2 blocks and the
+reason goes to the model **[verified: docs/users/features/hooks.md]**.
+We do not use `auto` mode: it calls an LLM classifier on every action, which
+costs an extra request on the single slot.
 
 ## Skills (AGENT_SKILLS_DIRS)
 
-- **Descoberta:** os diretórios de `AGENT_SKILLS_DIRS` entram em `skills.directories`
-  (nível "user"; cada diretório é varrido um nível abaixo, `<nome>/SKILL.md`)
-  **[verificado: docs settings.md]**. O Qwen Code também lê `$QWEN_HOME/skills`,
-  `.qwen/skills` e `.agents/skills` do projeto e `~/.agents/skills` da HOME real
-  (no host; no agent-box a HOME é vazia).
-- **Sob demanda:** só nome e descrição entram na lista da ferramenta `skill`; o corpo
-  é carregado quando o modelo chama a skill **[verificado: docs features/skills.md]**.
-- **Chamada explícita:** `/<nome-da-skill>` (ou o painel `/skills`).
-- **Bootstrap do Superpowers:** hook `SessionStart` (`startup|resume|clear|compact`)
-  que devolve `hookSpecificOutput.additionalContext` com o `using-superpowers` e o mapa
-  `qwen-code/superpowers-tools.md` (`settings.skills-bootstrap.json`).
-- **Mapa de ferramentas:** o Qwen Code é um fork do Gemini CLI, mas os nomes das
-  ferramentas mudaram (`edit` e não `replace`, `skill` e não `activate_skill`, `agent`
-  e não `invoke_agent`, `todo_write` desligado por padrão; conferido em
-  `packages/core/src/tools/tool-names.ts`). Por isso o mapa é nosso, não o
-  `gemini-tools.md` do Superpowers.
-- **Não verificado (E6):** o `additionalContext` do `SessionStart` chega ao modelo no
-  modo `-p`; o modelo aciona a skill certa sozinho; custo de tokens da lista.
+- **Discovery:** the `AGENT_SKILLS_DIRS` directories go into `skills.directories`
+  ("user" level; each directory is scanned one level below, `<name>/SKILL.md`)
+  **[verified: docs settings.md]**. Qwen Code also reads `$QWEN_HOME/skills`,
+  the project's `.qwen/skills` and `.agents/skills`, and `~/.agents/skills` of the real HOME
+  (on the host; in the agent-box HOME is empty).
+- **On demand:** only name and description go into the `skill` tool's list; the body
+  is loaded when the model calls the skill **[verified: docs features/skills.md]**.
+- **Explicit call:** `/<skill-name>` (or the `/skills` panel).
+- **Superpowers bootstrap:** `SessionStart` hook (`startup|resume|clear|compact`)
+  that returns `hookSpecificOutput.additionalContext` with `using-superpowers` and the
+  `qwen-code/superpowers-tools.md` map (`settings.skills-bootstrap.json`).
+- **Tool map:** Qwen Code is a fork of Gemini CLI, but the tool names
+  changed (`edit` not `replace`, `skill` not `activate_skill`, `agent`
+  not `invoke_agent`, `todo_write` off by default; checked in
+  `packages/core/src/tools/tool-names.ts`). That is why the map is ours, not
+  Superpowers' `gemini-tools.md`.
+- **Unverified (E6):** the `SessionStart` `additionalContext` reaches the model in
+  `-p` mode; the model triggers the right skill by itself; token cost of the list.
 
-> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
-> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
-> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
-> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
-> (ver `agents/README.md`).
+> **Autonomous profile only in the agent-box.** `run.sh` refuses `AGENT_PROFILE=autonomous`
+> outside the E7 container (which sets `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> forces it on the host and is unsafe. The agent's environment is clean (`env -i` + allowlist)
+> and the llama-server key comes from `LLM_API_KEY` or the E5 file
+> (see `agents/README.md`).
 
-## Uso não interativo
+## Non-interactive use
 
 ```bash
-agents/qwen-code/run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
-# executa: qwen --prompt=<conteúdo> --output-format stream-json --approval-mode yolo
+agents/qwen-code/run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
+# runs: qwen --prompt=<contents> --output-format stream-json --approval-mode yolo
 ```
 
-- `events.jsonl`: mensagens `system`, `assistant` (com `usage`), resultados de
-  ferramenta e `result` final.
-- Códigos de saída do Qwen Code: 0 sucesso, 53 limite de turnos, 55 orçamento
-  (`--max-wall-time`/`--max-tool-calls`), 130 SIGINT **[verificado: docs/users/features/headless.md]**.
-- `AGENT_LOG_REQUESTS=1` acrescenta `--openai-logging --openai-logging-dir <log>/requests`
-  (corpo de cada requisição e resposta).
-- O prompt vai como argumento (`--prompt=`); prompts acima de ~120 KB são recusados.
+- `events.jsonl`: `system` messages, `assistant` (with `usage`), tool
+  results and the final `result`.
+- Qwen Code exit codes: 0 success, 53 turn limit, 55 budget
+  (`--max-wall-time`/`--max-tool-calls`), 130 SIGINT **[verified: docs/users/features/headless.md]**.
+- `AGENT_LOG_REQUESTS=1` adds `--openai-logging --openai-logging-dir <log>/requests`
+  (body of each request and response).
+- The prompt goes as an argument (`--prompt=`); prompts above ~120 KB are refused.
 
-## Medir o preâmbulo
+## Measuring the preamble
 
-`agents/measure-preamble.sh qwen-code`. A primeira requisição gravada em
-`requests/` mostra system prompt, ferramentas e mensagens; o `usage` da primeira
-resposta no `events.jsonl` dá `prompt_tokens`; o `/metrics` do servidor dá o total
-processado. O Qwen Code adia ferramentas pouco usadas (`tools.toolSearch.enabled`,
-padrão ligado), o que reduz o preâmbulo.
+`agents/measure-preamble.sh qwen-code`. The first request recorded in
+`requests/` shows the system prompt, tools and messages; the first response's `usage`
+in `events.jsonl` gives `prompt_tokens`; the server's `/metrics` gives the total
+processed. Qwen Code defers rarely used tools (`tools.toolSearch.enabled`,
+on by default), which reduces the preamble.
 
-## Problemas conhecidos com Qwen3.6 + llama.cpp
+## Known problems with Qwen3.6 + llama.cpp
 
-1. **Catálogo de memória no fim da requisição** (#14203, aberta desde 0.25.1): com
-   memória automática ligada, o catálogo é anexado no fim de cada requisição e
-   some na seguinte. Em modelos híbridos como o Qwen3.6, o llama.cpp só volta a
-   checkpoints perto do fim do prompt, então cada passo reprocessa a conversa
-   inteira. **Mitigação:** `memory.enableManagedAutoMemory: false` (conferido no
-   código: sem memória gerenciada o catálogo fica vazio).
-2. **Janela de 1M presumida para `qwen3.x`** (#13415, aberta). **Mitigação:**
+1. **Memory catalog at the end of the request** (#14203, open since 0.25.1): with
+   automatic memory on, the catalog is appended at the end of each request and
+   disappears in the next. On hybrid models such as Qwen3.6, llama.cpp only goes back to
+   checkpoints near the end of the prompt, so each step reprocesses the whole
+   conversation. **Mitigation:** `memory.enableManagedAutoMemory: false` (checked in
+   the code: without managed memory the catalog stays empty).
+2. **1M window assumed for `qwen3.x`** (#13415, open). **Mitigation:**
    `contextWindowSize: 131072`.
-3. **Recursos que mudam o contexto** (#14215, aberta): sugestões, atualizações de
-   memória e retomada de sessão alteram o prompt e derrubam o cache em servidores
-   locais. **Mitigação:** os recursos estão desligados.
-4. Hooks `PreToolUse` que falham (erro ≠ 2) deixam o comando passar (#12457,
-   aberta, citada para `qwen serve`). A guarda só usa saída 0 ou 2; as regras
-   `deny` nativas são a primeira camada.
+3. **Features that change the context** (#14215, open): suggestions, memory
+   updates and session resume alter the prompt and drop the cache on local
+   servers. **Mitigation:** the features are turned off.
+4. `PreToolUse` hooks that fail (error ≠ 2) let the command through (#12457,
+   open, cited for `qwen serve`). The guard only uses exit 0 or 2; the native
+   `deny` rules are the first layer.
 
-## Testar primeiro na E6 (não verificado)
+## Test first in E6 (unverified)
 
-- O `settings.json` gerado é aceito pela 0.26.3 sem aviso (`goals.modelProposed`,
-  nomes em `tools.disabled`, `hooks`).
-- O hook de guarda dispara em `-p` com `--approval-mode yolo` e bloqueia `git push`.
-- Nenhuma requisição extra por turno: contar `requests/` contra os turnos do `events.jsonl`.
-- O reaproveitamento de cache entre turnos: `prompt_tokens_details.cached_tokens`
-  perto do tamanho do prompt anterior.
-- O campo extra `reasoning` (cópia do `reasoning_content`) não atrapalha o template do Qwen3.6.
-- `QWEN_DISABLE_AUTO_TITLE` (só no doc de design).
-- `--bare` (só `read_file`, `edit`, `run_shell_command`) como variante de preâmbulo mínimo:
-  ignora boa parte da config; testar se o provedor local continua valendo.
+- The generated `settings.json` is accepted by 0.26.3 without a warning (`goals.modelProposed`,
+  names in `tools.disabled`, `hooks`).
+- The guard hook fires in `-p` with `--approval-mode yolo` and blocks `git push`.
+- No extra request per turn: count `requests/` against the turns in `events.jsonl`.
+- Cache reuse across turns: `prompt_tokens_details.cached_tokens`
+  close to the size of the previous prompt.
+- The extra `reasoning` field (copy of `reasoning_content`) does not get in the way of the Qwen3.6 template.
+- `QWEN_DISABLE_AUTO_TITLE` (only in the design doc).
+- `--bare` (only `read_file`, `edit`, `run_shell_command`) as a minimal-preamble variant:
+  it ignores a good part of the config; test whether the local provider still applies.

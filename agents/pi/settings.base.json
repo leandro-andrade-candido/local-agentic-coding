@@ -1,12 +1,12 @@
 {
-  "//": "Base do Pi 1.4.x. Gerado em $PI_CODING_AGENT_DIR/settings.json, mesclado com settings.<perfil>.json.",
+  "//": "Base for Pi 1.4.x. Generated in $PI_CODING_AGENT_DIR/settings.json, merged with settings.<profile>.json.",
   "defaultProvider": "local",
   "defaultModel": "@@LLM_MODEL@@",
   "defaultThinkingLevel": "medium",
   "defaultTools": ["read", "bash", "edit", "write"],
   "cacheWarming": "off",
   "compaction": {
-    "//": "Compacta quando sobram menos de 32k tokens livres: ~98k de 131k.",
+    "//": "Compacts when fewer than 32k tokens remain free: ~98k of 131k.",
     "enabled": true,
     "reserveTokens": 32768,
     "keepRecentTokens": 20000

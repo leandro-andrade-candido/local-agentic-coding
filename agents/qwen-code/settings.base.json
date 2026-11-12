@@ -1,5 +1,5 @@
 {
-  "//": "Base do Qwen Code 0.26.x para o llama-server local. Gerado em $QWEN_HOME/settings.json por run.sh/qwen-local (agents/lib/render.py), mesclado com settings.<perfil>.json. Chaves '//' são removidas.",
+  "//": "Base for Qwen Code 0.26.x against the local llama-server. Generated in $QWEN_HOME/settings.json by run.sh/qwen-local (agents/lib/render.py), merged with settings.<profile>.json. '//' keys are removed.",
   "$version": 4,
   "general": {
     "enableAutoUpdate": false,
@@ -9,7 +9,7 @@
   "privacy": { "usageStatisticsEnabled": false },
   "telemetry": { "enabled": false, "logPrompts": false },
   "ui": {
-    "//": "Sugestões de continuação e feedback chamam o modelo em segundo plano: com um slot só, cada chamada extra apaga o cache do prompt.",
+    "//": "Follow-up suggestions and feedback call the model in the background: with a single slot, each extra call wipes the prompt cache.",
     "enableFollowupSuggestions": false,
     "enableUserFeedback": false,
     "enableWelcomeBack": false,
@@ -28,14 +28,14 @@
         "envKey": "LOCAL_LLM_API_KEY",
         "baseUrl": "@@LLM_BASE_URL@@/v1",
         "generationConfig": {
-          "//": "timeout 0 = sem limite por requisição; o prefill de ~100k tokens leva minutos.",
+          "//": "timeout 0 = no per-request limit; the ~100k-token prefill takes minutes.",
           "timeout": 0,
           "streamIdleTimeoutMs": 900000,
           "maxRetries": 2,
           "contextWindowSize": "@@INT:LLM_CONTEXT@@",
           "modalities": { "image": false, "pdf": false, "audio": false, "video": false },
           "samplingParams": {
-            "//": "Cartão do modelo, modo thinking para código preciso. Com samplingParams o Qwen Code envia as chaves como estão e não calcula max_tokens sozinho.",
+            "//": "Model card, thinking mode for precise code. With samplingParams Qwen Code sends the keys as they are and does not compute max_tokens itself.",
             "temperature": 0.6,
             "top_p": 0.95,
             "top_k": 20,
@@ -51,7 +51,7 @@
     ]
   },
   "context": {
-    "//": "Compacta a ~75% da janela (98k de 131k), deixando ~32k para a resposta.",
+    "//": "Compacts at ~75% of the window (98k of 131k), leaving ~32k for the response.",
     "autoCompactThreshold": 0.75
   },
   "tools": {
@@ -68,7 +68,7 @@
     ]
   },
   "memory": {
-    "//": "Memória automática desligada: o catálogo vai no fim de cada requisição e força reprocessar o prompt inteiro em modelos híbridos no llama.cpp (QwenLM/qwen-code#14203).",
+    "//": "Automatic memory off: the catalog goes at the end of each request and forces reprocessing the whole prompt on hybrid models in llama.cpp (QwenLM/qwen-code#14203).",
     "enableManagedAutoMemory": false,
     "enableManagedAutoDream": false,
     "enableAutoSkill": false

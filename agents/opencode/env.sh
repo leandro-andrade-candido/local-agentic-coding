@@ -1,11 +1,11 @@
 # shellcheck shell=bash
-# Ambiente do OpenCode 1.x local (incluído por run.sh e opencode-local, depois de lib/common.sh).
-# Exige AGENT_HOME definido. Nada aqui lê ou grava ~/.config/opencode, ~/.local/share/opencode,
-# ~/.cache/opencode nem ~/.claude.
+# Local OpenCode 1.x environment (sourced by run.sh and opencode-local, after lib/common.sh).
+# Requires AGENT_HOME to be set. Nothing here reads or writes ~/.config/opencode, ~/.local/share/opencode,
+# ~/.cache/opencode or ~/.claude.
 
-# O OpenCode guarda config, dados (sessões, auth.json, logs), cache e estado nos
-# diretórios XDG: apontá-los para AGENT_HOME isola tudo. Só vale para o processo
-# do OpenCode e seus filhos (comandos que o agente roda também herdam).
+# OpenCode keeps config, data (sessions, auth.json, logs), cache and state in the
+# XDG directories: pointing them at AGENT_HOME isolates everything. It only applies
+# to the OpenCode process and its children (commands the agent runs inherit it too).
 keep XDG_CONFIG_HOME="$AGENT_HOME/opencode/config"
 keep XDG_DATA_HOME="$AGENT_HOME/opencode/data"
 keep XDG_CACHE_HOME="$AGENT_HOME/opencode/cache"
@@ -13,23 +13,23 @@ keep XDG_STATE_HOME="$AGENT_HOME/opencode/state"
 mkdir -p "$XDG_CONFIG_HOME/opencode/plugins" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
 
 keep OPENCODE_DISABLE_AUTOUPDATE=1
-# Sem buscar o catálogo models.dev: o provedor local está todo na config.
+# Do not fetch the models.dev catalog: the local provider is entirely in the config.
 keep OPENCODE_DISABLE_MODELS_FETCH=1
 keep OPENCODE_DISABLE_LSP_DOWNLOAD=1
-# Não ler ~/.claude/CLAUDE.md nem skills de ~/.claude e ~/.agents.
-# Skills e instruções de ~/.claude (CLAUDE.md, skills pessoais do Claude Code) ficam
-# de fora no host. As skills de projeto (.agents/skills) continuam valendo; no host
-# isso inclui ~/.agents/skills (hoje sem skills). No agent-box a HOME é vazia e
-# .claude/skills do projeto também vale.
+# Do not read ~/.claude/CLAUDE.md nor skills from ~/.claude and ~/.agents.
+# Skills and instructions from ~/.claude (CLAUDE.md, personal Claude Code skills) are
+# left out on the host. Project skills (.agents/skills) still apply; on the host
+# that includes ~/.agents/skills (currently without skills). In the agent-box HOME is
+# empty and the project's .claude/skills also apply.
 if [ "${AGENT_BOX:-0}" != 1 ]; then
   keep OPENCODE_DISABLE_CLAUDE_CODE=1
 fi
-# Plugins internos são todos de login em nuvem (Codex, Copilot, GitLab, Azure...).
+# The built-in plugins are all cloud logins (Codex, Copilot, GitLab, Azure...).
 keep OPENCODE_DISABLE_DEFAULT_PLUGINS=1
 keep OPENCODE_DISABLE_TERMINAL_TITLE=1
 
-# Skills: AGENT_SKILLS_DIRS em skills.paths; bootstrap do Superpowers pelo plugin
-# skills-bootstrap.js (mesmo mecanismo do plugin oficial da 1.x).
+# Skills: AGENT_SKILLS_DIRS in skills.paths; Superpowers bootstrap via the
+# skills-bootstrap.js plugin (same mechanism as the official 1.x plugin).
 setup_skills opencode
 oc_extra=()
 if [ -n "$AGENT_SKILLS_RESOLVED" ]; then

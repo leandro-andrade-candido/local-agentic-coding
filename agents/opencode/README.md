@@ -1,173 +1,173 @@
 # OpenCode (local)
 
-Concorrente da Meta 1. O mais parecido com o Claude Code em recursos
-(subagentes, skills, plugins, permissões allow/ask/deny), com o maior prompt
-fixo entre os abertos (~7,5 mil tokens).
+Goal 1 contender. The closest to Claude Code in features
+(subagents, skills, plugins, allow/ask/deny permissions), with the largest
+fixed prompt among the open ones (~7.5k tokens).
 
-| Item | Valor |
+| Item | Value |
 |---|---|
-| Versão fixada | **1.19.5** (`opencode-ai`, tag `latest`, 28/10/2026) **[verificado: npm, GitHub]** |
-| Licença | MIT **[verificado: npm, repositório anomalyco/opencode]** |
-| Executável | `opencode` (binário nativo; o `postinstall` copia o pacote da plataforma, ~214 MB) |
+| Pinned version | **1.19.5** (`opencode-ai`, `latest` tag, 2026-10-28) **[verified: npm, GitHub]** |
+| License | MIT **[verified: npm, anomalyco/opencode repository]** |
+| Executable | `opencode` (native binary; the `postinstall` copies the platform package, ~214 MB) |
 
-## Situação da linha 2.x
+## Status of the 2.x line
 
-- **OpenCode 2** saiu como outro pacote: `@opencode/cli` (2.2.1 em 29/10/2026),
-  com releases v2.0.x a v2.2.1 no mesmo repositório **[verificado: npm, GitHub]**.
-- O `opencode-ai` continua na 1.x e é o "Latest" do GitHub. Os dois usam o
-  comando `opencode` e não convivem no mesmo PATH; aqui convivem porque cada um
-  vai para o seu prefixo.
-- Mudanças que importam: API do servidor refeita, plugins da 1.x não funcionam
-  na 2.x, `tui.json` foi para dentro do JSON principal, serviço em segundo plano
-  único **[verificado: anoma.ly/notes/opencode-2-0]**.
-- **Manutenção da 1.x:** em 11/10/2026 os mantenedores fecharam as issues da 1.x
-  com "development is focused on V2" (foi assim que a #24316 virou "not planned").
-  Bugs achados na E6 provavelmente não serão corrigidos na 1.19.x.
-- Ficamos na 1.19.x por decisão do plano. Se o OpenCode for o escolhido, migrar
-  para a 2.x exige refazer `plugins/guard.js` e revisar a config.
+- **OpenCode 2** came out as another package: `@opencode/cli` (2.2.1 on 2026-10-29),
+  with releases v2.0.x to v2.2.1 in the same repository **[verified: npm, GitHub]**.
+- `opencode-ai` stays on 1.x and is GitHub's "Latest". Both use the
+  `opencode` command and do not coexist on the same PATH; here they coexist because each one
+  goes to its own prefix.
+- Changes that matter: server API redone, 1.x plugins do not work
+  on 2.x, `tui.json` moved into the main JSON, a single background
+  service **[verified: anoma.ly/notes/opencode-2-0]**.
+- **1.x maintenance:** on 2026-10-11 the maintainers closed the 1.x issues
+  with "development is focused on V2" (that is how #24316 became "not planned").
+  Bugs found in E6 will probably not be fixed in 1.19.x.
+- We stay on 1.19.x by decision of the plan. If OpenCode is the one chosen, migrating
+  to 2.x requires redoing `plugins/guard.js` and reviewing the config.
 
-## Instalação
+## Installation
 
 ```bash
 agents/install.sh opencode
 # = npm install --global --prefix ~/.local/opt/agents/opencode/1.19.5 opencode-ai@1.19.5
 ```
 
-Não usar `opencode upgrade` nem o script `curl ... | bash` do site (instala em
-`~/.opencode/bin` e pode trocar pela 2.x).
+Do not use `opencode upgrade` nor the site's `curl ... | bash` script (it installs in
+`~/.opencode/bin` and may swap in 2.x).
 
-## Isolamento da configuração
+## Configuration isolation
 
-O OpenCode guarda tudo nos diretórios XDG: config em `~/.config/opencode`,
-dados (sessões em SQLite, `auth.json`, logs) em `~/.local/share/opencode`,
-cache e estado **[verificado: packages/core/src/global.ts]**. `env.sh` aponta
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` e `XDG_STATE_HOME` para
-`<AGENT_HOME>/opencode/*`. Interativo: `~/.local/state/local-agentic/agents/opencode/`;
+OpenCode keeps everything in the XDG directories: config in `~/.config/opencode`,
+data (SQLite sessions, `auth.json`, logs) in `~/.local/share/opencode`,
+cache and state **[verified: packages/core/src/global.ts]**. `env.sh` points
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` at
+`<AGENT_HOME>/opencode/*`. Interactive: `~/.local/state/local-agentic/agents/opencode/`;
 eval: `<log-dir>/home/opencode/`.
 
-Efeito colateral: os comandos que o agente roda herdam essas variáveis (o `gh`
-não acha o login; caches de pip e npm vão para o diretório isolado). O
-`~/.gitconfig` continua sendo lido.
+Side effect: the commands the agent runs inherit these variables (`gh`
+does not find its login; pip and npm caches go to the isolated directory). The
+`~/.gitconfig` is still read.
 
-Além disso:
+In addition:
 
-| Variável | Por quê |
+| Variable | Why |
 |---|---|
-| `OPENCODE_DISABLE_CLAUDE_CODE=1` (só no host) | não ler `~/.claude/CLAUDE.md` nem `.claude/skills` (da HOME e do projeto) |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` | os plugins internos são de login em nuvem (Codex, Copilot, GitLab, Azure, xAI...) |
-| `OPENCODE_DISABLE_MODELS_FETCH=1` | sem buscar o catálogo models.dev |
-| `OPENCODE_DISABLE_AUTOUPDATE=1`, `OPENCODE_DISABLE_LSP_DOWNLOAD=1` | sem rede automática |
+| `OPENCODE_DISABLE_CLAUDE_CODE=1` (host only) | do not read `~/.claude/CLAUDE.md` nor `.claude/skills` (from HOME and from the project) |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` | the built-in plugins are cloud logins (Codex, Copilot, GitLab, Azure, xAI...) |
+| `OPENCODE_DISABLE_MODELS_FETCH=1` | do not fetch the models.dev catalog |
+| `OPENCODE_DISABLE_AUTOUPDATE=1`, `OPENCODE_DISABLE_LSP_DOWNLOAD=1` | no automatic network |
 
-Todas constam de `packages/core/src/flag/flag.ts` da tag v1.19.5 e da página de
-CLI **[verificado]**.
-`OPENCODE_DISABLE_PROJECT_CONFIG` **não** é usado: além de `opencode.json` do
-repositório, ele desliga a leitura do `AGENTS.md` do projeto.
+All appear in `packages/core/src/flag/flag.ts` of tag v1.19.5 and in the CLI
+page **[verified]**.
+`OPENCODE_DISABLE_PROJECT_CONFIG` is **not** used: besides the repository's `opencode.json`,
+it turns off reading the project's `AGENTS.md`.
 
-## Modelo e servidor (`opencode.base.json`)
+## Model and server (`opencode.base.json`)
 
-| Ajuste | Valor |
+| Setting | Value |
 |---|---|
-| Provedor | `llamacpp`, `npm: @ai-sdk/openai-compatible` (vem embutido no binário), `baseURL: $LLM_BASE_URL/v1` |
-| Provedores habilitados | só `llamacpp` (`enabled_providers`); `small_model` também é o local |
-| Amostragem | `temperature` 0.6 e `top_p` 0.95 por agente (build, plan, general, explore, compaction); `top_k` 20, `min_p` 0, `presence_penalty` 0 em `models.<id>.options` |
-| Thinking | `reasoning: true`; `interleaved: {field: reasoning_content}` devolve o raciocínio no histórico; `options.chat_template_kwargs.preserve_thinking: true` |
-| Janela e saída | `limit: {context: 131072, output: 32768}`; o OpenCode corta a saída em 32000 (`OUTPUT_TOKEN_MAX`) |
-| Compactação | automática quando o total passa de contexto − saída = ~99k (`session/overflow.ts`); `prune` desligado |
+| Provider | `llamacpp`, `npm: @ai-sdk/openai-compatible` (built into the binary), `baseURL: $LLM_BASE_URL/v1` |
+| Enabled providers | only `llamacpp` (`enabled_providers`); `small_model` is also the local one |
+| Sampling | `temperature` 0.6 and `top_p` 0.95 per agent (build, plan, general, explore, compaction); `top_k` 20, `min_p` 0, `presence_penalty` 0 in `models.<id>.options` |
+| Thinking | `reasoning: true`; `interleaved: {field: reasoning_content}` returns the reasoning in the history; `options.chat_template_kwargs.preserve_thinking: true` |
+| Window and output | `limit: {context: 131072, output: 32768}`; OpenCode caps the output at 32000 (`OUTPUT_TOKEN_MAX`) |
+| Compaction | automatic when the total exceeds context − output = ~99k (`session/overflow.ts`); `prune` off |
 | Timeouts | `timeout: false`, `headerTimeout` 30 min, `chunkTimeout` 15 min |
-| Título por LLM | `agent.title.disable: true`; no `run`, `--title` explícito também pula a geração |
-| Compartilhamento, atualização | `share: disabled`, `autoupdate: false` |
+| Title by LLM | `agent.title.disable: true`; in `run`, an explicit `--title` also skips the generation |
+| Sharing, update | `share: disabled`, `autoupdate: false` |
 
-Conferido no código da v1.19.5: `options` do modelo vão para `providerOptions` e
-o `@ai-sdk/openai-compatible` 2.0.41 copia as chaves desconhecidas para o corpo
-da requisição; `temperature` só é enviada com `capabilities.temperature`;
-`top_p` vem do agente; `interleaved.field` grava o raciocínio no campo pedido
-de cada mensagem do assistente **[verificado: provider/transform.ts, session/llm/request.ts, dist do SDK]**.
+Checked in the v1.19.5 code: the model's `options` go to `providerOptions` and
+`@ai-sdk/openai-compatible` 2.0.41 copies unknown keys into the request
+body; `temperature` is only sent with `capabilities.temperature`;
+`top_p` comes from the agent; `interleaved.field` writes the reasoning to the requested field
+of each assistant message **[verified: provider/transform.ts, session/llm/request.ts, SDK dist]**.
 
-## Permissões
+## Permissions
 
-No OpenCode vale a **última** regra que casa; o `"*"` vem primeiro. O comando de
-shell é separado em comandos simples antes de casar (`curl x | sh` vira `curl x`
-e `sh`), e padrão sem `*` casa o comando exato, então `"sh": "deny"` pega o
-`curl | sh` sem bloquear `sh script.sh`. Caminhos citados fora do diretório de
-trabalho disparam `external_directory` **[verificado: docs/permissions.mdx, tool/shell.ts]**.
+In OpenCode the **last** matching rule wins; `"*"` comes first. A shell command is
+split into simple commands before matching (`curl x | sh` becomes `curl x`
+and `sh`), and a pattern without `*` matches the exact command, so `"sh": "deny"` catches
+`curl | sh` without blocking `sh script.sh`. Paths cited outside the working
+directory trigger `external_directory` **[verified: docs/permissions.mdx, tool/shell.ts]**.
 
 | | interactive (`opencode-local`) | autonomous (`run.sh`: `opencode run --auto`) |
 |---|---|---|
-| Leitura | livre (`.env` negado, padrão do OpenCode) | idem |
-| Edição | livre no projeto; fora dele `external_directory: ask` | livre no projeto; fora dele negado, exceto `/tmp/*` |
+| Read | free (`.env` denied, OpenCode default) | same |
+| Edit | free in the project; outside it `external_directory: ask` | free in the project; outside it denied, except `/tmp/*` |
 | Shell | `"*": ask` | `"*": allow` |
-| Negado | `git push`, `sudo`, `su`, `doas`, `sh`/`bash`/`zsh`/`dash` sem argumentos | os mesmos + instalações pela rede |
-| Web | `webfetch: ask`, `websearch: deny` | ambos `deny` |
-| Repetição (3 chamadas iguais) | `doom_loop: ask` | `doom_loop: deny` |
-| Plugin `plugins/guard.js` | `lib/guard.py` em todo comando bash | idem |
+| Denied | `git push`, `sudo`, `su`, `doas`, `sh`/`bash`/`zsh`/`dash` without arguments | the same + network installs |
+| Web | `webfetch: ask`, `websearch: deny` | both `deny` |
+| Repetition (3 identical calls) | `doom_loop: ask` | `doom_loop: deny` |
+| `plugins/guard.js` plugin | `lib/guard.py` on every bash command | same |
 
-`--auto` aprova o que seria `ask`; `deny` continua valendo **[verificado: docs]**.
-O plugin fica em `$XDG_CONFIG_HOME/opencode/plugins/` (link para o repositório) e
-lança erro em `tool.execute.before` para bloquear **[verificado: docs/plugins.mdx]**.
+`--auto` approves what would be `ask`; `deny` still applies **[verified: docs]**.
+The plugin lives in `$XDG_CONFIG_HOME/opencode/plugins/` (link to the repository) and
+throws an error in `tool.execute.before` to block **[verified: docs/plugins.mdx]**.
 
 ## Skills (AGENT_SKILLS_DIRS)
 
-- **Descoberta:** os diretórios de `AGENT_SKILLS_DIRS` vão para `skills.paths` (chave da
-  config 1.x; cada diretório é varrido por `**/SKILL.md`) **[verificado: core/src/v1/config/skills.ts, skill/index.ts]**.
-  Também valem `skills/` do diretório de config isolado, `.opencode/skills` e
-  `.agents/skills` do projeto. `.claude/skills` e `~/.claude/CLAUDE.md` ficam de fora no
-  host (`OPENCODE_DISABLE_CLAUDE_CODE=1`); no agent-box (HOME vazia) valem.
-  `OPENCODE_DISABLE_EXTERNAL_SKILLS` saiu: ele também desligava `.agents/skills` do projeto.
-- **Sob demanda:** a ferramenta nativa `skill` lista nome e descrição e carrega o corpo
-  quando chamada.
-- **Chamada explícita:** pedir no prompt "use a ferramenta skill para carregar <nome>"
-  (é o que a doc do Superpowers para OpenCode indica).
-- **Bootstrap do Superpowers:** plugin `plugins/skills-bootstrap.js`, com o mesmo gancho
-  do plugin oficial para a 1.x (`experimental.chat.messages.transform`, bootstrap no
-  início da primeira mensagem do usuário, pulando subagentes).
-- **Mapa de ferramentas:** o do plugin oficial (V1), com uma correção: para modelos que
-  não são GPT o OpenCode oferece `edit`/`write`, não `apply_patch`
-  (`tool/registry.ts`), então o mapa diz `write`/`edit`.
-- **Não verificado (E6):** plugin carregado sem rede; skill carregada pelo modelo.
+- **Discovery:** the `AGENT_SKILLS_DIRS` directories go to `skills.paths` (1.x config
+  key; each directory is scanned for `**/SKILL.md`) **[verified: core/src/v1/config/skills.ts, skill/index.ts]**.
+  The isolated config directory's `skills/`, and the project's `.opencode/skills` and
+  `.agents/skills` also apply. `.claude/skills` and `~/.claude/CLAUDE.md` are left out on the
+  host (`OPENCODE_DISABLE_CLAUDE_CODE=1`); in the agent-box (empty HOME) they apply.
+  `OPENCODE_DISABLE_EXTERNAL_SKILLS` was dropped: it also turned off the project's `.agents/skills`.
+- **On demand:** the native `skill` tool lists name and description and loads the body
+  when called.
+- **Explicit call:** ask in the prompt "use the skill tool to load <name>"
+  (which is what the Superpowers doc for OpenCode indicates).
+- **Superpowers bootstrap:** `plugins/skills-bootstrap.js` plugin, with the same hook
+  as the official plugin for 1.x (`experimental.chat.messages.transform`, bootstrap at the
+  start of the first user message, skipping subagents).
+- **Tool map:** the official plugin's (V1), with one fix: for non-GPT models
+  OpenCode offers `edit`/`write`, not `apply_patch`
+  (`tool/registry.ts`), so the map says `write`/`edit`.
+- **Unverified (E6):** plugin loaded without network; skill loaded by the model.
 
-> **Perfil autonomous só no agent-box.** O `run.sh` recusa `AGENT_PROFILE=autonomous`
-> fora do container da E7 (que marca `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
-> força no host e é inseguro. O ambiente do agente é limpo (`env -i` + lista de
-> permitidas) e a chave do llama-server vem de `LLM_API_KEY` ou do arquivo da E5
-> (ver `agents/README.md`).
+> **Autonomous profile only in the agent-box.** `run.sh` refuses `AGENT_PROFILE=autonomous`
+> outside the E7 container (which sets `AGENT_BOX=1`); `AGENT_ALLOW_HOST_AUTONOMOUS=1`
+> forces it on the host and is unsafe. The agent's environment is clean (`env -i` + allowlist)
+> and the llama-server key comes from `LLM_API_KEY` or the E5 file
+> (see `agents/README.md`).
 
-## Uso não interativo
+## Non-interactive use
 
 ```bash
-agents/opencode/run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
-# executa: opencode run --format json --model llamacpp/qwen3.6-35b --dir <dir> \
+agents/opencode/run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
+# runs: opencode run --format json --model llamacpp/qwen3.6-35b --dir <dir> \
 #            --title "eval ..." --print-logs --log-level INFO --auto <prompt>
 ```
 
-`--format json` emite os eventos crus (partes de texto, raciocínio, ferramentas,
-`step_finish` com `tokens`); logs do OpenCode vão para `stderr.log`. Saída ≠ 0
-quando a sessão termina com erro **[verificado: cli/cmd/run.ts]**.
+`--format json` emits the raw events (text parts, reasoning, tools,
+`step_finish` with `tokens`); OpenCode logs go to `stderr.log`. Exit ≠ 0
+when the session ends with an error **[verified: cli/cmd/run.ts]**.
 
-## Medir o preâmbulo
+## Measuring the preamble
 
-`agents/measure-preamble.sh opencode`: `tokens.input` do primeiro `step_finish`
-e o `/metrics` do servidor. O OpenCode não grava o corpo das requisições; para
-ver o system prompt, use `llama-server --verbose` (ou `-lv 4`) durante a medição.
+`agents/measure-preamble.sh opencode`: the `tokens.input` of the first `step_finish`
+and the server's `/metrics`. OpenCode does not record the request body; to
+see the system prompt, use `llama-server --verbose` (or `-lv 4`) during the measurement.
 
-## Problemas conhecidos com Qwen3.6 + llama.cpp
+## Known problems with Qwen3.6 + llama.cpp
 
-- **#24316** (fechada como "not planned" em 11/10/2026, no fechamento em massa
-  da 1.x): o modelo escreve `<tool_call>...` dentro do raciocínio, a TUI mostra o
-  XML cru e a sessão para. Relatado de 1.14.x a 1.18.23, com llama.cpp, vLLM e Ollama.
-  - O parser do Qwen3 no llama.cpp b11982 já trata `<tool_call>` como fim do
-    raciocínio (`common/parsers/qwen3-coder.cpp`), a mesma correção do Ollama
-    (PR #15022) **[verificado: código]**. Deve bastar; reproduzir na E6.
-  - Mitigações relatadas: `preserve_thinking` (aqui: padrão do servidor b11982 +
-    `interleaved`), saída máxima maior (32k), temperatura de código (0.6).
-  - PR #27984 (remover tags XML soltas do texto) foi fechado sem merge.
-  - Último recurso: template com o ajuste citado na issue (mover `<tool_call>`
-    de `reasoning_content` para `content`).
+- **#24316** (closed as "not planned" on 2026-10-11, in the mass closing
+  of 1.x): the model writes `<tool_call>...` inside the reasoning, the TUI shows the
+  raw XML and the session stops. Reported from 1.14.x to 1.18.23, with llama.cpp, vLLM and Ollama.
+  - The Qwen3 parser in llama.cpp b11982 already treats `<tool_call>` as the end of the
+    reasoning (`common/parsers/qwen3-coder.cpp`), the same fix as Ollama's
+    (PR #15022) **[verified: code]**. It should be enough; reproduce in E6.
+  - Reported mitigations: `preserve_thinking` (here: b11982 server default +
+    `interleaved`), larger max output (32k), code temperature (0.6).
+  - PR #27984 (remove stray XML tags from the text) was closed without merging.
+  - Last resort: a template with the tweak cited in the issue (move `<tool_call>`
+    from `reasoning_content` to `content`).
 
-## Testar primeiro na E6 (não verificado)
+## Test first in E6 (unverified)
 
-- A config gerada passa na validação (`opencode debug config` com as mesmas variáveis).
-- O `run` respeita `--auto` + `deny` e o `--title` evita a chamada de título (contar requisições no `/metrics`).
-- O plugin carrega com `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` e bloqueia `git push`.
-- `options` chegam ao servidor (`top_k`, `min_p`, `chat_template_kwargs`) e a temperatura do agente é aplicada (`llama-server --verbose`).
-- Sintoma da #24316 em 3 tarefas: contar `<tool_call>` em texto/raciocínio nos eventos.
-- `external_directory` com `/tmp/*` liberado não atrapalha testes que usam `/tmp`.
+- The generated config passes validation (`opencode debug config` with the same variables).
+- `run` honors `--auto` + `deny` and `--title` avoids the title call (count requests in `/metrics`).
+- The plugin loads with `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` and blocks `git push`.
+- `options` reach the server (`top_k`, `min_p`, `chat_template_kwargs`) and the agent's temperature is applied (`llama-server --verbose`).
+- #24316 symptom over 3 tasks: count `<tool_call>` in text/reasoning in the events.
+- `external_directory` with `/tmp/*` allowed does not get in the way of tests that use `/tmp`.

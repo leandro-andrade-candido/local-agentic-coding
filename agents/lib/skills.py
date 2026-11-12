@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Skills (padrão SKILL.md) para os agentes locais.
+"""Skills (SKILL.md standard) for the local agents.
 
-Contrato: AGENT_SKILLS_DIRS = lista de diretórios separados por ":"; cada um
-contém pastas de skill (<nome>/SKILL.md). Sem a variável, usa o perfil base:
-/opt/skills/base (container) ou $SKILLS_PREFIX/profiles/base (host), o que
-existir. AGENT_SKILLS_DIRS="" (vazia) desliga as skills.
+Contract: AGENT_SKILLS_DIRS = list of directories separated by ":"; each one
+contains skill folders (<name>/SKILL.md). Without the variable, it uses the base
+profile: /opt/skills/base (container) or $SKILLS_PREFIX/profiles/base (host),
+whichever exists. AGENT_SKILLS_DIRS="" (empty) turns skills off.
 
-Comandos:
-  dirs                          imprime os diretórios existentes, separados por ":"
-  copy <destino>                copia cada pasta de skill para <destino>/<nome>
-                                (primeira ocorrência de cada nome vence; <destino> é recriado)
-  bootstrap <agente> <arquivo>  grava o bootstrap do Superpowers para o agente
-                                (using-superpowers + mapa de ferramentas); não grava
-                                nada se não houver using-superpowers
-  hook-json <arquivo> [evento]  imprime o JSON de hook SessionStart (Claude Code,
-                                Qwen Code) com o conteúdo do arquivo em additionalContext
-  overlay <arquivo> <chave>     grava um JSON {"skills": {<chave>: [dirs...]}} para
-                                mesclar na config (Qwen: directories; OpenCode: paths)
+Commands:
+  dirs                          print the existing directories, separated by ":"
+  copy <dest>                   copy each skill folder to <dest>/<name>
+                                (the first occurrence of each name wins; <dest> is recreated)
+  bootstrap <agent> <file>      write the Superpowers bootstrap for the agent
+                                (using-superpowers + tool map); writes nothing
+                                if there is no using-superpowers
+  hook-json <file> [event]      print the SessionStart hook JSON (Claude Code,
+                                Qwen Code) with the file contents in additionalContext
+  overlay <file> <key>          write a JSON {"skills": {<key>: [dirs...]}} to
+                                merge into the config (Qwen: directories; OpenCode: paths)
 """
 import json
 import os
@@ -27,9 +27,9 @@ import sys
 AGENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOTSTRAP_MARKER = "superpowers:using-superpowers bootstrap"
 
-# Mapa de ferramentas por agente. Os arquivos references/*-tools.md vêm do próprio
-# Superpowers (pasta da skill using-superpowers); os de agents/<agente>/ são nossos,
-# para agentes que o Superpowers não cobre ou cobre com outros nomes de ferramenta.
+# Tool map per agent. The references/*-tools.md files come from Superpowers
+# itself (the using-superpowers skill folder); the ones in agents/<agent>/ are ours,
+# for agents that Superpowers does not cover or covers with other tool names.
 MAPPINGS = {
     "claude-local": ("skill", "references/claude-code-tools.md"),
     "codex-local": ("skill", "references/codex-tools.md"),
@@ -54,12 +54,12 @@ def skill_dirs():
         if os.path.isdir(d):
             out.append(os.path.abspath(d))
         else:
-            print(f"skills.py: aviso: diretório de skills inexistente: {d}", file=sys.stderr)
+            print(f"skills.py: warning: skills directory does not exist: {d}", file=sys.stderr)
     return out
 
 
 def skills():
-    """[(nome, caminho)] na ordem de AGENT_SKILLS_DIRS; o primeiro nome vence."""
+    """[(name, path)] in AGENT_SKILLS_DIRS order; the first name wins."""
     seen, out = set(), []
     for d in skill_dirs():
         for name in sorted(os.listdir(d)):
@@ -77,8 +77,8 @@ def strip_frontmatter(text):
 
 
 def make_writable(root):
-    # A origem é montada só leitura e copytree preserva as permissões; sem escrita
-    # nas pastas, a próxima sessão não consegue apagar a cópia (PermissionError).
+    # The source is mounted read-only and copytree preserves permissions; without
+    # write access on the folders, the next session cannot delete the copy (PermissionError).
     for d, dirs, files in os.walk(root):
         os.chmod(d, os.stat(d).st_mode | 0o700)
         for f in files:

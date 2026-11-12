@@ -1,5 +1,5 @@
 {
-  "//": "Provedor do llama-server local para o Pi 1.4.x. Gerado em $PI_CODING_AGENT_DIR/models.json por run.sh/pi-local. O provedor embutido 'llama.cpp' do Pi exige o modo router do llama-server; aqui o servidor roda com um modelo só (-m), por isso o provedor é declarado como endpoint compatível.",
+  "//": "Local llama-server provider for Pi 1.4.x. Generated in $PI_CODING_AGENT_DIR/models.json by run.sh/pi-local. Pi's built-in 'llama.cpp' provider requires the llama-server router mode; here the server runs with a single model (-m), so the provider is declared as a compatible endpoint.",
   "providers": {
     "local": {
       "name": "llama.cpp local",

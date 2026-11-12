@@ -1,44 +1,44 @@
 #!/usr/bin/env python3
-"""Guarda de comandos de shell, comum aos cinco agentes. MELHOR ESFORÇO.
+"""Shell command guard, shared by the five agents. BEST EFFORT.
 
-Chamada como hook PreToolUse (Claude Code, Qwen Code, Codex), pelo plugin do
-OpenCode e pela extensão do Pi. É uma segunda camada, conservadora: bloqueia
-padrões perigosos no texto do comando e aceita falsos positivos (por exemplo,
-`git commit -m "push"` é bloqueado). Não é uma barreira: código gerado e
-executado depois, `eval` de strings montadas, interpretadores (`python -c`) e
-redirecionamentos (`> ~/.bashrc`, `mv`, `truncate`) escapam. A barreira é o
-container da E7 (agent-box).
+Called as a PreToolUse hook (Claude Code, Qwen Code, Codex), by the OpenCode
+plugin and by the Pi extension. It is a conservative second layer: it blocks
+dangerous patterns in the command text and accepts false positives (for example,
+`git commit -m "push"` is blocked). It is not a barrier: code generated and run
+later, `eval` of built strings, interpreters (`python -c`) and redirections
+(`> ~/.bashrc`, `mv`, `truncate`) get through. The barrier is the E7 container
+(agent-box).
 
-Entrada (stdin, JSON), formato de hook do Claude Code / Qwen Code / Codex:
+Input (stdin, JSON), hook format of Claude Code / Qwen Code / Codex:
   {"tool_name": "Bash", "tool_input": {"command": "..."}, "cwd": "..."}
-ou o formato simples {"command": "...", "cwd": "..."}. `command` pode ser lista.
-Saída: código 0 libera; código 2 bloqueia, com o motivo em stderr (o agente
-repassa o motivo ao modelo, por isso as mensagens são em inglês).
+or the plain format {"command": "...", "cwd": "..."}. `command` may be a list.
+Output: exit code 0 allows; exit code 2 blocks, with the reason on stderr (the
+agent passes the reason to the model, which is why the messages are in English).
 
-Política (ambiente):
-  AGENT_PROFILE  interactive | autonomous (padrão: autonomous)
-  AGENT_WORKDIR  raiz do projeto; senão CLAUDE_PROJECT_DIR/QWEN_PROJECT_DIR; senão cwd
-  AGENT_LOG_DIR  se definido, cada bloqueio é registrado em guard.log (JSONL)
+Policy (environment):
+  AGENT_PROFILE  interactive | autonomous (default: autonomous)
+  AGENT_WORKDIR  project root; else CLAUDE_PROJECT_DIR/QWEN_PROJECT_DIR; else cwd
+  AGENT_LOG_DIR  if set, each block is recorded in guard.log (JSONL)
 
-Duas passadas; qualquer uma bloqueia.
-1. Texto inteiro (sem aspas nem barras invertidas, heredocs incluídos), sem olhar
-   a estrutura:
-   - `git` e `push`/`send-pack`/`receive-pack` no mesmo comando
-   - `sudo`, `su`, `doas`, `pkexec`, `runuser` como palavra
-   - downloader (`curl`, `wget`...) junto de: pipe para shell/`source`/`eval`/
-     `xargs`/`env`/`if`, pipe para interpretador lendo o stdin, `<(curl`/`$(curl`,
-     ou arquivo baixado (`-o`) seguido de shell/interpretador
-   - autonomous: instalação de pacotes (npm/pnpm/yarn/bun/pip/uv/poetry/cargo/
-     go/gem/apt/brew..., nomes com versão como pip3.12), `yarn` sozinho, e
-     `npx`/`npm exec`/`pnpm dlx` de programa que não está em node_modules/.bin
-2. Estrutura (comandos separados, palavras-chave do shell como separadores,
-   opções de wrappers, `bash -c`, `env -S`, heredoc e here-string avaliados como
-   script, exceto o corpo de `apply_patch`):
-   - `rm` fora do projeto, na raiz do projeto, em `.git` ou com alvo não
-     resolvível; `rm -r/-f` vindo de `xargs`, depois de `cd`/`pushd` não
-     resolvível ou depois de `ln` no mesmo comando; `/tmp` é liberado, menos a
-     pasta que contém o projeto
-   - `find ... -delete` / `-exec rm` com ponto de partida fora do projeto
+Two passes; either one blocks.
+1. Whole text (without quotes or backslashes, heredocs included), ignoring
+   structure:
+   - `git` and `push`/`send-pack`/`receive-pack` in the same command
+   - `sudo`, `su`, `doas`, `pkexec`, `runuser` as a word
+   - a downloader (`curl`, `wget`...) together with: a pipe to shell/`source`/
+     `eval`/`xargs`/`env`/`if`, a pipe to an interpreter reading stdin,
+     `<(curl`/`$(curl`, or a downloaded file (`-o`) followed by a shell/interpreter
+   - autonomous: package installs (npm/pnpm/yarn/bun/pip/uv/poetry/cargo/
+     go/gem/apt/brew..., versioned names such as pip3.12), bare `yarn`, and
+     `npx`/`npm exec`/`pnpm dlx` of a program that is not in node_modules/.bin
+2. Structure (separate commands, shell keywords as separators, wrapper
+   options, `bash -c`, `env -S`, heredoc and here-string evaluated as a script,
+   except the body of `apply_patch`):
+   - `rm` outside the project, on the project root, on `.git` or with an
+     unresolvable target; `rm -r/-f` coming from `xargs`, after an unresolvable
+     `cd`/`pushd` or after `ln` in the same command; `/tmp` is allowed, except
+     the folder that contains the project
+   - `find ... -delete` / `-exec rm` with a starting point outside the project
 """
 import fnmatch
 import json
@@ -56,7 +56,7 @@ PRIV = {"sudo", "su", "doas", "pkexec", "runuser"}
 KEYWORDS = {"if", "then", "elif", "else", "fi", "for", "while", "until", "do", "done",
             "case", "esac", "select", "function", "{", "}", "!", "in", "coproc"}
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")", ";;", "\n"}
-# Wrappers e as opções que levam argumento.
+# Wrappers and the options that take an argument.
 WRAPPER_OPTS = {
     "nice": {"-n", "--adjustment"}, "time": {"-f", "--format", "-o", "--output"},
     "command": set(), "builtin": set(), "noglob": set(), "exec": {"-a"}, "nohup": set(),
@@ -118,19 +118,19 @@ def project_root(cwd):
 
 
 def norm_prog(word):
-    """Nome do programa sem caminho e sem versão: /usr/bin/pip3.12 -> pip."""
+    """Program name without path or version: /usr/bin/pip3.12 -> pip."""
     base = word.rsplit("/", 1)[-1]
     m = re.fullmatch(r"(pip|python|node|ruby|perl)[0-9.]*", base)
     return m.group(1) if m else base
 
 
-# ---------------------------------------------------------------- texto inteiro
+# ---------------------------------------------------------------- whole text
 
 def scan_text(command, cwd, root, profile, heredoc_skip):
     text = command
-    for body in heredoc_skip:  # corpo de apply_patch: conteúdo de arquivo, nunca executado
+    for body in heredoc_skip:  # apply_patch body: file content, never executed
         text = text.replace(body, " ")
-    # apply_patch '<patch>' (forma de argumento do Codex): idem.
+    # apply_patch '<patch>' (Codex argument form): same.
     text = re.sub(r"\bapply_patch\s+(['\"])\*\*\* Begin Patch.*?\*\*\* End Patch\s*\1", "apply_patch ", text, flags=re.S)
     flat = re.sub(r"\\\n", " ", text)
     flat = re.sub(r"[\\'\"]", "", flat)
@@ -195,14 +195,14 @@ def local_bin(name, cwd, root):
     return False
 
 
-# ---------------------------------------------------------------- estrutura
+# ---------------------------------------------------------------- structure
 
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 
 
 def split_heredocs(cmd):
-    """Devolve (comando sem os corpos, [(leitor, corpo)]). Leitor "apply_patch"
-    marca corpo de patch (conteúdo de arquivo, nunca executado)."""
+    """Return (command without the bodies, [(reader, body)]). Reader "apply_patch"
+    marks a patch body (file content, never executed)."""
     out, bodies, lines, i = [], [], cmd.split("\n"), 0
     while i < len(lines):
         line = lines[i]
@@ -231,8 +231,8 @@ def tokenize(cmd):
 
 
 def segments(tokens):
-    """Comandos simples: [(tokens, separador_anterior, here_strings)].
-    Palavras-chave do shell (if/then/for/do...) separam; redirecionamentos saem."""
+    """Simple commands: [(tokens, previous_separator, here_strings)].
+    Shell keywords (if/then/for/do...) separate; redirections are dropped."""
     segs, cur, prev, skip, herestr = [], [], None, None, []
     for tok in tokens:
         if skip:
@@ -256,7 +256,7 @@ def segments(tokens):
 
 
 def program(tokens):
-    """Pula VAR=x e wrappers com suas opções. Devolve (prog, args, via_xargs, env_s)."""
+    """Skip VAR=x and wrappers with their options. Return (prog, args, via_xargs, env_s)."""
     i, via_xargs, env_s = 0, False, None
     while i < len(tokens):
         t = tokens[i]
@@ -276,7 +276,7 @@ def program(tokens):
                     continue
                 i += 2 if o in opts else 1
             if base == "timeout" and i < len(tokens):
-                i += 1  # duração
+                i += 1  # duration
             if base == "env":
                 while i < len(tokens) and "=" in tokens[i]:
                     i += 1
@@ -286,7 +286,7 @@ def program(tokens):
 
 
 def resolve(path, cwd):
-    """(diretório, padrão) do alvo; (None, None) se não dá para resolver."""
+    """(directory, pattern) of the target; (None, None) if it cannot be resolved."""
     if cwd is None and not (path.startswith("/") or path.startswith("~") or path.startswith("$HOME")):
         return None, None
     home = os.path.expanduser("~")
@@ -384,7 +384,7 @@ def structural(command, cwd, root, profile, depth):
     try:
         tokens = tokenize(command)
     except ValueError:
-        return  # aspas desbalanceadas: fica só a passada de texto
+        return  # unbalanced quotes: only the text pass applies
     link_made = False
     for toks, _sep, herestr in segments(tokens):
         prog, args, via_xargs, env_s = program(toks)

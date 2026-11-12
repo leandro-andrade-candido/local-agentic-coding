@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Qwen Code sem interação, conforme o contrato do eval.
-# Uso: agents/qwen-code/run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
-# Saída em <log-dir>: events.jsonl (stream-json), stderr.log, run-meta.json,
-# command.txt, settings.effective.json, home/qwen (sessões), métricas do servidor
-# e, com AGENT_LOG_REQUESTS=1, requests/ (cada requisição e resposta OpenAI).
+# Non-interactive Qwen Code, following the eval contract.
+# Usage: agents/qwen-code/run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
+# Output in <log-dir>: events.jsonl (stream-json), stderr.log, run-meta.json,
+# command.txt, settings.effective.json, home/qwen (sessions), server metrics
+# and, with AGENT_LOG_REQUESTS=1, requests/ (each OpenAI request and response).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/../lib/common.sh"

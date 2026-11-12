@@ -1,5 +1,5 @@
 {
-  "//": "Perfil do eval (run.sh usa --approval-mode yolo). No YOLO as regras deny continuam valendo; ask e allow não têm efeito. Listas substituem as da base.",
+  "//": "Eval profile (run.sh uses --approval-mode yolo). In YOLO the deny rules still apply; ask and allow have no effect. Lists replace those of the base.",
   "tools": {
     "approvalMode": "yolo",
     "disabled": [

@@ -1,5 +1,5 @@
 {
-  "//": "Base do OpenCode 1.19.x. Gerado em $XDG_CONFIG_HOME/opencode/opencode.json (diretório isolado) por run.sh/opencode-local, mesclado com opencode.<perfil>.json.",
+  "//": "Base for OpenCode 1.19.x. Generated in $XDG_CONFIG_HOME/opencode/opencode.json (isolated directory) by run.sh/opencode-local, merged with opencode.<profile>.json.",
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
   "share": "disabled",
@@ -26,7 +26,7 @@
           "tool_call": true,
           "temperature": true,
           "attachment": false,
-          "//interleaved": "Devolve o raciocínio anterior em reasoning_content (preserve_thinking do Qwen3.6).",
+          "//interleaved": "Sends the previous reasoning back in reasoning_content (Qwen3.6 preserve_thinking).",
           "interleaved": {
             "field": "reasoning_content"
           },
@@ -42,12 +42,12 @@
             "input": 0,
             "output": 0
           },
-          "//limit": "O OpenCode limita a saída a 32000 e compacta em context - saída = ~99k.",
+          "//limit": "OpenCode caps the output at 32000 and compacts at context - output = ~99k.",
           "limit": {
             "context": "@@INT:LLM_CONTEXT@@",
             "output": "@@INT:LLM_MAX_OUTPUT@@"
           },
-          "//options": "Campos extras vão direto no corpo da requisição (@ai-sdk/openai-compatible).",
+          "//options": "Extra fields go straight into the request body (@ai-sdk/openai-compatible).",
           "options": {
             "top_k": 20,
             "min_p": 0,
@@ -61,7 +61,7 @@
     }
   },
   "agent": {
-    "//": "temperature e top_p são por agente no OpenCode. O agente de título fica desligado: com um slot só, cada chamada extra apaga o cache do prompt.",
+    "//": "temperature and top_p are per agent in OpenCode. The title agent is off: with a single slot, each extra call wipes the prompt cache.",
     "build": {
       "temperature": 0.6,
       "top_p": 0.95

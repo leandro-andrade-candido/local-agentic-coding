@@ -1,9 +1,9 @@
-// Bootstrap do Superpowers no OpenCode 1.x local.
-// Adaptado do plugin oficial do Superpowers v6.4.1 (.opencode/plugins/superpowers.js,
-// MIT, Jesse Vincent), parte V1: o mesmo gancho experimental.chat.messages.transform
-// põe o bootstrap no início da primeira mensagem do usuário. As skills em si vêm de
-// skills.paths (gerado a partir de AGENT_SKILLS_DIRS), não deste plugin.
-// O texto vem de AGENT_SKILLS_BOOTSTRAP_FILE (using-superpowers + opencode/superpowers-tools.md).
+// Superpowers bootstrap in the local OpenCode 1.x.
+// Adapted from the official Superpowers plugin v6.4.1 (.opencode/plugins/superpowers.js,
+// MIT, Jesse Vincent), part V1: the same experimental.chat.messages.transform hook
+// puts the bootstrap at the start of the first user message. The skills themselves come
+// from skills.paths (generated from AGENT_SKILLS_DIRS), not from this plugin.
+// The text comes from AGENT_SKILLS_BOOTSTRAP_FILE (using-superpowers + opencode/superpowers-tools.md).
 import { readFileSync } from "node:fs"
 
 const MARKER = "superpowers:using-superpowers bootstrap"
@@ -21,7 +21,7 @@ function bootstrap() {
 }
 
 async function isChildSession(client, sessionID) {
-  // Subagentes (task) não reiniciam o fluxo do controlador (upstream #2160).
+  // Subagents (task) do not restart the controller's flow (upstream #2160).
   if (!client || !sessionID) return false
   try {
     const res = await client.session.get({ path: { id: sessionID } })

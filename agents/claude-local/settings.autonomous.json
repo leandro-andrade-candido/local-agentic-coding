@@ -1,5 +1,5 @@
 {
-  "//": "Perfil do eval (run.sh usa --permission-mode bypassPermissions; precisa de usuário não root). Regras deny e o hook PreToolUse continuam valendo nesse modo.",
+  "//": "Eval profile (run.sh uses --permission-mode bypassPermissions; needs a non-root user). Deny rules and the PreToolUse hook still apply in this mode.",
   "permissions": {
     "deny": [
       "WebSearch",

@@ -1,15 +1,15 @@
 /**
- * Skills e bootstrap do Superpowers no Pi local.
+ * Skills and Superpowers bootstrap in the local Pi.
  *
- * Adaptado da extensão oficial do Superpowers v6.4.1 (.pi/extensions/superpowers.ts,
- * MIT, Jesse Vincent): em vez da pasta skills/ do pacote, entrega ao Pi os
- * diretórios de AGENT_SKILLS_RESOLVED (lib/skills.py) e injeta o bootstrap gerado
- * em AGENT_SKILLS_BOOTSTRAP_FILE (using-superpowers + pi/superpowers-tools.md).
+ * Adapted from the official Superpowers extension v6.4.1 (.pi/extensions/superpowers.ts,
+ * MIT, Jesse Vincent): instead of the package's skills/ folder, it hands Pi the
+ * directories in AGENT_SKILLS_RESOLVED (lib/skills.py) and injects the bootstrap
+ * generated in AGENT_SKILLS_BOOTSTRAP_FILE (using-superpowers + pi/superpowers-tools.md).
  *
- * - resources_discover: os diretórios entram como skills nativas do Pi (só nome e
- *   descrição no prompt; o corpo é lido sob demanda; `/skill:nome` força).
- * - context: insere o bootstrap como primeira mensagem do usuário no começo de cada
- *   sessão e depois de compactação, uma vez só.
+ * - resources_discover: the directories become native Pi skills (only name and
+ *   description in the prompt; the body is read on demand; `/skill:name` forces it).
+ * - context: inserts the bootstrap as the first user message at the start of each
+ *   session and after compaction, only once.
  */
 import { readFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

@@ -1,4 +1,4 @@
 {
-  "//": "Perfil do eval: sem confiar em .pi/ do repositório (run.sh também passa --no-approve). A extensão guard.ts bloqueia a lista de lib/guard.py e escrita fora do projeto.",
+  "//": "Eval profile: does not trust the repository's .pi/ (run.sh also passes --no-approve). The guard.ts extension blocks the lib/guard.py list and writing outside the project.",
   "defaultProjectTrust": "never"
 }

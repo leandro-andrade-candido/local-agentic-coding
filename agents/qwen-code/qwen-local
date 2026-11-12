@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Qwen Code interativo apontado para o llama-server local, com config isolada.
-# Uso: cd <projeto> && <repo>/agents/qwen-code/qwen-local [opções do qwen]
-# Perfil: AGENT_PROFILE=interactive (padrão) ou autonomous.
+# Interactive Qwen Code pointed at the local llama-server, with isolated config.
+# Usage: cd <project> && <repo>/agents/qwen-code/qwen-local [qwen options]
+# Profile: AGENT_PROFILE=interactive (default) or autonomous.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$HERE/../lib/common.sh"

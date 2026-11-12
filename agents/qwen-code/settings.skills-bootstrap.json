@@ -1,5 +1,5 @@
 {
-  "//": "Só entra quando há a skill using-superpowers em AGENT_SKILLS_DIRS: injeta o bootstrap do Superpowers no início de cada sessão (e depois de /clear ou compactação).",
+  "//": "Only included when the using-superpowers skill is in AGENT_SKILLS_DIRS: injects the Superpowers bootstrap at the start of each session (and after /clear or compaction).",
   "hooks": {
     "SessionStart": [
       {

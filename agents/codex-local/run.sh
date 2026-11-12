@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Codex CLI com o modelo local, sem interação, conforme o contrato do eval.
-# Uso: agents/codex-local/run.sh --workdir <dir> --prompt-file <arquivo> --log-dir <dir>
-# Saída em <log-dir>: events.jsonl (codex exec --json), stderr.log (progresso),
+# Non-interactive Codex CLI with the local model, following the eval contract.
+# Usage: agents/codex-local/run.sh --workdir <dir> --prompt-file <file> --log-dir <dir>
+# Output in <log-dir>: events.jsonl (codex exec --json), stderr.log (progress),
 # last-message.txt, run-meta.json, agent-metrics.json, command.txt,
-# config.effective.toml, guard.log (bloqueios), home/codex (CODEX_HOME isolado,
-# com a sessão em sessions/) e métricas do servidor.
+# config.effective.toml, guard.log (blocks), home/codex (isolated CODEX_HOME,
+# with the session in sessions/) and server metrics.
 #
-# O perfil autonomous só roda no agent-box (AGENT_BOX=1). Lá o sandbox do Codex
-# fica desligado (danger-full-access): o container é a barreira. Só com
-# AGENT_ALLOW_HOST_AUTONOMOUS=1 (inseguro) faz sentido CODEX_LOCAL_SANDBOX=workspace-write,
-# que liga o sandbox do Codex (bubblewrap) no host.
+# The autonomous profile only runs in the agent-box (AGENT_BOX=1). There the Codex
+# sandbox is off (danger-full-access): the container is the barrier. Only with
+# AGENT_ALLOW_HOST_AUTONOMOUS=1 (unsafe) does CODEX_LOCAL_SANDBOX=workspace-write
+# make sense, which turns on the Codex sandbox (bubblewrap) on the host.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/../lib/common.sh"

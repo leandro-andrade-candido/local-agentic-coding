@@ -1,5 +1,5 @@
 {
-  "//": "Perfil do eval (run.sh usa 'opencode run --auto': o que seria 'ask' é aprovado, 'deny' continua bloqueando). Fora do projeto só /tmp; doom_loop (3 chamadas idênticas) é negado para cortar loops.",
+  "//": "Eval profile (run.sh uses 'opencode run --auto': what would be 'ask' is approved, 'deny' still blocks). Outside the project only /tmp; doom_loop (3 identical calls) is denied to cut loops.",
   "permission": {
     "read": { "*": "allow", "*.env": "deny", "*.env.*": "deny", "*.env.example": "allow" },
     "edit": "allow",

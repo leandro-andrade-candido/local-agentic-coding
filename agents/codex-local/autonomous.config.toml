@@ -1,7 +1,7 @@
-# Perfil do eval ($CODEX_HOME/autonomous.config.toml, --profile autonomous).
-# Sem aprovações e sem o sandbox do Codex: o isolamento é o container da E7
-# (o bubblewrap do Codex não cria namespaces dentro de um container Docker sem
-# privilégios). Regras "forbidden" (rules/) e o hook de guarda continuam valendo.
-# Fora do container (só com AGENT_ALLOW_HOST_AUTONOMOUS=1, inseguro): CODEX_LOCAL_SANDBOX=workspace-write.
+# Eval profile ($CODEX_HOME/autonomous.config.toml, --profile autonomous).
+# No approvals and no Codex sandbox: isolation is the E7 container
+# (Codex's bubblewrap cannot create namespaces inside an unprivileged Docker
+# container). "forbidden" rules (rules/) and the guard hook still apply.
+# Outside the container (only with AGENT_ALLOW_HOST_AUTONOMOUS=1, unsafe): CODEX_LOCAL_SANDBOX=workspace-write.
 approval_policy = "never"
 sandbox_mode = "danger-full-access"

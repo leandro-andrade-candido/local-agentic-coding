@@ -1,6 +1,6 @@
 
-# Só no perfil autonomous: instalação de pacotes pela rede (as dependências do
-# eval já vêm instaladas).
+# Only in the autonomous profile: package installation over the network (the eval's
+# dependencies come preinstalled).
 
 prefix_rule(
     pattern = ["npm", ["install", "i", "ci", "add", "update"]],

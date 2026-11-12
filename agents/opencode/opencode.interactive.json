@@ -1,5 +1,5 @@
 {
-  "//": "Perfil interativo. No OpenCode vale a última regra que casa, por isso o '*' vem primeiro. Comandos de shell são casados depois de separados (a | b vira 'a' e 'b'); 'sh', 'bash' sem argumentos pegam o curl | sh. O plugin plugins/guard.js aplica lib/guard.py a todo comando.",
+  "//": "Interactive profile. In OpenCode the last matching rule wins, so '*' comes first. Shell commands are matched after being split (a | b becomes 'a' and 'b'); 'sh' and 'bash' without arguments catch curl | sh. The plugins/guard.js plugin applies lib/guard.py to every command.",
   "permission": {
     "read": { "*": "allow", "*.env": "deny", "*.env.*": "deny", "*.env.example": "allow" },
     "edit": "allow",

@@ -1,4 +1,4 @@
 {
-  "//": "Perfil interativo. O Pi não tem sistema de permissões: as regras ficam na extensão extensions/guard.ts (shell pergunta, escrita fora do projeto pergunta, lista de bloqueio em lib/guard.py).",
+  "//": "Interactive profile. Pi has no permission system: the rules live in the extensions/guard.ts extension (shell asks, writing outside the project asks, blocklist in lib/guard.py).",
   "defaultProjectTrust": "ask"
 }

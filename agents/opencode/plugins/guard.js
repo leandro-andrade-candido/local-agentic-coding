@@ -1,8 +1,8 @@
-// Plugin do OpenCode 1.x: passa todo comando da ferramenta bash por
-// agents/lib/guard.py (lista de bloqueio comum aos quatro agentes).
-// Lançar um erro em tool.execute.before cancela a chamada e devolve a
-// mensagem ao modelo. Falha da guarda bloqueia o comando (fail closed).
-// Variáveis: AGENT_GUARD (caminho do guard.py), AGENT_PROFILE, AGENT_WORKDIR.
+// OpenCode 1.x plugin: passes every command of the bash tool through
+// agents/lib/guard.py (blocklist shared by the four agents).
+// Throwing an error in tool.execute.before cancels the call and returns the
+// message to the model. A guard failure blocks the command (fail closed).
+// Variables: AGENT_GUARD (path to guard.py), AGENT_PROFILE, AGENT_WORKDIR.
 import { spawnSync } from "node:child_process"
 
 export const LocalGuard = async ({ directory }) => {

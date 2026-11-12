@@ -1,8 +1,8 @@
 /**
- * Grava cada requisição enviada ao modelo em JSONL (AGENT_REQUEST_LOG).
- * Serve para medir o tamanho do preâmbulo (system prompt + ferramentas) e
- * conferir se o prefixo do prompt fica estável entre turnos (cache do llama-server).
- * Sem AGENT_REQUEST_LOG a extensão não faz nada.
+ * Records each request sent to the model as JSONL (AGENT_REQUEST_LOG).
+ * Used to measure the preamble size (system prompt + tools) and to check
+ * whether the prompt prefix stays stable across turns (llama-server cache).
+ * Without AGENT_REQUEST_LOG the extension does nothing.
  */
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

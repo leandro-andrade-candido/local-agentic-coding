@@ -1,5 +1,5 @@
 {
-  "//": "Perfil interativo: leitura livre, edição livre dentro do projeto, shell pergunta, lista de bloqueio. Ordem de decisão do Qwen Code: deny > ask > allow > modo.",
+  "//": "Interactive profile: free reading, free editing inside the project, shell asks, blocklist. Qwen Code decision order: deny > ask > allow > mode.",
   "tools": {
     "approvalMode": "default"
   },
