@@ -1,19 +1,19 @@
 # Skills
 
-As skills seguem o padrão `SKILL.md`. Cada agente vê só o nome e a descrição de cada skill instalada; as instruções completas são carregadas quando a tarefa pede ou quando a skill é chamada pelo nome (por exemplo, `/brainstorming`). Por isso o conjunto pode variar conforme a necessidade, sem uma lista fixa.
+Skills follow the `SKILL.md` standard. Each agent sees only the name and description of every installed skill; the full instructions are loaded when the task calls for it or when the skill is invoked by name (for example, `/brainstorming`). That is why the set can vary with need, without a fixed list.
 
-| Camada | Conteúdo | Onde fica no container |
+| Layer | Content | Where it lives in the container |
 |---|---|---|
-| Base | Superpowers fixado em `versions.env`, filtrado por `profiles/base.txt` | `/opt/skills/base`, só leitura |
-| Projeto | Skills e `AGENTS.md` do próprio projeto (`.agents/skills` ou `.claude/skills`) | No repositório do projeto |
-| Perfis extras | Outros `profiles/<perfil>.txt` (ex.: `frontend`), montados com `--skills-dir $SKILLS_PREFIX/profiles/<perfil>` | `/opt/skills/extra-N`, só leitura |
-| Pessoal | Skills próprias do autor, opcionais | Montadas só para leitura |
+| Base | Superpowers pinned in `versions.env`, filtered by `profiles/base.txt` | `/opt/skills/base`, read-only |
+| Project | The project's own skills and `AGENTS.md` (`.agents/skills` or `.claude/skills`) | In the project repository |
+| Extra profiles | Other `profiles/<profile>.txt` (e.g. `frontend`), mounted with `--skills-dir $SKILLS_PREFIX/profiles/<profile>` | `/opt/skills/extra-N`, read-only |
+| Personal | The author's own skills, optional | Mounted read-only |
 
-**Fontes dos perfis** (`scripts/fetch-skills.sh <perfil>...`): uma linha sem prefixo é skill do Superpowers; `anthropic:<nome>` é skill de `anthropics/skills`, fixada por commit em `versions.env` (o repositório não tem tags). Dele só se baixam as pastas usadas, e cada uma traz o próprio `LICENSE.txt`.
+**Profile sources** (`scripts/fetch-skills.sh <profile>...`): a line without a prefix is a Superpowers skill; `anthropic:<name>` is a skill from `anthropics/skills`, pinned by commit in `versions.env` (the repository has no tags). Only the folders in use are downloaded from it, and each one ships its own `LICENSE.txt`.
 
-**Cuidados com o modelo local**
-- **Custo fixo por skill:** cada skill instalada acrescenta ~50–150 tokens a todo prompt. Use perfis enxutos por projeto em vez de instalar tudo.
-- **Acionamento:** quem decide quando usar uma skill é o modelo, e um modelo pequeno aciona com menos precisão. Compense com chamada explícita (`/nome`) ou com um `AGENTS.md` que diga qual skill usar em cada fase.
-- **Ferramentas exclusivas do Claude Code:** algumas skills dependem de `Task` ou `TodoWrite`. O Superpowers traz mapeamento oficial para Codex e Pi (`references/codex-tools.md`, `pi-tools.md`); Qwen Code e OpenCode não têm e podem funcionar pior.
+**Caveats for the local model**
+- **Fixed cost per skill:** each installed skill adds ~50–150 tokens to every prompt. Use lean per-project profiles instead of installing everything.
+- **Triggering:** the model decides when to use a skill, and a small model triggers less accurately. Compensate with an explicit call (`/name`) or with an `AGENTS.md` that says which skill to use in each phase.
+- **Claude Code-only tools:** some skills depend on `Task` or `TodoWrite`. Superpowers ships an official mapping for Codex and Pi (`references/codex-tools.md`, `pi-tools.md`); Qwen Code and OpenCode have none and may work worse.
 
-Na E6 mede-se, por agente, se o carregamento sob demanda funciona, se o modelo aciona a skill certa sozinho e se a chamada explícita funciona.
+In E6 we measure, per agent, whether on-demand loading works, whether the model triggers the right skill on its own and whether the explicit call works.

@@ -1,6 +1,6 @@
-# Perfil frontend: complemento do base para projetos com UI. Monte com
-#   sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend <agente> <projeto>
-# Prefixo anthropic: = anthropics/skills fixado em versions.env; sem prefixo = Superpowers.
+# Frontend profile: complement to the base for projects with a UI. Mount with
+#   sandbox/agent-shell.sh --skills-dir ~/.local/opt/skills/profiles/frontend <agent> <project>
+# Prefix anthropic: = anthropics/skills pinned in versions.env; no prefix = Superpowers.
 anthropic:frontend-design
-# Valida no navegador (Playwright + Chromium do agent-box): sobe o app, navega, print, console.
+# Validates in the browser (agent-box Playwright + Chromium): starts the app, navigates, screenshots, console.
 anthropic:webapp-testing

@@ -1,15 +1,15 @@
-# Pesos de modelos e downloads ficam fora do repositório (~/models, ~/.cache).
+# Model weights and downloads stay outside the repository (~/models, ~/.cache).
 *.gguf
 *.part
 *.tar.gz
 
-# Saídas brutas e volumosas; os resumos em .md são versionados.
+# Raw, bulky outputs; the .md summaries are versioned.
 logs/
 bench/raw/
 eval/runs/
 eval/.cache/
 
-# Segredos, notas privadas e dependências locais.
+# Secrets, private notes and local dependencies.
 .env
 *.local.env
 *.local.md
@@ -18,5 +18,5 @@ node_modules/
 __pycache__/
 .venv/
 
-# Documentos pessoais (CV etc.) nunca entram no repositório.
+# Personal documents (CV etc.) never enter the repository.
 pessoal/

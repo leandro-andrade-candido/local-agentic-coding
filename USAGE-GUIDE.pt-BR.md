@@ -1,3 +1,5 @@
+> 🇬🇧 English version: [USAGE-GUIDE.md](USAGE-GUIDE.md)
+
 # Guia de uso manual
 
 Como ligar, usar e testar o ambiente sozinho. Os comandos rodam a partir de `~/me/local`. Estado em 03/11/2026: veja a tabela de etapas no [README](README.md).

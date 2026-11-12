@@ -1,5 +1,5 @@
-# Perfil base: skills do Superpowers disponíveis em todo projeto (uma por linha).
-# Só nome e descrição entram no prompt; o corpo é carregado sob demanda.
+# Base profile: Superpowers skills available in every project (one per line).
+# Only the name and description go into the prompt; the body is loaded on demand.
 using-superpowers
 brainstorming
 writing-plans

@@ -3,7 +3,7 @@
 [![ci](https://github.com/leandro-andrade-candido/local-agentic-coding/actions/workflows/ci.yml/badge.svg)](https://github.com/leandro-andrade-candido/local-agentic-coding/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> 🇧🇷 Versão em português: [README.pt-BR.md](README.pt-BR.md). The detailed stage logs and verification reports are in Portuguese; the key findings are summarized in English below.
+> 🇧🇷 Versão em português: [README.pt-BR.md](README.pt-BR.md).
 
 **Can a consumer PC run a coding agent comparable to the paid cloud tools, using open-weight models and mostly open-source tools, with zero recurring API cost?**
 
@@ -30,7 +30,7 @@ The independent re-run reproduced these within about ±5%.
 - **Server hardening:** API key required on every endpoint except `/health`, localhost only, admin endpoints disabled, 13 automated health checks.
 - **Reproducible:** runtime, model files (by revision **and** SHA-256), agents (sha512 of each tarball) and the container base image (digest) are all pinned.
 
-Full benchmark report: [`bench/RESULTS-E4.md`](bench/RESULTS-E4.md) (Portuguese).
+Full benchmark report: [`bench/RESULTS-E4.md`](bench/RESULTS-E4.md).
 
 ## Architecture
 
@@ -109,7 +109,7 @@ sandbox/escape-tests.sh               # should report everything passing
 sandbox/agent-shell.sh codex-local ~/path/to/project   # or qwen-code, pi, opencode, claude-local
 ```
 
-The operational guide (Portuguese) is [`USAGE-GUIDE.pt-BR.md`](USAGE-GUIDE.pt-BR.md).
+The operational guide is [`USAGE-GUIDE.md`](USAGE-GUIDE.md) (also in [Portuguese](USAGE-GUIDE.pt-BR.md)).
 
 ## Repository layout
 

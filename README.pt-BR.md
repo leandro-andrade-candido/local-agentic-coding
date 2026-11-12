@@ -10,7 +10,7 @@ Ambiente de desenvolvimento com agentes de IA rodando localmente, com modelos e 
 
 **Para usar e testar manualmente, comece pelo [USAGE-GUIDE.pt-BR.md](USAGE-GUIDE.pt-BR.md).**
 
-O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estão em [DIAGNOSIS-AND-PLAN.md](DIAGNOSIS-AND-PLAN.md).
+O diagnóstico, as alternativas avaliadas, as decisões e o plano completo estão em [DIAGNOSIS-AND-PLAN.md](DIAGNOSIS-AND-PLAN.md). O restante da documentação (plano, registros de etapas e relatórios de verificação) está em inglês.
 
 ## Etapas
 
