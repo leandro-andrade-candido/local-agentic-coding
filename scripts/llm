@@ -19,6 +19,9 @@
 #                        no argument: lists the models in models.tsv (installed? in use?);
 #                        with an alias: saves the choice (takes effect on the next start/restart);
 #                        --reset: back to the profile default. The API name does not change.
+#   vision [on|off]      no argument: shows the switch and the projector; on/off saves it
+#                        (default on: loads the model's projector from models.tsv, so the API
+#                        accepts images). Takes effect on the next start/restart.
 #   env                  export lines for the agents: eval "$(scripts/llm env)"
 #   test [options]       scripts/tool_calls.py against the server, JSON in logs/tool_calls-<date>.json
 #   wait-ready [--timeout S]
@@ -33,7 +36,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_FILE="$UNIT_DIR/$LLM_SERVICE"
 
 die() { echo "error: $*" >&2; exit 2; }
-usage() { sed -n '2,28p' "$0"; }
+usage() { sed -n '2,31p' "$0"; }
 
 require_key() {
   [ -f "$LLM_API_KEY_FILE" ] || die "key missing: $LLM_API_KEY_FILE (create it with: scripts/llm key)"
@@ -233,7 +236,9 @@ cmd_model() {
       local current; current="$(llm_model_alias)"
       echo "selected model: $current (API name: $(llm_api_alias))"
       [ -n "${LLM_SERVER_MODEL:-}" ] && echo "  (comes from LLM_SERVER_MODEL; does not apply to the systemd service)"
-      awk -F'\t' '!/^#/ && NF >= 7 {print $1 "\t" $4 "\t" $5 "\t" $7}' "$tsv" |
+      # Projector rows (role "projector: ...") are not models: see scripts/llm vision.
+      awk -F'\t' '!/^#/ && NF >= 7 && $7 !~ /^projector:/ {
+          print $1 "\t" (($8 != "" && $8 != "-") ? $8 : $4) "\t" $5 "\t" $7}' "$tsv" |
         while IFS=$'\t' read -r a file bytes role; do
           local mark="-" inst="not downloaded"
           [ "$a" = "$current" ] && mark="*"
@@ -249,14 +254,44 @@ cmd_model() {
     -*) die "usage: llm model [<alias>|--reset]" ;;
     *)
       [ $# -eq 1 ] || die "usage: llm model [<alias>|--reset]"
-      local file
-      file="$(awk -F'\t' -v a="$1" '!/^#/ && $1 == a {print $4; exit}' "$tsv")"
+      local file role
+      file="$(awk -F'\t' -v a="$1" '!/^#/ && $1 == a {print (($8 != "" && $8 != "-") ? $8 : $4); exit}' "$tsv")"
       [ -n "$file" ] || die "alias '$1' is not in models.tsv"
+      role="$(awk -F'\t' -v a="$1" '!/^#/ && $1 == a {print $7; exit}' "$tsv")"
+      case "$role" in projector:*) die "'$1' is a vision projector, not a model (see: scripts/llm vision)" ;; esac
       [ -f "$MODELS_DIR/$file" ] || echo "warning: $MODELS_DIR/$file does not exist yet (scripts/fetch-model.sh $1)" >&2
       (umask 077 && mkdir -p "$(dirname "$LLM_MODEL_CHOICE_FILE")") || die "could not create $(dirname "$LLM_MODEL_CHOICE_FILE")"
       printf '%s\n' "$1" > "$LLM_MODEL_CHOICE_FILE"
       echo "selected model: $1 ($file); takes effect on the next scripts/llm start/restart"
       ;;
+  esac
+}
+
+cmd_vision() {
+  case "${1:-}" in
+    "")
+      [ $# -eq 0 ] || die "usage: llm vision [on|off]"
+      llm_resolve_model || die "$MODEL_ERROR"
+      llm_resolve_mmproj || die "$MMPROJ_ERROR"
+      local src="default"
+      [ -f "$LLM_VISION_CHOICE_FILE" ] && src="saved in $LLM_VISION_CHOICE_FILE"
+      [ -n "${LLM_SERVER_VISION:-}" ] && src="LLM_SERVER_VISION; does not apply to the systemd service"
+      echo "vision: $VISION ($src)"
+      if [ "$VISION" = on ] && [ -z "$MMPROJ_PATH" ]; then
+        echo "  model $MODEL_ALIAS has no projector in models.tsv: the server starts without vision"
+      elif [ -n "$MMPROJ_PATH" ]; then
+        local inst="not downloaded (scripts/fetch-model.sh $MMPROJ_ALIAS)"
+        [ -f "$MMPROJ_PATH" ] && inst="installed"
+        echo "  projector for $MODEL_ALIAS: $MMPROJ_ALIAS ($MMPROJ_PATH, $inst)"
+      fi
+      ;;
+    on|off)
+      [ $# -eq 1 ] || die "usage: llm vision [on|off]"
+      (umask 077 && mkdir -p "$(dirname "$LLM_VISION_CHOICE_FILE")") || die "could not create $(dirname "$LLM_VISION_CHOICE_FILE")"
+      printf '%s\n' "$1" > "$LLM_VISION_CHOICE_FILE"
+      echo "vision: $1; takes effect on the next scripts/llm start/restart"
+      ;;
+    *) die "usage: llm vision [on|off]" ;;
   esac
 }
 
@@ -290,10 +325,13 @@ cmd_health() {
     fit_warn="$(journalctl --user _SYSTEMD_INVOCATION_ID="$inv" --no-pager -o cat 2> /dev/null \
       | grep -c 'failed to fit params')"
   fi
-  LLM_HEALTH_FIT_WARN="$fit_warn" LLM_HEALTH_EXPECTED="$expected" \
+  # Vision expected from the switch and models.tsv (on only when a projector would be loaded).
+  local vision=off
+  llm_resolve_model && llm_resolve_mmproj && [ -n "$MMPROJ_PATH" ] && vision=on
+  LLM_HEALTH_FIT_WARN="$fit_warn" LLM_HEALTH_EXPECTED="$expected" LLM_HEALTH_VISION="$vision" \
     python3 -I - "$LLM_BASE_URL_LOCAL" "$LLM_API_KEY_FILE" \
     "$(llm_api_alias)" "$LLAMA_SERVER_PORT" <<'PY'
-import json, os, subprocess, sys, time, urllib.error, urllib.request
+import base64, json, os, struct, subprocess, sys, time, urllib.error, urllib.request, zlib
 
 base, key_file, alias, port = sys.argv[1:5]
 expected = json.loads(os.environ.get("LLM_HEALTH_EXPECTED") or "{}")
@@ -356,6 +394,49 @@ if st == 200:
     detail += (f", prompt {t.get('prompt_n', '?')} tok in {t.get('prompt_ms', 0):.0f} ms,"
                f" 1st token in {t.get('predicted_ms', 0):.0f} ms")
 rec(st == 200, "POST /v1/chat/completions, 1 token", detail, ms)
+
+# 1b. Vision, on the three APIs the agents use (Natively/Qwen Code: chat; Claude Code:
+# messages; Codex: responses). The image is a 32x32 red PNG built here, so nothing is read
+# from disk. Only the HTTP status is checked: what the model says about the image is
+# quality, not health. With vision off the server must refuse it (no projector loaded).
+def png(w, h, rgb):
+    def chunk(t, d):
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    rows = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+img = base64.b64encode(png(32, 32, (220, 30, 30))).decode()
+vision_on = os.environ.get("LLM_HEALTH_VISION") == "on"
+mods = []
+st, js, _, _, _ = req("GET", "/v1/models")
+for m in (js or {}).get("data", []) if st == 200 else []:
+    if m.get("id") == alias:
+        mods = (m.get("architecture") or {}).get("input_modalities") or []
+rec(("image" in mods) == vision_on, f"vision {'on' if vision_on else 'off'}: input_modalities",
+    f"{mods} (expected {'with' if vision_on else 'without'} image)")
+probe = "What color is this image? One word."
+no_think = {"chat_template_kwargs": {"enable_thinking": False}}
+calls = [
+    ("chat/completions", "/v1/chat/completions", {
+        "model": alias, "max_tokens": 4, **no_think, "messages": [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + img}},
+            {"type": "text", "text": probe}]}]}, {}),
+    ("messages (Claude Code)", "/v1/messages", {
+        "model": alias, "max_tokens": 4, **no_think, "messages": [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img}},
+            {"type": "text", "text": probe}]}]}, {"anthropic-version": "2023-06-01"}),
+    ("responses (Codex)", "/v1/responses", {
+        "model": alias, "max_output_tokens": 16, **no_think, "input": [{"role": "user", "content": [
+            {"type": "input_image", "image_url": "data:image/png;base64," + img},
+            {"type": "input_text", "text": probe}]}]}, {}),
+]
+for name, path, body, hdrs in calls:
+    st, js, raw, _, ms = req("POST", path, body, headers=hdrs, timeout=120)
+    if vision_on:
+        rec(st == 200, f"image via {name}", f"HTTP {st}" + ("" if st == 200 else f": {raw.decode()[:90]}"), ms)
+    else:
+        rec(st != 200, f"image refused via {name} (vision off)", f"HTTP {st} (expected an error)", ms)
+
 st, _, raw, _, ms = req("GET", "/metrics")
 rec(st == 200 and b"llamacpp:prompt_tokens_total" in raw, "GET /metrics (with key)", f"HTTP {st}", ms)
 
@@ -449,6 +530,7 @@ case "$cmd" in
   preflight) exec "$REPO/scripts/preflight.sh" "$@" ;;
   dry-run) exec "$REPO/runtime/llama-server-start.sh" --dry-run ;;
   model) cmd_model "$@" ;;
+  vision) cmd_vision "$@" ;;
   env) cmd_env "$@" ;;
   test) cmd_test "$@" ;;
   wait-ready) cmd_wait_ready "$@" ;;

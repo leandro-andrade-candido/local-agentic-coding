@@ -36,6 +36,27 @@ scripts/llm model --reset            # back to the default (Q4, qwen3.6-35b)
 - **RAM:** model (~28 GiB) + `--cache-ram` (12 GiB) + ~4 GiB sit close to WSL's ~50 GB limit, and the preflight may warn. If there is swap, reduce `--cache-ram` to `8192` in the profile and adjust the expected value (`scripts/llm health` compares it with the server).
 - **To measure as in E4 (server stopped):** `scripts/llm stop`, then `MODEL=~/models/Qwen3.6-35B-A3B-UD-Q6_K.gguf bench/04-final.sh agent Q6-agent` and the same with `tg Q6-tg`; compare with `bench/RESULTS-E4.md`. For quality, run the same task (for example S1–S3) with the same agent on both versions.
 
+## 1.2 Images (vision)
+
+The server accepts images by default: it loads the model's vision projector
+(`qwen3.6-35b-mmproj` in `models.tsv`, ~0.9 GB) on the GPU.
+
+```bash
+scripts/fetch-model.sh qwen3.6-35b-mmproj   # once (~0.9 GB, SHA-256 checked)
+scripts/llm vision                          # shows the switch and the projector
+scripts/llm vision off                      # text only; takes effect on the next start/restart
+scripts/llm vision on                       # default
+```
+
+- **Agents:** no configuration change. Claude Code (pasted image, `Read` on a PNG), Codex
+  (`input_image`) and Qwen Code send images to the same server. `scripts/llm health` checks the three APIs.
+- **Cost:** ~2–4 s more per image (a 1080p screenshot takes ~2,000 tokens; `--image-max-tokens 2048`
+  scales larger images down). Text generation keeps ~37 tok/s.
+- **VRAM:** the headroom is ~200 MiB smaller than in E4. Close other apps that use the NVIDIA GPU.
+  If `restart` logs `failed to fit params`, run `scripts/llm stop && scripts/llm start` and check again.
+- **Q6:** not measured with the projector. Turn vision off if Q6 does not load.
+- Details and measurements: `docs/stages/vision.md`.
+
 ## 2. Using an agent on a project (interactive, isolated)
 
 ```bash
@@ -127,6 +148,7 @@ The raw data is in `logs/e5-raciocinio/` (outside git; the folder name is kept a
 | Validation suite | validated without a model (13/13) |
 | Agent comparison (E6), full validation and pilots (E8) | not run |
 | Q6 version of the model | downloaded and hash-checked on Nov 3; performance and quality not measured |
+| Vision (images), Q4 | on Nov 27: health 17/17 on the three APIs, VRAM and timings measured with synthetic images; image quality, agent use and Q6 not measured; no independent verification |
 
 ## 6. Updating
 

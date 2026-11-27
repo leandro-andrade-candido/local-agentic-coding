@@ -32,6 +32,7 @@ Antes da comparação formal, usei o ambiente num projeto real e privado de clie
 | E3 | Teste de fumaça com Qwen3.5-4B | concluída e verificada em 29/10 |
 | E4 | Qwen3.6-35B-A3B e benchmarks | concluída e verificada em 29/10 |
 | E5 | llama-server como serviço | em andamento: serviço instalado e saudável; bateria de tool calling parcial (ver `docs/stages/E5.md`) |
+| Visão | Entrada de imagens (projetor de visão na GPU) para todos os agentes e clientes | funcionando, health 17/17 (ver `docs/stages/vision.md`); qualidade com imagens reais e uso nos agentes ainda não medidos |
 | E7 | Container, permissões, hooks (roda antes da E6) | concluída; furo do host corrigido (150/150); reverificação adversária pendente |
 | E6 | Teste comparativo dos agentes (configs prontas em `agents/`) | pendente |
 | E8 | Validação (T1–T7 e piloto em projeto real privado) | suíte pronta e validada sem modelo; primeiro uso manual em 02/11 (relato do usuário, sem métricas); execução formal pendente; Q6 baixado em 03/11 para teste manual |

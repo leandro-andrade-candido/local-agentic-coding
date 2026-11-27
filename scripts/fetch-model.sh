@@ -11,10 +11,12 @@ MODELS_TSV="${MODELS_TSV:-$ROOT/models.tsv}"
 name="${1:?usage: $0 <alias> (see models.tsv)}"
 line="$(awk -F'\t' -v a="$name" '$1 == a' "$MODELS_TSV")"
 [ -n "$line" ] || { echo "unknown alias: $name" >&2; exit 1; }
-IFS=$'\t' read -r _ repo rev file bytes sha _ <<<"$line"
+IFS=$'\t' read -r _ repo rev file bytes sha _ local_file _ <<<"$line"
+# local_file (column 8): name on disk, for generic upstream names such as mmproj-F16.gguf.
+if [ -z "${local_file:-}" ] || [ "$local_file" = "-" ]; then local_file="$file"; fi
 
 mkdir -p "$MODELS_DIR"
-dest="$MODELS_DIR/$file"
+dest="$MODELS_DIR/$local_file"
 part="$dest.part"
 
 verify() { # file
@@ -28,7 +30,7 @@ if [ -f "$dest" ]; then
 fi
 
 exec 9>"$part.lock"
-flock -n 9 || { echo "download of $file is already in progress" >&2; exit 1; }
+flock -n 9 || { echo "download of $local_file is already in progress" >&2; exit 1; }
 
 for attempt in 1 2; do
   if [ ! -f "$part" ] || [ "$(stat -c %s "$part")" -lt "$bytes" ]; then

@@ -97,6 +97,7 @@ Stages are numbered as planned; E7 (sandbox) ran before E6 because the agents mu
 |---|---|---|
 | E0–E4 | Hardware/WSL tuning, pinned runtime, smoke test, model selection and benchmarks | ✅ done (E1–E4 independently verified) |
 | E5 | `llama-server` as a hardened user service | 🟡 service running and healthy; reasoning-budget tuning and full tool-calling battery in progress |
+| Vision | Image input (vision projector on the GPU) for all agents and clients | 🟡 working, health 17/17 ([`docs/stages/vision.md`](docs/stages/vision.md)); real-image quality and agent use not yet measured |
 | E7 | Isolation container, permissions, command guard | ✅ done; host-side hole fixed (150/150); adversarial re-check of the fix pending |
 | E6 | Bake-off of the five agents on the local model | ⏳ next: configs and protocol ready in [`agents/`](agents/) |
 | E8 | Validation on 7 tasks (T1–T7), 3 smoke tasks and a pilot on a real private project | ⏳ suite ready and validated without a model; manual first use done |
@@ -111,6 +112,7 @@ Requirements: Linux or WSL2 with systemd, an NVIDIA GPU with ≥ 8 GB and a rece
 ```bash
 scripts/install-llama-cpp.sh          # pinned llama.cpp build (versions.env)
 scripts/fetch-model.sh qwen3.6-35b    # ~22 GB, verified by SHA-256 (models.tsv)
+scripts/fetch-model.sh qwen3.6-35b-mmproj  # ~0.9 GB vision projector (on by default; scripts/llm vision off to skip)
 scripts/llm install                   # systemd user service (not enabled at login)
 scripts/llm preflight && scripts/llm start && scripts/llm health
 

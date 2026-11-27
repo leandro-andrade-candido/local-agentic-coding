@@ -3,11 +3,14 @@
 
 Usage (called by runtime/llama-server-start.sh and scripts/llm):
   python3 -I runtime/llama-server-args.py --bin BIN --profile FILE --policy FILE \
-      --model GGUF [--format nul|shell|json|check]
+      --model GGUF [--mmproj GGUF] [--format nul|shell|json|check]
 
 Required environment (substituted in the ${...} values): LLAMA_SERVER_HOST,
 LLAMA_SERVER_PORT, LLM_API_KEY_FILE. Optional: LOCAL_AGENTIC_REPO (to refuse
 a key stored inside the repository).
+
+--mmproj (optional) adds the vision projector chosen by the wrapper from models.tsv;
+like -m, it is never accepted from the profile or the policy.
 
 Rules:
 - Format of both files: one flag per line ("flag" or "flag value", no quotes
@@ -51,6 +54,7 @@ FORBIDDEN = {
     "--log-prompts-dir": "would write the prompts (project code) to disk",
     "--api-key": "the key would end up on the command line (ps) and in git; use --api-key-file",
     "--model": "the model comes from models.tsv, via the wrapper",
+    "--mmproj": "the vision projector comes from models.tsv, via the wrapper (scripts/llm vision)",
     "--model-url": "model download",
     "--docker-repo": "model download",
     "--hf-repo": "model download",
@@ -245,7 +249,10 @@ def build(args):
     if same:
         note("in both profile and policy with the same value (only the policy's stays): " + ", ".join(same))
 
-    final = [{"flag": "-m", "value": args.model, "group": groups["-m"], "where": "wrapper"}] + kept + policy
+    final = [{"flag": "-m", "value": args.model, "group": groups["-m"], "where": "wrapper"}]
+    if args.mmproj:
+        final.append({"flag": "--mmproj", "value": args.mmproj, "group": groups["--mmproj"], "where": "wrapper"})
+    final += kept + policy
 
     by_group = {e["group"]: e for e in final}
     for name, spelling in REQUIRED.items():
@@ -282,6 +289,7 @@ def main():
     ap.add_argument("--profile", required=True)
     ap.add_argument("--policy", required=True)
     ap.add_argument("--model", required=True)
+    ap.add_argument("--mmproj", default="")
     ap.add_argument("--repo", default=os.environ.get("LOCAL_AGENTIC_REPO", ""))
     ap.add_argument("--format", choices=("nul", "shell", "json", "check"), default="nul")
     args = ap.parse_args()

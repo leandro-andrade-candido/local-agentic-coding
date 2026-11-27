@@ -10,8 +10,9 @@
 #   1. Clears LLAMA_*, HF_TOKEN, MTMD_BACKEND_DEVICE and GGML_* from the environment:
 #      llama-server reads LLAMA_ARG_* as flags, and the policy must not be bypassable from outside.
 #      Then loads runtime/llama-server.env (E4 profile variables).
-#   2. Checks the binary (build from versions.env) and the model (exists, size from models.tsv).
-#   3. Builds the arguments: -m <model> + runtime/llama-server.args (E4) +
+#   2. Checks the binary (build from versions.env), the model (exists, size from models.tsv)
+#      and, with vision on (scripts/llm vision; default on), the model's projector (same checks).
+#   3. Builds the arguments: -m <model> [--mmproj <projector>] + runtime/llama-server.args (E4) +
 #      runtime/llama-server.policy.args (E5), via runtime/llama-server-args.py.
 #   4. Preflight (scripts/preflight.sh): warnings do not stop it; a blocker (exit code 2) does.
 #      LLM_PREFLIGHT=off skips the preflight.
@@ -65,12 +66,22 @@ llm_resolve_model || die "$MODEL_ERROR"
 size="$(stat -c %s "$MODEL_PATH")"
 [ "$size" = "$MODEL_BYTES" ] \
   || die "model size $MODEL_PATH: $size bytes, expected $MODEL_BYTES (models.tsv)"
+llm_resolve_mmproj || die "$MMPROJ_ERROR"
+mmproj_args=()
+if [ -n "$MMPROJ_PATH" ]; then
+  [ -f "$MMPROJ_PATH" ] \
+    || die "vision projector missing: $MMPROJ_PATH (scripts/fetch-model.sh $MMPROJ_ALIAS, or scripts/llm vision off)"
+  size="$(stat -c %s "$MMPROJ_PATH")"
+  [ "$size" = "$MMPROJ_BYTES" ] \
+    || die "projector size $MMPROJ_PATH: $size bytes, expected $MMPROJ_BYTES (models.tsv)"
+  mmproj_args=(--mmproj "$MMPROJ_PATH")
+fi
 
 # 3. Arguments (the key never passes through here: only the file path).
 builder=(env LLAMA_SERVER_HOST="$LLAMA_SERVER_HOST" LLAMA_SERVER_PORT="$LLAMA_SERVER_PORT"
          LLM_API_KEY_FILE="$LLM_API_KEY_FILE" LOCAL_AGENTIC_REPO="$LOCAL_AGENTIC_REPO"
          python3 -I "$LLAMA_SERVER_ARGS_PY" --bin "$LLAMA_SERVER_BIN"
-         --profile "$LLAMA_SERVER_PROFILE" --policy "$LLAMA_SERVER_POLICY" --model "$MODEL_PATH")
+         --profile "$LLAMA_SERVER_PROFILE" --policy "$LLAMA_SERVER_POLICY" --model "$MODEL_PATH" "${mmproj_args[@]}")
 args_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/llama-server-args.XXXXXX")"
 trap 'rm -f "$args_file"' EXIT
 "${builder[@]}" --format nul > "$args_file" || die "arguments refused (see above)"
@@ -81,6 +92,7 @@ trap - EXIT
 # 4. Preflight.
 if $dry_run; then
   echo "# build: $LLAMA_CPP_BUILD  model: $MODEL_ALIAS ($MODEL_BYTES bytes, size checked)"
+  echo "# vision: $VISION${MMPROJ_PATH:+ (projector $MMPROJ_ALIAS, $MMPROJ_BYTES bytes, size checked)}"
   echo "# environment (runtime/llama-server.env): ${env_shown[*]:-none}"
   echo "# key: --api-key-file $LLM_API_KEY_FILE (content not shown)"
   echo "# preflight:"
@@ -102,5 +114,5 @@ case "$preflight_mode" in
 esac
 
 # 5. Execution.
-echo "starting llama-server $LLAMA_CPP_BUILD: $MODEL_ALIAS at $LLM_BASE_URL_LOCAL" >&2
+echo "starting llama-server $LLAMA_CPP_BUILD: $MODEL_ALIAS (vision $VISION${MMPROJ_ALIAS:+, $MMPROJ_ALIAS}) at $LLM_BASE_URL_LOCAL" >&2
 exec "$LLAMA_SERVER_BIN" "${args[@]}"

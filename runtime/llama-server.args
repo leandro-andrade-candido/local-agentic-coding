@@ -22,9 +22,10 @@
 -ctv q8_0
 # All layers on the GPU (attention, DeltaNet, shared expert, output).
 -ngl 99
-# Routed experts of layers 0-37 in RAM and of the last 2 on the GPU (~1-2% per layer). Premise: dedicated GPU;
-# ~470 MiB stay free (CUDA's view) and usage does not grow with context (measured up to 123k tokens).
--ncmoe 38
+# Routed experts of all 40 layers in RAM (E4 had 38: the last 2 on the GPU, ~1-2% each). Vision (2026-11-27)
+# needs the ~1.3 GiB this frees: the F16 projector (858 MiB) and the image encoder run on the GPU.
+# Premise: dedicated GPU; usage does not grow with context (measured up to 123k tokens in E4).
+-ncmoe 40
 # --fit on only as a check: with explicit -ngl/-ncmoe it changes nothing; if less than the
 # target is left, it just logs a "failed to fit params" warning and loads anyway (watched by the health script).
 --fit on
@@ -51,6 +52,10 @@
 -cms 2048
 # Prompt cache in RAM up to 12 GiB: keeps the main conversation when another comes in (subagent, title) and restores it.
 --cache-ram 12288
+# Cap of image tokens: bounds the encoder's VRAM (it grows with the image) and the prefill.
+# 2048 holds a 1920x1080 screenshot at native resolution (measured: 2061 prompt tokens with the text);
+# larger images are scaled down. Has no effect when vision is off (scripts/llm vision).
+--image-max-tokens 2048
 # Prometheus metrics at /metrics (used by the validation runner).
 --metrics
 # Debugging (off in production): uncomment to log created/restored checkpoints and
